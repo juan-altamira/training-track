@@ -7,7 +7,9 @@
 	let { children, data } = $props();
 	let session = (data?.session ?? null) as Session | null;
 
-	const hideAuthActions = $derived($page.url.pathname.startsWith('/r/'));
+	const hideAuthActions = $derived(
+		['/r/', '/login', '/registro', '/reset'].some((p) => $page.url.pathname.startsWith(p))
+	);
 </script>
 
 <svelte:head>

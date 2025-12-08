@@ -5,5 +5,5 @@ export const load: PageServerLoad = async ({ locals }) => {
 	if (locals.session) {
 		throw redirect(302, '/clientes');
 	}
-	return {};
+	throw redirect(302, '/login');
 };

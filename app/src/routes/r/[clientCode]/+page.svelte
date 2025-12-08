@@ -69,7 +69,9 @@
 	const resetProgress = async () => {
 		saving = true;
 		message = '';
-		const res = await fetch('?/resetProgress', { method: 'POST' });
+		const formData = new FormData();
+		formData.set('reset', 'true');
+		const res = await fetch('?/resetProgress', { method: 'POST', body: formData });
 		if (res.ok) {
 			const data = await res.json();
 			if (data?.progress) {

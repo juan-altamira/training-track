@@ -5,10 +5,7 @@
 
 	let { data, form } = $props();
 	let clients = (data?.clients ?? []) as ClientSummary[];
-	const SITE_URL = (data?.siteUrl ?? env.PUBLIC_SITE_URL ?? 'https://training-track.vercel.app').replace(
-		/\/?$/,
-		''
-	);
+	const SITE_URL = (data?.siteUrl ?? 'https://training-track.vercel.app').replace(/\/?$/, '');
 
 	const copyLink = async (client: ClientSummary) => {
 		const link = `${SITE_URL}/r/${client.client_code}`;

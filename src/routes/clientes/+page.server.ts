@@ -90,13 +90,14 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			};
 		}) ?? [];
 
-	const siteUrl = (env.PUBLIC_SITE_URL || url.origin || 'https://training-track.vercel.app').replace(
-		/\/?$/,
-		''
-	);
+	const envSite = env.PUBLIC_SITE_URL?.replace(/\/?$/, '') || '';
+	const origin = url.origin?.replace(/\/?$/, '') || '';
+	const siteUrl =
+		(envSite && !envSite.includes('localhost') ? envSite : origin) ||
+		'https://training-track.vercel.app';
 
 	return {
-		clients: list
+		clients: list,
 		siteUrl
 	};
 };

@@ -54,10 +54,11 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 		await supabase.from('progress').insert({ client_id: clientId, progress });
 	}
 
-	const siteUrl = (env.PUBLIC_SITE_URL || url.origin || 'https://training-track.vercel.app').replace(
-		/\/?$/,
-		''
-	);
+	const envSite = env.PUBLIC_SITE_URL?.replace(/\/?$/, '') || '';
+	const origin = url.origin?.replace(/\/?$/, '') || '';
+	const siteUrl =
+		(envSite && !envSite.includes('localhost') ? envSite : origin) ||
+		'https://training-track.vercel.app';
 
 	return {
 		client,

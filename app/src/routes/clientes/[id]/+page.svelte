@@ -3,14 +3,14 @@
 	import { WEEK_DAYS, getTargetSets } from '$lib/routines';
 	import type { ProgressState, RoutineExercise, RoutinePlan } from '$lib/types';
 
-	let { data } = $props();
+let { data } = $props();
 
-	let plan: RoutinePlan = structuredClone(data.plan);
-	let progress: ProgressState = structuredClone(data.progress);
-	let selectedDay = WEEK_DAYS[0].key;
-	let saving = false;
-	let feedback = '';
-	let statusMessage = '';
+let plan: RoutinePlan = $state(structuredClone(data.plan));
+let progress: ProgressState = $state(structuredClone(data.progress));
+let selectedDay = $state(WEEK_DAYS[0].key);
+let saving = $state(false);
+let feedback = $state('');
+let statusMessage = $state('');
 
 	const link = `${PUBLIC_SITE_URL.replace(/\/?$/, '')}/r/${data.client.client_code}`;
 

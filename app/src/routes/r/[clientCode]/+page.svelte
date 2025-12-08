@@ -2,13 +2,15 @@
 	import { WEEK_DAYS, getTargetSets } from '$lib/routines';
 	import type { ProgressState, RoutinePlan } from '$lib/types';
 
-	let { data } = $props();
+let { data } = $props();
 
-	let plan: RoutinePlan = data.status === 'ok' ? data.plan : ({} as RoutinePlan);
-	let progress: ProgressState =
-		data.status === 'ok' ? structuredClone(data.progress) : ({} as ProgressState);
-	let saving = false;
-	let message = '';
+let plan: RoutinePlan = data.status === 'ok' ? data.plan : ({} as RoutinePlan);
+let progress: ProgressState = $state(
+	data.status === 'ok' ? structuredClone(data.progress) : ({} as ProgressState)
+);
+
+let saving = $state(false);
+let message = $state('');
 
 	const adjustSets = (dayKey: string, exerciseId: string, delta: number) => {
 		const dayPlan = plan[dayKey];

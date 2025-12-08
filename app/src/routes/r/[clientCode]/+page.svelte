@@ -27,21 +27,11 @@
 			exercises: { ...(progress[dayKey]?.exercises ?? {}), [exerciseId]: nextValue }
 		};
 
-		const allDone = dayPlan.exercises.every((ex) => {
+		progress[dayKey].completed = dayPlan.exercises.every((ex) => {
 			const t = Math.max(1, getTargetSets(ex) || 0);
 			const done = progress[dayKey].exercises?.[ex.id] ?? 0;
 			return done >= t;
 		});
-
-		progress[dayKey].completed = allDone;
-		saveProgress();
-	};
-
-	const toggleDayComplete = (dayKey: string) => {
-		progress[dayKey] = {
-			...(progress[dayKey] ?? { exercises: {} }),
-			completed: !progress[dayKey]?.completed
-		};
 		saveProgress();
 	};
 
@@ -159,11 +149,6 @@
 										</div>
 									{/each}
 								{/if}
-								<div class="day-footer">
-									<button class={`day-toggle ${progress[day.key]?.completed ? 'secondary' : ''}`} type="button" onclick={() => toggleDayComplete(day.key)}>
-										{progress[day.key]?.completed ? 'Marcar como pendiente' : 'Marcar día completo'}
-									</button>
-								</div>
 							</div>
 						{/if}
 					</article>
@@ -368,19 +353,6 @@
 	.day-footer {
 		display: flex;
 		justify-content: flex-end;
-	}
-	.day-toggle {
-		border: none;
-		border-radius: 12px;
-		padding: 0.65rem 1rem;
-		font-weight: 700;
-		background: #22c55e;
-		color: #0c141d;
-		cursor: pointer;
-	}
-	.day-toggle.secondary {
-		background: #1e293b;
-		color: #dce3ff;
 	}
 	.feedback {
 		margin-top: 1rem;

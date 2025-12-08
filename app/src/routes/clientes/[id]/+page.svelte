@@ -114,16 +114,16 @@ let statusMessage = $state('');
 	};
 </script>
 
-<section class="space-y-6">
+<section class="space-y-6 text-slate-100">
 	<div class="flex flex-wrap items-start justify-between gap-4">
 		<div>
-			<p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Cliente</p>
-			<h1 class="text-2xl font-semibold text-slate-900">{data.client.name}</h1>
-			<p class="text-sm text-slate-600">{data.client.objective ?? 'Sin objetivo definido'}</p>
+			<p class="text-sm font-semibold uppercase tracking-wide text-slate-400">Cliente</p>
+			<h1 class="text-2xl font-semibold text-slate-50">{data.client.name}</h1>
+			<p class="text-sm text-slate-400">{data.client.objective ?? 'Sin objetivo definido'}</p>
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
 			<button
-				class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+				class="rounded-lg border border-slate-700 bg-[#151827] px-3 py-2 text-sm text-slate-100 hover:bg-[#1b1f30]"
 				type="button"
 				on:click={copyLink}
 			>
@@ -131,7 +131,7 @@ let statusMessage = $state('');
 			</button>
 			{#if data.client.status === 'active'}
 				<button
-					class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 hover:bg-amber-100"
+					class="rounded-lg border border-amber-500/50 bg-amber-900/40 px-3 py-2 text-sm text-amber-200 hover:bg-amber-900/60"
 					type="button"
 					on:click={() => setStatus('archived')}
 				>
@@ -139,7 +139,7 @@ let statusMessage = $state('');
 				</button>
 			{:else}
 				<button
-					class="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 hover:bg-emerald-100"
+					class="rounded-lg border border-emerald-500/50 bg-emerald-900/40 px-3 py-2 text-sm text-emerald-200 hover:bg-emerald-900/60"
 					type="button"
 					on:click={() => setStatus('active')}
 				>
@@ -150,18 +150,18 @@ let statusMessage = $state('');
 	</div>
 
 	{#if statusMessage}
-		<p class="rounded-lg bg-slate-900 px-3 py-2 text-sm text-white">{statusMessage}</p>
+		<p class="rounded-lg bg-[#151827] px-3 py-2 text-sm text-emerald-200 border border-emerald-700/40">{statusMessage}</p>
 	{/if}
 
 	<section class="grid gap-6 lg:grid-cols-[2fr,1fr]">
-		<div class="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+		<div class="space-y-4 rounded-2xl border border-slate-800 bg-[#0f111b] p-5 shadow-lg shadow-black/30">
 			<div class="flex items-center justify-between">
 				<div>
-					<p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Rutina</p>
-					<h2 class="text-xl font-semibold text-slate-900">Edición rápida</h2>
+					<p class="text-sm font-semibold uppercase tracking-wide text-slate-400">Rutina</p>
+					<h2 class="text-xl font-semibold text-slate-50">Edición rápida</h2>
 				</div>
 				<button
-					class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
+					class="rounded-lg bg-[#1c2338] px-4 py-2 text-sm font-medium text-slate-100 hover:bg-[#222b43] disabled:cursor-not-allowed disabled:opacity-70"
 					on:click={saveRoutine}
 					disabled={saving}
 				>
@@ -173,10 +173,10 @@ let statusMessage = $state('');
 				{#each WEEK_DAYS as day}
 					<button
 						type="button"
-						class={`rounded-full px-3 py-1 text-sm ${
+						class={`rounded-full px-3 py-1 text-sm border ${
 							selectedDay === day.key
-								? 'bg-slate-900 text-white'
-								: 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+								? 'bg-[#1c2338] text-white border-slate-600'
+								: 'bg-[#151827] text-slate-300 border-slate-800 hover:bg-[#1b1f30]'
 						}`}
 						on:click={() => (selectedDay = day.key)}
 					>
@@ -185,29 +185,29 @@ let statusMessage = $state('');
 				{/each}
 			</div>
 
-			<div class="space-y-3 rounded-xl border border-slate-100 bg-slate-50 p-4">
+			<div class="space-y-3 rounded-xl border border-slate-800 bg-[#0b0d14] p-4">
 				{#if plan[selectedDay].exercises.length === 0}
-					<p class="text-sm text-slate-600">Sin ejercicios. Agregá uno.</p>
+					<p class="text-sm text-slate-400">Sin ejercicios. Agregá uno.</p>
 				{:else}
 					{#each plan[selectedDay].exercises as exercise, index (exercise.id)}
-						<div class="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+						<div class="rounded-lg border border-slate-800 bg-[#111423] p-3 shadow-sm">
 							<div class="flex flex-wrap items-center justify-between gap-2">
-								<p class="text-sm font-semibold text-slate-800">Ejercicio {index + 1}</p>
+								<p class="text-sm font-semibold text-slate-100">Ejercicio {index + 1}</p>
 								<div class="flex items-center gap-1">
 									<button
-										class="rounded border border-slate-200 px-2 py-1 text-xs hover:bg-slate-100"
+										class="rounded border border-slate-700 bg-[#151827] px-2 py-1 text-xs text-slate-200 hover:bg-[#1b1f30]"
 										on:click={() => moveExercise(selectedDay, exercise.id, 'up')}
 									>
 										↑
 									</button>
 									<button
-										class="rounded border border-slate-200 px-2 py-1 text-xs hover:bg-slate-100"
+										class="rounded border border-slate-700 bg-[#151827] px-2 py-1 text-xs text-slate-200 hover:bg-[#1b1f30]"
 										on:click={() => moveExercise(selectedDay, exercise.id, 'down')}
 									>
 										↓
 									</button>
 									<button
-										class="rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100"
+										class="rounded border border-red-700 bg-red-900/40 px-2 py-1 text-xs text-red-200 hover:bg-red-900/60"
 										on:click={() => removeExercise(selectedDay, exercise.id)}
 									>
 										Quitar
@@ -215,19 +215,19 @@ let statusMessage = $state('');
 								</div>
 							</div>
 							<div class="mt-2 grid gap-3 md:grid-cols-2">
-								<label class="block text-xs font-medium text-slate-700">
+								<label class="block text-xs font-medium text-slate-300">
 									Nombre
 									<input
-										class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
+										class="mt-1 w-full rounded-lg border border-slate-700 bg-[#151827] px-3 py-2 text-sm text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
 										value={exercise.name}
 										on:input={(e) =>
 											updateExercise(selectedDay, exercise.id, 'name', (e.target as HTMLInputElement).value)}
 									/>
 								</label>
-								<label class="block text-xs font-medium text-slate-700">
+								<label class="block text-xs font-medium text-slate-300">
 									Series/reps (texto)
 									<input
-										class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
+										class="mt-1 w-full rounded-lg border border-slate-700 bg-[#151827] px-3 py-2 text-sm text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
 										value={exercise.scheme}
 										on:input={(e) =>
 											updateExercise(
@@ -238,12 +238,12 @@ let statusMessage = $state('');
 											)}
 									/>
 								</label>
-								<label class="block text-xs font-medium text-slate-700">
+								<label class="block text-xs font-medium text-slate-300">
 									Series totales (para progreso)
 									<input
 										type="number"
 										min="0"
-										class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
+										class="mt-1 w-full rounded-lg border border-slate-700 bg-[#151827] px-3 py-2 text-sm text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
 										value={exercise.totalSets ?? getTargetSets(exercise)}
 										on:input={(e) =>
 											updateExercise(
@@ -254,10 +254,10 @@ let statusMessage = $state('');
 											)}
 									/>
 								</label>
-								<label class="block text-xs font-medium text-slate-700">
+								<label class="block text-xs font-medium text-slate-300">
 									Nota (opcional)
 									<input
-										class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
+										class="mt-1 w-full rounded-lg border border-slate-700 bg-[#151827] px-3 py-2 text-sm text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
 										value={exercise.note ?? ''}
 										on:input={(e) =>
 											updateExercise(
@@ -274,7 +274,7 @@ let statusMessage = $state('');
 				{/if}
 
 				<button
-					class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-100"
+					class="rounded-lg border border-slate-700 bg-[#151827] px-3 py-2 text-sm font-medium text-slate-100 hover:bg-[#1b1f30]"
 					on:click={() => addExercise(selectedDay)}
 					type="button"
 				>
@@ -283,47 +283,40 @@ let statusMessage = $state('');
 			</div>
 
 			{#if feedback}
-				<p class="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{feedback}</p>
+				<p class="rounded-lg bg-emerald-900/40 px-3 py-2 text-sm text-emerald-200 border border-emerald-700/50">{feedback}</p>
 			{/if}
 		</div>
 
 		<div class="space-y-3">
-			<div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-				<p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Link público</p>
-				<p class="text-sm text-slate-700 break-all">{link}</p>
+			<div class="rounded-2xl border border-slate-800 bg-[#0f111b] p-5 shadow-lg shadow-black/30">
+				<p class="text-sm font-semibold uppercase tracking-wide text-slate-400">Link público</p>
+				<p class="text-sm text-slate-200 break-all">{link}</p>
 				<p class="mt-2 text-xs text-slate-500">
 					El cliente no necesita login. Si está archivado verá “acceso desactivado”.
 				</p>
 			</div>
 
-			<div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+			<div class="rounded-2xl border border-slate-800 bg-[#0f111b] p-5 shadow-lg shadow-black/30">
 				<div class="flex items-center justify-between">
 					<div>
-						<p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Progreso</p>
-						<h3 class="text-lg font-semibold text-slate-900">Semana actual</h3>
+						<p class="text-sm font-semibold uppercase tracking-wide text-slate-400">Progreso</p>
+						<h3 class="text-lg font-semibold text-slate-50">Semana actual</h3>
 					</div>
-					<button
-						class="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700 hover:bg-slate-100"
-						on:click={resetProgress}
-						type="button"
-					>
-						Reiniciar semana
-					</button>
 				</div>
-				<ul class="mt-3 space-y-2 text-sm text-slate-700">
+				<ul class="mt-3 space-y-2 text-sm text-slate-200">
 					{#each WEEK_DAYS as day}
 						{#if plan[day.key]}
 							{@const completion = dayCompletion(day.key)}
-							<li class="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+							<li class="flex items-center justify-between rounded-lg border border-slate-800 bg-[#111423] px-3 py-2">
 								<div>
 									<p class="font-semibold">{day.label}</p>
-									<p class="text-xs text-slate-600">
+									<p class="text-xs text-slate-400">
 										{completion.done}/{completion.total} ejercicios completos
 									</p>
 								</div>
 								<span
 									class={`rounded-full px-3 py-1 text-xs font-semibold ${
-										completion.completed ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700'
+										completion.completed ? 'bg-emerald-900/50 text-emerald-300' : 'bg-slate-800 text-slate-300'
 									}`}
 								>
 									{completion.completed ? 'Completado' : 'En progreso'}

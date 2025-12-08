@@ -1,36 +1,67 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
-	import { PUBLIC_SITE_URL } from '$env/static/public';
-	import { supabaseClient } from '$lib/supabaseClient';
-	import { onMount } from 'svelte';
+import { goto } from '$app/navigation';
+import { PUBLIC_SITE_URL } from '$env/static/public';
+import { supabaseClient } from '$lib/supabaseClient';
+import { onMount } from 'svelte';
 
-	let email = '';
-	let newPassword = '';
-	let confirmPassword = '';
-	let showPwd = false;
-	let showConfirm = false;
-	let message = '';
-	let error = '';
-	let loading = false;
-	let mode: 'request' | 'update' = 'request';
+let email = '';
+let newPassword = '';
+let confirmPassword = '';
+let showPwd = false;
+let showConfirm = false;
+let message = '';
+let error = '';
+let loading = false;
+let mode: 'request' | 'update' = 'request';
 
-	onMount(async () => {
-		const url = new URL(window.location.href);
-		const code = url.searchParams.get('code');
-		if (code) {
-			loading = true;
-			const { error: exchangeError } = await supabaseClient.auth.exchangeCodeForSession(code);
-			if (exchangeError) {
-				error = 'No pudimos validar el link. Pedí uno nuevo.';
-				console.error(exchangeError);
-				mode = 'request';
-			} else {
-				mode = 'update';
-				message = 'Link verificado. Ingresá tu nueva contraseña.';
-			}
-			loading = false;
+const parseHashParams = (hash: string) => {
+	const params = new URLSearchParams(hash.replace(/^#/, ''));
+	return {
+		access_token: params.get('access_token'),
+		refresh_token: params.get('refresh_token'),
+		type: params.get('type')
+	};
+};
+
+onMount(async () => {
+	const url = new URL(window.location.href);
+	const hashParams = parseHashParams(window.location.hash);
+	const code = url.searchParams.get('code');
+
+	// Prefer hash tokens (Supabase recovery flow sends them)
+	if (hashParams.access_token && hashParams.refresh_token) {
+		loading = true;
+		error = '';
+		const { error: setError } = await supabaseClient.auth.setSession({
+			access_token: hashParams.access_token,
+			refresh_token: hashParams.refresh_token
+		});
+		if (setError) {
+			console.error(setError);
+			error = 'No pudimos validar el link. Pedí uno nuevo.';
+		} else {
+			mode = 'update';
+			message = 'Link verificado. Ingresá tu nueva contraseña.';
 		}
-	});
+		loading = false;
+		return;
+	}
+
+	// Fallback: code param (older flow)
+	if (code) {
+		loading = true;
+		const { error: exchangeError } = await supabaseClient.auth.exchangeCodeForSession(code);
+		if (exchangeError) {
+			error = 'No pudimos validar el link. Pedí uno nuevo.';
+			console.error(exchangeError);
+			mode = 'request';
+		} else {
+			mode = 'update';
+			message = 'Link verificado. Ingresá tu nueva contraseña.';
+		}
+		loading = false;
+	}
+});
 
 	const requestReset = async () => {
 		loading = true;

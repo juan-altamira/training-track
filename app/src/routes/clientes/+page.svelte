@@ -45,12 +45,14 @@
 			<p class="text-sm font-semibold uppercase tracking-wide text-slate-400">Clientes</p>
 			<h1 class="text-2xl font-semibold text-slate-50">Panel del entrenador</h1>
 		</div>
-		<button
-			on:click={() => goto('/login')}
-			class="rounded-lg border border-slate-700 bg-[#151827] px-3 py-2 text-sm text-slate-100 hover:bg-[#1b1f30]"
-		>
-			Obtener nuevo magic link
-		</button>
+		<form method="POST" action="/logout">
+			<button
+				type="submit"
+				class="rounded-lg border border-slate-700 bg-[#151827] px-3 py-2 text-sm text-slate-100 hover:bg-[#1b1f30]"
+			>
+				Cerrar sesión
+			</button>
+		</form>
 	</div>
 
 	<section class="grid gap-6 lg:grid-cols-[2fr,1fr]">

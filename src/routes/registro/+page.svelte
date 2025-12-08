@@ -1,6 +1,6 @@
 <script lang="ts">
-import { env } from '$env/dynamic/public';
-import { supabaseClient } from '$lib/supabaseClient';
+	import { goto } from '$app/navigation';
+	import { supabaseClient } from '$lib/supabaseClient';
 
 let email = '';
 let password = '';
@@ -10,9 +10,8 @@ let error = '';
 let loading = false;
 let showPassword = false;
 let showConfirm = false;
-const SITE_URL = (env.PUBLIC_SITE_URL ?? 'http://localhost:5173').replace(/\/?$/, '');
 
-const sendSignUpLink = async () => {
+const createAccount = async () => {
 	loading = true;
 	error = '';
 	message = '';
@@ -21,28 +20,41 @@ const sendSignUpLink = async () => {
 		loading = false;
 		return;
 	}
-	const { error: signUpError } = await supabaseClient.auth.signUp({
+	const { data, error: signUpError } = await supabaseClient.auth.signUp({
 		email: email.trim(),
-		password,
-		options: {
-			emailRedirectTo: `${SITE_URL}/registro`
-		}
+		password
 	});
-		if (signUpError) {
-			error = 'No pudimos enviar el link. Revisá el email e intentá de nuevo.';
-			console.error(signUpError);
-		} else {
-			message = 'Revisá tu correo y tocá el link para confirmar tu cuenta.';
-		}
+	if (signUpError) {
+		error = 'No pudimos crear la cuenta. Revisá los datos e intentá de nuevo.';
+		console.error(signUpError);
 		loading = false;
-	};
+		return;
+	}
+
+	// Si devuelve sesión, ya estamos logueados; si no, intentamos login manual
+	if (!data.session) {
+		const { error: loginError } = await supabaseClient.auth.signInWithPassword({
+			email: email.trim(),
+			password
+		});
+		if (loginError) {
+			error = 'Cuenta creada, pero no pudimos iniciar sesión automáticamente. Probá entrar con tus credenciales.';
+			console.error(loginError);
+			loading = false;
+			return;
+		}
+	}
+
+	await goto('/clientes');
+	loading = false;
+};
 </script>
 
 <section class="mx-auto max-w-lg space-y-6 rounded-2xl border border-slate-800 bg-[#0f111b] p-8 shadow-lg shadow-black/30 text-slate-100">
 	<div class="space-y-2 text-center">
 		<p class="text-sm font-semibold uppercase tracking-wide text-slate-400">Registro</p>
 		<h1 class="text-2xl font-semibold text-slate-50">Crear cuenta de entrenador</h1>
-		<p class="text-sm text-slate-400">Ingresá tu email. Te enviamos un link para confirmar.</p>
+		<p class="text-sm text-slate-400">Ingresá tu email y contraseña. Entrás directo sin confirmar correo.</p>
 		<p class="text-xs text-slate-500">¿Ya tenés cuenta? <a class="text-emerald-300 hover:underline" href="/login">Entrá aquí</a></p>
 	</div>
 	<div class="space-y-4">
@@ -97,14 +109,14 @@ const sendSignUpLink = async () => {
 			</div>
 		</label>
 		<button
-			on:click|preventDefault={sendSignUpLink}
+			on:click|preventDefault={createAccount}
 			class="w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-70"
 			disabled={loading || !email || !password || !confirmPassword}
 		>
 			{#if loading}
-				Enviando...
+				Creando...
 			{:else}
-				Enviar link de registro
+				Crear cuenta
 			{/if}
 		</button>
 		{#if message}
@@ -115,6 +127,6 @@ const sendSignUpLink = async () => {
 		{/if}
 	</div>
 	<p class="text-xs text-slate-500 text-center">
-		Redirect configurado en Supabase: {SITE_URL}/registro
+		Accedés con email y contraseña. No se requiere confirmación por correo.
 	</p>
 </section>

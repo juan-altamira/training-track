@@ -25,21 +25,21 @@
 		}
 	});
 
-	const sendMagicLink = async () => {
+	const sendSignUpLink = async () => {
 		loading = true;
 		error = '';
 		message = '';
-		const { error: signInError } = await supabaseClient.auth.signInWithOtp({
+		const { error: signUpError } = await supabaseClient.auth.signUp({
 			email: email.trim(),
 			options: {
-				emailRedirectTo: `${PUBLIC_SITE_URL}/login`
+				emailRedirectTo: `${PUBLIC_SITE_URL}/registro`
 			}
 		});
-		if (signInError) {
+		if (signUpError) {
 			error = 'No pudimos enviar el link. Revisá el email e intentá de nuevo.';
-			console.error(signInError);
+			console.error(signUpError);
 		} else {
-			message = 'Te enviamos un link. Revisá tu correo y tocá el link para entrar.';
+			message = 'Revisá tu correo y tocá el link para confirmar tu cuenta.';
 		}
 		loading = false;
 	};
@@ -47,10 +47,10 @@
 
 <section class="mx-auto max-w-lg space-y-6 rounded-2xl border border-slate-800 bg-[#0f111b] p-8 shadow-lg shadow-black/30 text-slate-100">
 	<div class="space-y-2 text-center">
-		<p class="text-sm font-semibold uppercase tracking-wide text-slate-400">Entrar</p>
-		<h1 class="text-2xl font-semibold text-slate-50">Ingreso de entrenadores</h1>
-		<p class="text-sm text-slate-400">Usá tu email registrado. Te enviamos un magic link.</p>
-		<p class="text-xs text-slate-500">¿No tenés cuenta? <a class="text-emerald-300 hover:underline" href="/registro">Registrate</a></p>
+		<p class="text-sm font-semibold uppercase tracking-wide text-slate-400">Registro</p>
+		<h1 class="text-2xl font-semibold text-slate-50">Crear cuenta de entrenador</h1>
+		<p class="text-sm text-slate-400">Ingresá tu email. Te enviamos un link para confirmar.</p>
+		<p class="text-xs text-slate-500">¿Ya tenés cuenta? <a class="text-emerald-300 hover:underline" href="/login">Entrá aquí</a></p>
 	</div>
 	<div class="space-y-4">
 		<label class="block text-sm font-medium text-slate-200">
@@ -64,14 +64,14 @@
 			/>
 		</label>
 		<button
-			on:click|preventDefault={sendMagicLink}
+			on:click|preventDefault={sendSignUpLink}
 			class="w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-70"
 			disabled={loading || !email}
 		>
 			{#if loading}
 				Enviando...
 			{:else}
-				Enviar link de acceso
+				Enviar link de registro
 			{/if}
 		</button>
 		{#if message}
@@ -82,6 +82,6 @@
 		{/if}
 	</div>
 	<p class="text-xs text-slate-500 text-center">
-		Redirect configurado en Supabase: {PUBLIC_SITE_URL}/login
+		Redirect configurado en Supabase: {PUBLIC_SITE_URL}/registro
 	</p>
 </section>

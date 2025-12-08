@@ -161,11 +161,11 @@ let statusMessage = $state('');
 					<h2 class="text-2xl font-semibold text-slate-50">Edición rápida</h2>
 				</div>
 				<button
-					class="rounded-lg bg-[#1c2338] px-4 py-2.5 text-base font-medium text-slate-100 hover:bg-[#222b43] disabled:cursor-not-allowed disabled:opacity-70"
+					class="save-cta rounded-lg bg-[#1c2338] px-4 py-2.5 text-base font-medium text-slate-100 hover:bg-[#222b43] disabled:cursor-not-allowed disabled:opacity-70"
 					on:click={saveRoutine}
 					disabled={saving}
 				>
-					{saving ? 'Guardando...' : 'Guardar cambios'}
+					<span>{saving ? 'Guardando...' : 'Guardar cambios'}</span>
 				</button>
 			</div>
 
@@ -321,3 +321,35 @@ let statusMessage = $state('');
 		</div>
 	</section>
 </section>
+
+<style>
+	.save-cta {
+		position: relative;
+		overflow: hidden;
+	}
+	.save-cta:not(:disabled)::after {
+		content: '';
+		position: absolute;
+		inset: -2px;
+		background: linear-gradient(120deg, rgba(34, 197, 94, 0.5), rgba(16, 185, 129, 0.4), rgba(56, 189, 248, 0.35));
+		opacity: 0.4;
+		filter: blur(10px);
+		transform: translateX(-120%);
+		animation: sweep 2.6s ease-in-out infinite;
+	}
+	.save-cta span {
+		position: relative;
+		z-index: 1;
+	}
+	@keyframes sweep {
+		0% {
+			transform: translateX(-120%);
+		}
+		50% {
+			transform: translateX(10%);
+		}
+		100% {
+			transform: translateX(120%);
+		}
+	}
+</style>

@@ -151,5 +151,35 @@ export const actions: Actions = {
 		}
 
 		throw redirect(303, `/clientes/${client.id}`);
+	},
+	delete: async ({ request, locals }) => {
+		if (!locals.session) {
+			throw redirect(303, '/login');
+		}
+
+		const formData = await request.formData();
+		const clientId = String(formData.get('client_id') || '');
+
+		if (!clientId) {
+			return fail(400, { message: 'Cliente inválido' });
+		}
+
+		const supabase = locals.supabase;
+		const { data: client, error: fetchError } = await supabase
+			.from('clients')
+			.select('id')
+			.eq('id', clientId)
+			.eq('trainer_id', locals.session.user.id)
+			.maybeSingle();
+
+		if (fetchError || !client) {
+			return fail(403, { message: 'No podés eliminar este cliente' });
+		}
+
+		await supabase.from('progress').delete().eq('client_id', clientId);
+		await supabase.from('routines').delete().eq('client_id', clientId);
+		await supabase.from('clients').delete().eq('id', clientId);
+
+		return { success: true };
 	}
 };

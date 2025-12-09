@@ -138,5 +138,28 @@ export const actions: Actions = {
 		const status = String(formData.get('status') || 'active');
 		await locals.supabase.from('clients').update({ status }).eq('id', params.id);
 		return { success: true };
+	},
+	delete: async ({ params, locals }) => {
+		if (!locals.session) {
+			throw redirect(303, '/login');
+		}
+
+		const supabase = locals.supabase;
+		const { data: client, error: fetchError } = await supabase
+			.from('clients')
+			.select('id')
+			.eq('id', params.id)
+			.eq('trainer_id', locals.session.user.id)
+			.maybeSingle();
+
+		if (fetchError || !client) {
+			return fail(403, { message: 'No podés eliminar este cliente' });
+		}
+
+		await supabase.from('progress').delete().eq('client_id', params.id);
+		await supabase.from('routines').delete().eq('client_id', params.id);
+		await supabase.from('clients').delete().eq('id', params.id);
+
+		throw redirect(303, '/clientes');
 	}
 };

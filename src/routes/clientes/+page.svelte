@@ -6,6 +6,8 @@
 	let { data, form } = $props();
 	let clients = (data?.clients ?? []) as ClientSummary[];
 	const SITE_URL = (data?.siteUrl ?? 'https://training-track.vercel.app').replace(/\/?$/, '');
+	let deleteTarget: ClientSummary | null = null;
+	let deleteConfirm = '';
 
 	const copyLink = async (client: ClientSummary) => {
 		const link = `${SITE_URL}/r/${client.client_code}`;
@@ -111,6 +113,16 @@
 								>
 									Copiar link público
 								</button>
+								<button
+									class="rounded-lg border border-red-600 bg-red-900/50 px-4 py-2.5 text-base text-red-100 hover:bg-red-900/70"
+									type="button"
+									on:click={() => {
+										deleteTarget = client;
+										deleteConfirm = '';
+									}}
+								>
+									Eliminar
+								</button>
 							</div>
 						</article>
 					{/each}
@@ -165,4 +177,49 @@
 			{/if}
 		</form>
 	</section>
+
+	{#if deleteTarget}
+		<div class="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm px-4">
+			<div class="w-full max-w-md rounded-2xl border border-slate-800 bg-[#0f111b] p-6 shadow-2xl shadow-black/40 text-slate-100">
+				<div class="space-y-2">
+					<h2 class="text-xl font-semibold text-red-200">Eliminar cliente</h2>
+					<p class="text-sm text-slate-300">
+						Para eliminar al cliente <span class="font-semibold">{deleteTarget.name}</span> definitivamente, escribí la palabra
+						<span class="font-semibold text-red-300">eliminar</span>.
+					</p>
+				</div>
+				<form method="post" action="?/delete" class="mt-4 space-y-3">
+					<input type="hidden" name="client_id" value={deleteTarget.id} />
+					<label class="block text-sm font-medium text-slate-200">
+						Confirmación
+						<input
+							class="mt-1 w-full rounded-lg border border-slate-700 bg-[#151827] px-3 py-2 text-base text-slate-100 focus:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-500/40"
+							placeholder="eliminar"
+							bind:value={deleteConfirm}
+							name="confirm_text"
+						/>
+					</label>
+					<div class="flex items-center justify-end gap-3 pt-2">
+						<button
+							type="button"
+							class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-2 text-slate-200 hover:bg-[#1b1f30]"
+							on:click={() => {
+								deleteTarget = null;
+								deleteConfirm = '';
+							}}
+						>
+							Cancelar
+						</button>
+						<button
+							type="submit"
+							class="rounded-lg bg-red-600 px-4 py-2 text-white transition hover:bg-red-500 disabled:opacity-60 disabled:cursor-not-allowed"
+							disabled={deleteConfirm.trim().toLowerCase() !== 'eliminar'}
+						>
+							Eliminar definitivamente
+						</button>
+					</div>
+				</form>
+			</div>
+		</div>
+	{/if}
 </section>

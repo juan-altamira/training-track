@@ -113,15 +113,17 @@
 								>
 									Copiar link público
 								</button>
+							</div>
+							<div class="pt-2">
 								<button
-									class="rounded-lg border border-red-600 bg-red-900/50 px-4 py-2.5 text-base text-red-100 hover:bg-red-900/70"
+									class="w-full rounded-lg border border-red-600 bg-red-900/40 px-4 py-2.5 text-base text-red-100 hover:bg-red-900/60"
 									type="button"
 									on:click={() => {
 										deleteTarget = client;
 										deleteConfirm = '';
 									}}
 								>
-									Eliminar
+									Eliminar cliente
 								</button>
 							</div>
 						</article>

@@ -6,8 +6,8 @@
 	let { data, form } = $props();
 	let clients = (data?.clients ?? []) as ClientSummary[];
 	const SITE_URL = (data?.siteUrl ?? 'https://training-track.vercel.app').replace(/\/?$/, '');
-	let deleteTarget: ClientSummary | null = null;
-	let deleteConfirm = '';
+	let deleteTarget = $state<ClientSummary | null>(null);
+	let deleteConfirm = $state('');
 
 	const copyLink = async (client: ClientSummary) => {
 		const link = `${SITE_URL}/r/${client.client_code}`;
@@ -45,8 +45,8 @@
 <section class="flex flex-col gap-8 text-slate-100">
 	<div class="flex flex-wrap items-center justify-between gap-3">
 		<div>
-			<p class="text-2xl font-extrabold tracking-wide text-emerald-300">
-				En este panel verás a tus clientes
+			<p class="text-2xl font-extrabold tracking-wide text-emerald-80">
+				EN ESTE PANEL VERAS A TUS CLIENTES
 			</p>
 		</div>
 		<form method="POST" action="/logout">

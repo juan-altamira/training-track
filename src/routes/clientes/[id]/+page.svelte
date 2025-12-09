@@ -117,9 +117,7 @@ const MAX_EXERCISES_PER_DAY = 50;
 <section class="space-y-6 text-slate-100">
 	<div class="flex flex-wrap items-start justify-between gap-4">
 		<div>
-			<p class="text-base font-semibold uppercase tracking-wide text-slate-400">Cliente</p>
-			<h1 class="text-3xl font-semibold text-slate-50">{data.client.name}</h1>
-			<p class="text-base text-slate-400">{data.client.objective ?? 'Sin objetivo definido'}</p>
+			<h1 class="text-3xl font-extrabold tracking-wide text-slate-50">{data.client.name}</h1>
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
 			<button
@@ -181,11 +179,8 @@ const MAX_EXERCISES_PER_DAY = 50;
 
 	<section class="grid gap-6 lg:grid-cols-[2fr,1fr]">
 		<div class="space-y-5 rounded-2xl border border-slate-800 bg-[#0f111b] p-6 shadow-lg shadow-black/30">
-			<div class="flex items-center justify-between">
-				<div>
-					<p class="text-base font-semibold uppercase tracking-wide text-slate-400">Rutina</p>
-					<h2 class="text-2xl font-semibold text-slate-50">Edición rápida</h2>
-				</div>
+			<div class="flex flex-col items-center justify-between gap-2">
+				<h2 class="text-3xl font-extrabold uppercase tracking-wide text-slate-50">Rutina</h2>
 				<button
 					class="save-cta rounded-lg bg-[#1c2338] px-4 py-2.5 text-base font-medium text-slate-100 hover:bg-[#222b43] disabled:cursor-not-allowed disabled:opacity-70"
 					on:click={saveRoutine}

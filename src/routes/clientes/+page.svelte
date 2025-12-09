@@ -45,7 +45,7 @@
 <section class="flex flex-col gap-8 text-slate-100">
 	<div class="flex flex-wrap items-center justify-between gap-3">
 		<div>
-			<p class="text-2xl font-semibold uppercase tracking-wide text-slate-100">EN ESTE PANEL VERAS A TUS CLIENTES</p>
+			<p class="text-2xl font-semibold tracking-wide text-slate-100">en este panel verás a tus clientes</p>
 		</div>
 		<form method="POST" action="/logout">
 			<button
@@ -130,7 +130,7 @@
 			class="space-y-5 rounded-xl border border-slate-800 bg-[#0f111b] p-7 shadow-lg shadow-black/30"
 		>
 			<div class="space-y-2">
-				<h2 class="text-2xl font-semibold text-slate-50 uppercase">Crear cliente</h2>
+				<h2 class="text-2xl font-semibold text-slate-50 tracking-tight">crear cliente</h2>
 			</div>
 
 			<label class="block text-base font-medium text-slate-200">
@@ -154,7 +154,7 @@
 
 			<button
 				type="submit"
-				class="relative w-full overflow-hidden rounded-lg bg-emerald-600 px-5 py-3 text-lg text-white transition hover:bg-emerald-500"
+				class="relative w-full overflow-hidden rounded-xl bg-emerald-600 px-5 py-3 text-lg text-white transition hover:bg-emerald-500"
 			>
 				<span class="absolute inset-0 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500 opacity-0 animate-pulse blur-sm"></span>
 				<span class="relative">Crear y generar link</span>

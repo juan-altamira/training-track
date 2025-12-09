@@ -159,9 +159,14 @@ export const actions: Actions = {
 
 		const formData = await request.formData();
 		const clientId = String(formData.get('client_id') || '');
+		const confirm = String(formData.get('confirm_text') || '').trim().toLowerCase();
 
 		if (!clientId) {
 			return fail(400, { message: 'Cliente inválido' });
+		}
+
+		if (confirm !== 'eliminar') {
+			return fail(400, { message: 'Debes escribir "eliminar" para confirmar' });
 		}
 
 		const supabase = locals.supabase;

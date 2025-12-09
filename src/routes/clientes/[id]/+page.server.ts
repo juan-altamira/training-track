@@ -139,9 +139,15 @@ export const actions: Actions = {
 		await locals.supabase.from('clients').update({ status }).eq('id', params.id);
 		return { success: true };
 	},
-	delete: async ({ params, locals }) => {
+	delete: async ({ request, params, locals }) => {
 		if (!locals.session) {
 			throw redirect(303, '/login');
+		}
+
+		const formData = await request.formData();
+		const confirmText = String(formData.get('confirm_text') || '');
+		if (confirmText.trim().toLowerCase() !== 'eliminar') {
+			return fail(400, { message: 'Debes escribir "eliminar" para confirmar' });
 		}
 
 		const supabase = locals.supabase;

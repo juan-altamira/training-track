@@ -464,18 +464,18 @@ const otherClients = data.otherClients ?? [];
 	{#if showCopyModal}
 		<div class="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm px-4">
 			<div class="w-full max-w-md rounded-2xl border border-emerald-700/40 bg-gradient-to-br from-[#0f111b] via-[#0b1020] to-[#11172a] p-6 shadow-2xl shadow-black/50 text-slate-100 space-y-5">
-				<div class="space-y-10 text-center">
+				<div class="text-center">
 					<h2 class="text-2xl font-extrabold">
 						<span class="bg-gradient-to-r from-emerald-300 via-cyan-300 to-slate-100 bg-clip-text text-transparent">
 							Copiar rutina desde otro cliente
 						</span>
 					</h2>
-					<p class="text-sm text-amber-200 flex items-center justify-center gap-2">
+					<p class="mt-6 mb-8 text-sm text-amber-200 flex items-center justify-center gap-2">
 						⚠️ Esto reemplaza la rutina actual. El progreso se reiniciará para este cliente. ⚠️
 					</p>
 				</div>
 				{#if otherClients.length > 0}
-					<label class="block text-sm font-medium text-slate-200 mt-5">
+					<label class="block text-sm font-medium text-slate-200 mt-6">
 						Seleccioná cliente origen
 						<select
 							class="mt-3 w-full rounded-xl border border-slate-600 bg-[#0f1322] px-4 py-3 pr-12 text-base text-slate-100 shadow-inner focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-600 appearance-none"

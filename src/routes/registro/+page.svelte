@@ -56,9 +56,11 @@ const createAccount = async () => {
 	</div>
 	<div class="rounded-2xl border border-slate-800 bg-[#0f111b] p-8 shadow-lg shadow-black/30 space-y-6">
 		<div class="space-y-2 text-center">
-			<p class="text-sm font-semibold uppercase tracking-wide text-slate-400">Registro</p>
-			<h1 class="text-2xl font-semibold text-slate-50">Crear cuenta de entrenador</h1>
-			<p class="text-sm text-slate-400">Ingresá tu email y contraseña. Entrás directo sin confirmar correo.</p>
+			<h1 class="text-3xl font-extrabold text-slate-50 tracking-tight">
+				<span class="bg-gradient-to-r from-emerald-300 via-cyan-300 to-slate-100 bg-clip-text text-transparent">
+					Crear cuenta de entrenador
+				</span>
+			</h1>
 			<p class="text-xs text-slate-500">¿Ya tenés cuenta? <a class="text-emerald-300 hover:underline" href="/login">Entrá aquí</a></p>
 		</div>
 		<div class="space-y-4">

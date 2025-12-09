@@ -138,17 +138,17 @@ const otherClients = data.otherClients ?? [];
 		<div>
 			<h1 class="text-3xl font-extrabold tracking-wide text-slate-50">{data.client.name}</h1>
 		</div>
-		<div class="flex w-full flex-col gap-2">
-			<div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+		<div class="flex w-full flex-col gap-4">
+			<div class="flex flex-col md:flex-row items-stretch md:items-center gap-3 justify-between">
 				<button
-					class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-2.5 text-base text-slate-100 hover:bg-[#1b1f30]"
+					class="w-full md:w-auto rounded-lg border border-slate-700 bg-[#151827] px-4 py-2.5 text-base text-slate-100 hover:bg-[#1b1f30]"
 					type="button"
 					on:click={copyLink}
 				>
 					Copiar link público
 				</button>
 				<button
-					class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-2.5 text-base text-slate-100 hover:bg-[#1b1f30]"
+					class="w-full md:w-auto rounded-lg border border-slate-700 bg-[#151827] px-4 py-2.5 text-base text-slate-100 hover:bg-[#1b1f30]"
 					type="button"
 					on:click={() => {
 						selectedSource = '';
@@ -158,18 +158,18 @@ const otherClients = data.otherClients ?? [];
 					Copiar rutina de otro cliente
 				</button>
 			</div>
-			<div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+			<div class="flex flex-col md:flex-row items-stretch md:items-center gap-3 justify-between">
 				{#if clientStatus === 'active'}
 					<button
-						class="rounded-lg border border-amber-500/50 bg-amber-900/40 px-4 py-2.5 text-base text-amber-200 hover:bg-amber-900/60"
+						class="w-full md:w-auto rounded-lg border border-amber-500/50 bg-amber-900/40 px-4 py-2.5 text-base text-amber-200 hover:bg-amber-900/60"
 						type="button"
 						on:click={() => (showArchiveConfirm = true)}
 					>
-						Archivar
+						Archivar cliente
 					</button>
 				{:else}
 					<button
-						class="rounded-lg border border-emerald-500/50 bg-emerald-900/40 px-4 py-2.5 text-base text-emerald-200 hover:bg-emerald-900/60"
+						class="w-full md:w-auto rounded-lg border border-emerald-500/50 bg-emerald-900/40 px-4 py-2.5 text-base text-emerald-200 hover:bg-emerald-900/60"
 						type="button"
 						on:click={() => setStatus('active')}
 					>
@@ -177,14 +177,14 @@ const otherClients = data.otherClients ?? [];
 					</button>
 				{/if}
 				<button
-					class="rounded-lg border border-red-700 bg-red-900/50 px-4 py-2.5 text-base text-red-100 hover:bg-red-900/70"
+					class="w-full md:w-auto rounded-lg border border-red-700 bg-red-900/50 px-4 py-2.5 text-base text-red-100 hover:bg-red-900/70"
 					type="button"
 					on:click={() => {
 						showDeleteConfirm = true;
 						deleteConfirmText = '';
 					}}
 				>
-					Eliminar
+					Eliminar cliente
 				</button>
 			</div>
 		</div>
@@ -465,10 +465,15 @@ const otherClients = data.otherClients ?? [];
 		<div class="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm px-4">
 			<div class="w-full max-w-md rounded-2xl border border-emerald-700/40 bg-gradient-to-br from-[#0f111b] via-[#0b1020] to-[#11172a] p-6 shadow-2xl shadow-black/50 text-slate-100 space-y-5">
 				<div class="space-y-2 text-center">
-					<p class="text-xs uppercase tracking-[0.2em] text-emerald-300">Acción avanzada</p>
-					<h2 class="text-2xl font-bold text-slate-50">Copiar rutina desde otro cliente</h2>
-					<p class="text-sm text-slate-300">
+					<h2 class="text-2xl font-extrabold">
+						<span class="bg-gradient-to-r from-emerald-300 via-cyan-300 to-slate-100 bg-clip-text text-transparent">
+							Copiar rutina desde otro cliente
+						</span>
+					</h2>
+					<p class="text-sm text-amber-200 flex items-center justify-center gap-2">
+						<span aria-hidden="true">⚠️</span>
 						Esto reemplaza la rutina actual. El progreso se reiniciará para este cliente.
+						<span aria-hidden="true">⚠️</span>
 					</p>
 				</div>
 				{#if otherClients.length > 0}

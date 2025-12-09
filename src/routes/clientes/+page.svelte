@@ -82,7 +82,7 @@
 									{client.status === 'active' ? 'Activo' : 'Archivado'}
 								</span>
 							</div>
-							<div class="text-base text-slate-300">
+							<div class="text-base text-slate-300 mb-3">
 								<p>
 									Última actividad:
 									<span class={`font-semibold ${activityColor(client.days_since_activity)}`}>
@@ -90,14 +90,14 @@
 									</span>
 								</p>
 							</div>
-							<div class="mt-auto space-y-3">
+							<div class="mt-auto space-y-4">
 								<button
 									class="w-full rounded-xl bg-emerald-600 px-3.5 py-3 text-base font-semibold text-white hover:bg-emerald-500 shadow-sm"
 									on:click={() => goto(`/clientes/${client.id}`)}
 								>
 									Abrir rutina del cliente
 								</button>
-								<div class="grid grid-cols-2 gap-3">
+								<div class="grid grid-cols-2 gap-4">
 									<button
 										class="rounded-xl border border-red-600 bg-red-900/40 px-3.5 py-3 text-sm font-medium text-red-100 hover:bg-red-900/60"
 										type="button"

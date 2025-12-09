@@ -279,13 +279,15 @@ let deleteConfirmText = $state('');
 					>
 						+ Agregar ejercicio
 					</button>
-					<button
-						class="save-cta rounded-lg bg-[#1c2338] px-4 py-2.5 text-base font-medium text-slate-100 hover:bg-[#222b43] disabled:cursor-not-allowed disabled:opacity-70"
-						on:click={saveRoutine}
-						disabled={saving}
-					>
-						<span>{saving ? 'Guardando...' : 'Guardar cambios'}</span>
-					</button>
+					{#if plan[selectedDay].exercises.length > 0}
+						<button
+							class="save-cta rounded-lg bg-[#1c2338] px-4 py-2.5 text-base font-medium text-slate-100 hover:bg-[#222b43] disabled:cursor-not-allowed disabled:opacity-70"
+							on:click={saveRoutine}
+							disabled={saving}
+						>
+							<span>{saving ? 'Guardando...' : 'Guardar cambios'}</span>
+						</button>
+					{/if}
 				</div>
 			</div>
 

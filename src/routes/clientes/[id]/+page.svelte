@@ -476,7 +476,7 @@ const otherClients = data.otherClients ?? [];
 				</div>
 				{#if otherClients.length > 0}
 					<label class="block text-sm font-medium text-slate-200 mt-6">
-						Seleccioná cliente origen
+						Seleccioná desde qué cliente querés copiar
 						<select
 							class="mt-3 w-full rounded-xl border border-slate-600 bg-[#0f1322] px-4 py-3 pr-12 text-base text-slate-100 shadow-inner focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-600 appearance-none"
 							bind:value={selectedSource}

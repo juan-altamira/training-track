@@ -91,14 +91,13 @@
 		</p>
 	</section>
 {:else}
-	<section class="client-shell">
-		<header class="hero">
-			<h1>Rutina de Entrenamiento</h1>
-			<p>{data.clientName}</p>
-			{#if data.objective}
-				<p class="objective">{data.objective}</p>
-			{/if}
-		</header>
+		<section class="client-shell">
+			<header class="hero">
+				<h1>Rutina de Entrenamiento</h1>
+				{#if data.objective}
+					<p class="objective">{data.objective}</p>
+				{/if}
+			</header>
 
 		<div class="days">
 			{#each WEEK_DAYS as day}

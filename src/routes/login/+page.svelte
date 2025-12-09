@@ -47,8 +47,8 @@ const login = async () => {
 </script>
 
 <section class="min-h-screen flex items-start justify-center pt-16 pb-12 px-4 text-slate-100">
-	<div class="w-full max-w-lg rounded-2xl border border-slate-800 bg-[#0f111b] p-10 shadow-lg shadow-black/30">
-	<div class="space-y-3 text-center">
+	<div class="w-full max-w-lg rounded-2xl border border-slate-800 bg-[#0f111b] p-12 shadow-lg shadow-black/30 space-y-6">
+	<div class="space-y-4 text-center">
 		<h1 class="text-3xl font-extrabold text-slate-50 tracking-tight">
 			<span class="bg-gradient-to-r from-emerald-300 via-cyan-300 to-slate-100 bg-clip-text text-transparent">
 				Ingreso de entrenadores
@@ -56,7 +56,7 @@ const login = async () => {
 		</h1>
 	</div>
 
-	<div class="space-y-4">
+	<div class="space-y-5">
 		<label class="block text-base font-medium text-slate-200">
 			Email
 			<input

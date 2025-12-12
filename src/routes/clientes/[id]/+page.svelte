@@ -146,7 +146,7 @@ const hasSuspicious = WEEK_DAYS.some((d) => progress[d.key]?.suspicious);
 					type="button"
 					on:click={copyLink}
 				>
-					{copiedLink ? 'Copiado' : 'Copiar link de la rutina'}
+					{copiedLink ? '✓ Copiado' : 'Copiar link de la rutina'}
 				</button>
 				<button
 					class="w-full md:w-1/2 rounded-2xl border border-cyan-700/40 bg-gradient-to-r from-cyan-700 to-sky-600 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-cyan-900/30 transition hover:-translate-y-0.5 hover:shadow-cyan-900/50 hover:brightness-110"

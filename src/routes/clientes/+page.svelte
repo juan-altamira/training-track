@@ -274,7 +274,7 @@ let isOwner = data?.isOwner ?? false;
 										on:click={() => copyLink(client)}
 										type="button"
 									>
-										{copiedId === client.id ? 'Copiado' : 'Copiar link público'}
+										{copiedId === client.id ? '✓ Copiado' : 'Copiar link público'}
 									</button>
 								</div>
 							</div>

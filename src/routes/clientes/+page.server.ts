@@ -71,7 +71,7 @@ const fetchTrainerAdminData = async () => {
 	trainerRows?.forEach((row) => {
 		if (!row.email || row.email.toLowerCase() === OWNER_EMAIL) return;
 		const key = row.email.toLowerCase();
-		const current = byEmail.get(key) ?? { email: row.email, active: false };
+		const current = byEmail.get(key) ?? { email: row.email, active: false, created_at: row.created_at ?? null };
 		byEmail.set(key, {
 			...current,
 			trainer_id: row.id,
@@ -292,7 +292,7 @@ export const actions: Actions = {
 		if (!nextActive) {
 			const { data: trainer } = await supabaseAdmin.from('trainers').select('id').eq('email', email).maybeSingle();
 			if (trainer?.id) {
-				await supabaseAdmin.auth.admin.signOut({ user_id: trainer.id });
+				await supabaseAdmin.auth.admin.signOut(trainer.id);
 			}
 		}
 
@@ -312,7 +312,7 @@ export const actions: Actions = {
 		}
 		const { data: trainer } = await supabaseAdmin.from('trainers').select('id').eq('email', email).maybeSingle();
 		if (trainer?.id) {
-			await supabaseAdmin.auth.admin.signOut({ user_id: trainer.id });
+			await supabaseAdmin.auth.admin.signOut(trainer.id);
 		}
 		return { success: true };
 	},

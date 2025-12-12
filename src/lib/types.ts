@@ -28,6 +28,9 @@ export type ProgressMeta = {
 	suspicious_day?: string | null;
 	suspicious_at?: string | null;
 	suspicious_reason?: string | null;
+	last_suspicious_day?: string | null;
+	last_suspicious_at?: string | null;
+	last_suspicious_reason?: string | null;
 	first_set_ts?: Record<string, string | null>;
 	baseline_sets?: Record<string, number>;
 };

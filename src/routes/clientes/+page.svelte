@@ -11,13 +11,17 @@ let isOwner = data?.isOwner ?? false;
 	const SITE_URL = (data?.siteUrl ?? 'https://training-track.vercel.app').replace(/\/?$/, '');
 	let deleteTarget = $state<ClientSummary | null>(null);
 	let deleteConfirm = $state('');
-	let copyToast = $state('');
+	let openingId = $state<string | null>(null);
+	let copiedId = $state<string | null>(null);
+	let searchTerm = $state('');
 
 	const copyLink = async (client: ClientSummary) => {
 		const link = `${SITE_URL}/r/${client.client_code}`;
 		await navigator.clipboard.writeText(link);
-		copyToast = 'Link público copiado';
-		setTimeout(() => (copyToast = ''), 2000);
+		copiedId = client.id;
+		setTimeout(() => {
+			if (copiedId === client.id) copiedId = null;
+		}, 2000);
 	};
 
 	const humanDate = (iso?: string | null) => {
@@ -45,6 +49,24 @@ let isOwner = data?.isOwner ?? false;
 			alert(form.message as string);
 		}
 	};
+
+	const openClient = async (client: ClientSummary) => {
+		openingId = client.id;
+		await goto(`/clientes/${client.id}`);
+		openingId = null;
+	};
+
+	const normalizeText = (value: string | undefined | null) =>
+		(value ?? '')
+			.normalize('NFD')
+			.replace(/\p{Diacritic}/gu, '')
+			.toLowerCase();
+
+	const filteredClients = () => {
+		const term = normalizeText(searchTerm).trim();
+		if (!term) return clients;
+		return clients.filter((client) => normalizeText(client.name).includes(term));
+	};
 </script>
 
 <section class="flex flex-col gap-8 text-slate-100">
@@ -55,11 +77,34 @@ let isOwner = data?.isOwner ?? false;
 			</p>
 		</div>
 		<form method="POST" action="/logout">
+				<button
+					type="submit"
+					class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-2.5 text-base text-slate-100 hover:bg-[#1b1f30]"
+				>
+					Cerrar sesión
+				</button>
+		</form>
+	</div>
+
+	<div class="flex flex-wrap items-center gap-3 rounded-xl border border-slate-800 bg-[#0f111b] px-4 py-3 shadow-md shadow-black/30">
+		<form
+			class="flex w-full flex-col gap-3 sm:flex-row sm:items-center"
+			on:submit|preventDefault={() => (searchTerm = searchTerm.trim())}
+		>
+			<label class="w-full text-base text-slate-200">
+				<span class="sr-only">Buscar cliente</span>
+				<input
+					class="w-full rounded-lg border border-slate-700 bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-600/50"
+					type="text"
+					placeholder="Buscar cliente"
+					bind:value={searchTerm}
+				/>
+			</label>
 			<button
 				type="submit"
-				class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-2.5 text-base text-slate-100 hover:bg-[#1b1f30]"
+				class="rounded-lg border border-emerald-700 bg-emerald-600 px-4 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-emerald-500"
 			>
-				Cerrar sesión
+				Buscar
 			</button>
 		</form>
 	</div>
@@ -175,7 +220,7 @@ let isOwner = data?.isOwner ?? false;
 				</div>
 			{:else}
 				<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-					{#each clients as client}
+					{#each filteredClients() as client (client.id)}
 						<article class="flex flex-col gap-3 rounded-xl border border-slate-800 bg-[#0f111b] p-5 shadow-lg shadow-black/30">
 							<div class="flex items-start justify-between gap-2">
 								<div>
@@ -202,10 +247,16 @@ let isOwner = data?.isOwner ?? false;
 							</div>
 							<div class="mt-auto space-y-4">
 								<button
-									class="w-full rounded-xl bg-emerald-600 px-3.5 py-3 text-base font-semibold text-white hover:bg-emerald-500 shadow-sm"
-									on:click={() => goto(`/clientes/${client.id}`)}
+									class={`open-btn relative w-full overflow-hidden rounded-xl border border-emerald-700/50 bg-[#111827] px-3.5 py-3 text-base font-semibold text-white shadow-sm transition hover:border-emerald-500 hover:bg-[#0f1625] disabled:cursor-wait ${
+										openingId === client.id ? 'loading' : ''
+									}`}
+									on:click={() => openClient(client)}
+									disabled={openingId === client.id}
+									aria-busy={openingId === client.id}
 								>
-									Abrir rutina del cliente
+									<span class="btn-label">
+										{openingId === client.id ? 'Abriendo rutina...' : 'Abrir rutina del cliente'}
+									</span>
 								</button>
 								<div class="grid grid-cols-2 gap-4">
 									<button
@@ -223,7 +274,7 @@ let isOwner = data?.isOwner ?? false;
 										on:click={() => copyLink(client)}
 										type="button"
 									>
-										Copiar link público
+										{copiedId === client.id ? 'Copiado' : 'Copiar link público'}
 									</button>
 								</div>
 							</div>
@@ -237,7 +288,7 @@ let isOwner = data?.isOwner ?? false;
 			method="post"
 			action="?/create"
 			on:submit={handleCreated}
-			class="space-y-5 rounded-xl border border-slate-800 bg-[#0f111b] p-7 shadow-lg shadow-black/30"
+				class="space-y-5 rounded-xl border border-slate-800 bg-[#0f111b] p-7 shadow-lg shadow-black/30"
 		>
 			<div class="space-y-2">
 				<h2 class="text-2xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 via-cyan-300 to-slate-50">
@@ -329,8 +380,37 @@ let isOwner = data?.isOwner ?? false;
 	{/if}
 </section>
 
-{#if copyToast}
-	<div class="fixed top-6 right-6 z-40 rounded-lg border border-emerald-700/40 bg-emerald-900/70 px-4 py-3 text-sm font-semibold text-emerald-100 shadow-lg shadow-black/40">
-		{copyToast}
-	</div>
-{/if}
+<style>
+	.open-btn.loading::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: linear-gradient(90deg, #10b981 0%, #34d399 100%);
+		transform-origin: left;
+		animation: fillbtn 2s ease-in-out infinite;
+		opacity: 0.9;
+	}
+	.open-btn .btn-label {
+		position: relative;
+		z-index: 1;
+	}
+	@keyframes fillbtn {
+		from {
+			transform: scaleX(0);
+		}
+		to {
+			transform: scaleX(1);
+		}
+	}
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+		border: 0;
+	}
+</style>

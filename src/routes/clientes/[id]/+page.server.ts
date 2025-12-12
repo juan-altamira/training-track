@@ -262,7 +262,11 @@ export const actions: Actions = {
 			return fail(403, { message: 'No autorizado' });
 		}
 
-		const ownsAll = clientsPair.every((c) => c.trainer_id === locals.session.user.id);
+		if (!locals.session) {
+			throw redirect(303, '/login');
+		}
+
+		const ownsAll = clientsPair.every((c) => c.trainer_id === locals.session!.user.id);
 		if (!ownsAll) {
 			return fail(403, { message: 'No autorizado' });
 		}

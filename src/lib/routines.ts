@@ -62,7 +62,9 @@ export const normalizeProgress = (
 		last_reset_utc: meta?.last_reset_utc ?? progress?._meta?.last_reset_utc ?? null,
 		suspicious_day: meta?.suspicious_day ?? progress?._meta?.suspicious_day ?? null,
 		suspicious_at: meta?.suspicious_at ?? progress?._meta?.suspicious_at ?? null,
-		suspicious_reason: meta?.suspicious_reason ?? progress?._meta?.suspicious_reason ?? null
+		suspicious_reason: meta?.suspicious_reason ?? progress?._meta?.suspicious_reason ?? null,
+		first_set_ts: meta?.first_set_ts ?? progress?._meta?.first_set_ts ?? {},
+		baseline_sets: meta?.baseline_sets ?? progress?._meta?.baseline_sets ?? {}
 	};
 
 	return base;

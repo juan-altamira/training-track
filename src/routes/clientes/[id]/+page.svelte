@@ -19,6 +19,7 @@ let showCopyModal = $state(false);
 let selectedSource = $state('');
 const MAX_EXERCISES_PER_DAY = 50;
 const otherClients = data.otherClients ?? [];
+const hasSuspicious = WEEK_DAYS.some((d) => progress[d.key]?.suspicious);
 
 	const SITE_URL = (data.siteUrl ?? 'https://training-track.vercel.app').replace(/\/?$/, '');
 	const link = `${SITE_URL}/r/${data.client.client_code}`;
@@ -145,7 +146,7 @@ const otherClients = data.otherClients ?? [];
 					type="button"
 					on:click={copyLink}
 				>
-					Copiar link público
+					Copiar link de la rutina
 				</button>
 				<button
 					class="w-full md:w-1/2 rounded-2xl border border-cyan-700/40 bg-gradient-to-r from-cyan-700 to-sky-600 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-cyan-900/30 transition hover:-translate-y-0.5 hover:shadow-cyan-900/50 hover:brightness-110"
@@ -229,8 +230,8 @@ const otherClients = data.otherClients ?? [];
 						type="button"
 						class={`rounded-full px-4 py-2 text-base border ${
 							selectedDay === day.key
-								? 'bg-[#1c2338] text-white border-slate-600'
-								: 'bg-[#151827] text-slate-300 border-slate-800 hover:bg-[#1b1f30]'
+								? 'bg-[#16223d] text-white border-slate-600'
+								: 'bg-[#070c1d] text-slate-300 border-[#0f162b] hover:bg-[#0d152b]'
 						}`}
 						on:click={() => (selectedDay = day.key)}
 					>
@@ -341,29 +342,30 @@ const otherClients = data.otherClients ?? [];
 		</div>
 
 		<div class="space-y-3">
-			<div class="rounded-2xl border border-slate-800 bg-[#0f111b] p-6 shadow-lg shadow-black/30">
-				<p class="text-base font-semibold uppercase tracking-wide text-slate-400">Link público</p>
-				<p class="text-base text-slate-200 break-all">{link}</p>
-				<p class="mt-2 text-sm text-slate-500">
-					El cliente no necesita login. Si está archivado verá “acceso desactivado”.
-				</p>
+			<div class="rounded-2xl border border-slate-800 bg-gradient-to-br from-[#0f172a] to-[#0b1224] p-6 shadow-lg shadow-black/30 space-y-3">
+				<div class="flex items-center justify-between">
+					<div>
+						<p class="text-sm font-semibold uppercase tracking-[0.12em] text-slate-400">Link de la rutina</p>
+						<p class="mt-1 text-base font-semibold text-emerald-200 break-all">{link}</p>
+						<p class="mt-2 text-xs text-white">El cliente accede sin login; si está archivado verá “acceso desactivado”.</p>
+					</div>
+				</div>
 			</div>
 
 			<div class="rounded-2xl border border-slate-800 bg-[#0f111b] p-6 shadow-lg shadow-black/30">
 				<div class="flex items-center justify-between">
-					<div>
-						<p class="text-base font-semibold uppercase tracking-wide text-slate-400">Progreso</p>
-						<h3 class="text-xl font-semibold text-slate-50">Semana actual</h3>
+					<div class="flex flex-col gap-1">
+						<h3 class="text-xl font-semibold uppercase tracking-wide text-slate-50">Semana actual</h3>
 					</div>
 				</div>
 				<ul class="mt-3 space-y-3 text-base text-slate-200">
 					{#each WEEK_DAYS as day}
 						{#if plan[day.key] && plan[day.key].exercises.length > 0}
 							{@const completion = dayCompletion(day.key)}
-							<li class="flex items-center justify-between rounded-lg border border-slate-800 bg-[#111423] px-4 py-3">
-								<div>
-									<p class="font-semibold mr-4">{day.label}</p>
-									<p class="text-sm text-slate-400 mb-1 mr-4">
+							<li class="flex flex-wrap items-center gap-4 justify-between rounded-lg border border-slate-800 bg-[#111423] px-4 py-3">
+								<div class="mr-auto">
+									<p class="font-semibold">{day.label}</p>
+									<p class="text-sm text-slate-400 mb-1">
 										{completion.done}/{completion.total} ejercicios completos
 									</p>
 								</div>
@@ -386,16 +388,22 @@ const otherClients = data.otherClients ?? [];
 						{/if}
 					{/each}
 				</ul>
-				{#if WEEK_DAYS.some((d) => progress[d.key]?.suspicious)}
+				{#if hasSuspicious}
 					<p class="mt-3 text-sm text-amber-200">
 						El cliente marcó todas las series del día en menos de 60 segundos. Es posible que las haya marcado sin haber entrenado.
 					</p>
 				{/if}
-				{#if data.last_completed_at}
-					<p class="mt-3 text-sm text-slate-500">
-						Última actualización: {new Date(data.last_completed_at).toLocaleString()}
-					</p>
-				{/if}
+			</div>
+
+			<div class="rounded-2xl border border-slate-800 bg-[#0f111b] p-4 shadow-lg shadow-black/30 text-sm text-slate-300">
+				<p class="font-semibold text-slate-100">Última actualización</p>
+				<p class="mt-1 text-slate-400">
+					{#if data.last_completed_at}
+						{new Date(data.last_completed_at).toLocaleString()}
+					{:else}
+						—
+					{/if}
+				</p>
 			</div>
 		</div>
 	</section>

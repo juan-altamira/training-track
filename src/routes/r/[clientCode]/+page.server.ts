@@ -1,4 +1,4 @@
-import { normalizePlan, normalizeProgress, WEEK_DAYS } from '$lib/routines';
+import { getTargetSets, normalizePlan, normalizeProgress, WEEK_DAYS } from '$lib/routines';
 import { supabaseAdmin } from '$lib/server/supabaseAdmin';
 import type { ProgressState, RoutinePlan } from '$lib/types';
 import { error, fail } from '@sveltejs/kit';
@@ -108,6 +108,18 @@ export const actions: Actions = {
 		const sessionDay = String(formData.get('session_day') || '');
 		const sessionStart = String(formData.get('session_start') || '');
 		const sessionEnd = String(formData.get('session_end') || '');
+		const tsFirst = String(formData.get('ts_primera_serie') || '');
+		const tsLast = String(formData.get('ts_ultima_serie') || '');
+		const hadProgressFlag = String(formData.get('had_progress_before') || '');
+		console.log('suspicion-debug-incoming', {
+			clientCode,
+			sessionDay,
+			tsFirst,
+			tsLast,
+			sessionStart,
+			sessionEnd,
+			hadProgressFlag
+		});
 
 		let parsed: ProgressState;
 		try {
@@ -117,10 +129,16 @@ export const actions: Actions = {
 			return fail(400, { message: 'Formato inválido' });
 		}
 
-		// Traer progreso existente para conservar flags sospechosos previos
+		// Traer progreso existente para conservar flags y snapshots previos
 		const { data: existingRow, error: existingError } = await supabaseAdmin
 			.from('progress')
 			.select('progress')
+			.eq('client_id', client.id)
+			.maybeSingle();
+
+		const { data: routineRow } = await supabaseAdmin
+			.from('routines')
+			.select('plan')
 			.eq('client_id', client.id)
 			.maybeSingle();
 
@@ -130,25 +148,64 @@ export const actions: Actions = {
 		}
 
 		const existing = normalizeProgress(existingRow?.progress as ProgressState | null);
+		const routinePlan = normalizePlan(routineRow?.plan as RoutinePlan | null);
+
+		// Snapshots
+		const firstSetMap: Record<string, string | null> = existing._meta?.first_set_ts ?? {};
+		const baselineSets: Record<string, number> = existing._meta?.baseline_sets ?? {};
 
 		const nowUtc = nowIsoUtc();
 
 		if (sessionDay && parsed[sessionDay]?.completed && sessionStart && sessionEnd) {
-			const start = Date.parse(sessionStart);
-			const end = Date.parse(sessionEnd);
+			const start = tsFirst ? Date.parse(tsFirst) : Date.parse(sessionStart);
+			const end = tsLast ? Date.parse(tsLast) : Date.parse(sessionEnd);
 			if (!Number.isNaN(start) && !Number.isNaN(end) && end > start) {
 				const durationSec = (end - start) / 1000;
 				const existingDay = existing[sessionDay];
-				const hadProgressBefore =
-					existingDay?.completed ||
-					Object.values(existingDay?.exercises ?? {}).some((val) => (val ?? 0) > 0);
-				const wasCompletedBefore = existingDay?.completed ?? false;
+				const totalTargetSets =
+					routinePlan[sessionDay]?.exercises.reduce(
+						(acc, ex) => acc + Math.max(1, getTargetSets(ex) || 0),
+						0
+					) ?? 0;
+				const existingSets = Object.values(existingDay?.exercises ?? {}).reduce(
+					(acc, val) => acc + (val ?? 0),
+					0
+				);
+				const newSets = Object.values(parsed[sessionDay]?.exercises ?? {}).reduce(
+					(acc, val) => acc + (val ?? 0),
+					0
+				);
 
-				// Solo marcar sospechoso si se pasó de 0 progreso a todo completo en menos de 60s
-				if (!hadProgressBefore && !wasCompletedBefore && durationSec < 60) {
+				// Registrar snapshot al primer set tras el reset
+				if (!firstSetMap[sessionDay] && newSets > existingSets) {
+					firstSetMap[sessionDay] = tsFirst || sessionStart || nowUtc;
+					baselineSets[sessionDay] = existingSets;
+				}
+
+				const baselineForDay = baselineSets[sessionDay] ?? existingSets;
+				const hadProgressBefore =
+					hadProgressFlag
+						? hadProgressFlag === '1'
+						: (existingDay?.completed ?? false) || baselineForDay > 0;
+
+				const startRef = firstSetMap[sessionDay] ? Date.parse(firstSetMap[sessionDay] as string) : start;
+				const durationFromFirst =
+					startRef && !Number.isNaN(startRef) ? (end - startRef) / 1000 : durationSec;
+
+				// Regla: venía de cero y se completó en <60s desde el primer set
+				const alreadySuspicious = existingDay?.suspicious ?? false;
+				if (!alreadySuspicious && !hadProgressBefore && durationFromFirst < 60 && newSets >= totalTargetSets && totalTargetSets > 0) {
 					parsed[sessionDay] = {
 						...(parsed[sessionDay] ?? { completed: true, exercises: {} }),
 						suspicious: true
+					};
+					parsed._meta = {
+						...(parsed._meta ?? {}),
+						last_suspicious_day: sessionDay,
+						last_suspicious_at: nowUtc,
+						last_suspicious_reason: 'completed_all_under_60s',
+						first_set_ts: { ...(parsed._meta?.first_set_ts ?? {}), ...firstSetMap },
+						baseline_sets: { ...(parsed._meta?.baseline_sets ?? {}), ...baselineSets }
 					};
 				}
 			}
@@ -156,7 +213,9 @@ export const actions: Actions = {
 
 		const progress = normalizeProgress(parsed, {
 			last_activity_utc: nowUtc,
-			last_reset_utc: parsed?._meta?.last_reset_utc ?? null
+			last_reset_utc: parsed?._meta?.last_reset_utc ?? null,
+			first_set_ts: { ...(parsed._meta?.first_set_ts ?? {}), ...firstSetMap },
+			baseline_sets: { ...(parsed._meta?.baseline_sets ?? {}), ...baselineSets }
 		});
 		const anyCompleted = WEEK_DAYS.some((day) => progress[day.key]?.completed);
 

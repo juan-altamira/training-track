@@ -1,4 +1,4 @@
-import { normalizePlan, normalizeProgress } from '$lib/routines';
+import { normalizePlan, normalizeProgress, WEEK_DAYS } from '$lib/routines';
 import type { RoutinePlan } from '$lib/types';
 import { error, fail, redirect } from '@sveltejs/kit';
 import { nowIsoUtc } from '$lib/time';

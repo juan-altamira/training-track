@@ -13,6 +13,9 @@ let saving = $state(false);
 let message = $state('');
 let showResetConfirm = $state(false);
 let sessionStarts = $state<Record<string, string>>({});
+let firstSeriesTs = $state<Record<string, string>>({});
+let lastSeriesTs = $state<Record<string, string>>({});
+let baselineProgress = $state<Record<string, boolean>>({});
 
 	const adjustSets = (dayKey: string, exerciseId: string, delta: number) => {
 		const dayPlan = plan[dayKey];
@@ -23,8 +26,17 @@ let sessionStarts = $state<Record<string, string>>({});
 		const current = progress[dayKey]?.exercises?.[exerciseId] ?? 0;
 		const nextValue = Math.min(Math.max(current + delta, 0), target);
 
+		if (baselineProgress[dayKey] === undefined) {
+			const existing = progress[dayKey];
+			const had = (existing?.completed ?? false) || Object.values(existing?.exercises ?? {}).some((v) => (v ?? 0) > 0);
+			baselineProgress = { ...baselineProgress, [dayKey]: had };
+		}
+
 		if (!sessionStarts[dayKey]) {
 			sessionStarts = { ...sessionStarts, [dayKey]: new Date().toISOString() };
+		}
+		if (!firstSeriesTs[dayKey] && delta > 0) {
+			firstSeriesTs = { ...firstSeriesTs, [dayKey]: new Date().toISOString() };
 		}
 
 		progress[dayKey] = {
@@ -37,6 +49,7 @@ let sessionStarts = $state<Record<string, string>>({});
 			const done = progress[dayKey].exercises?.[ex.id] ?? 0;
 			return done >= t;
 		});
+		lastSeriesTs = { ...lastSeriesTs, [dayKey]: new Date().toISOString() };
 		saveProgress(dayKey);
 	};
 
@@ -53,6 +66,13 @@ let sessionStarts = $state<Record<string, string>>({});
 			formData.set('session_day', dayKey);
 			formData.set('session_start', sessionStarts[dayKey] ?? '');
 			formData.set('session_end', new Date().toISOString());
+			formData.set('had_progress_before', baselineProgress[dayKey] ? '1' : '0');
+			if (firstSeriesTs[dayKey]) {
+				formData.set('ts_primera_serie', firstSeriesTs[dayKey]);
+			}
+			if (lastSeriesTs[dayKey]) {
+				formData.set('ts_ultima_serie', lastSeriesTs[dayKey]);
+			}
 		}
 		const res = await fetch('?/saveProgress', {
 			method: 'POST',
@@ -85,6 +105,11 @@ let sessionStarts = $state<Record<string, string>>({});
 		}
 		saving = false;
 		showResetConfirm = false;
+		// limpiar estado de sesión
+		sessionStarts = {};
+		firstSeriesTs = {};
+		lastSeriesTs = {};
+		baselineProgress = {};
 	};
 </script>
 

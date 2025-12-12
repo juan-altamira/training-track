@@ -28,6 +28,8 @@ export type ProgressMeta = {
 	suspicious_day?: string | null;
 	suspicious_at?: string | null;
 	suspicious_reason?: string | null;
+	first_set_ts?: Record<string, string | null>;
+	baseline_sets?: Record<string, number>;
 };
 
 export type ProgressState = Record<string, ProgressDay> & {

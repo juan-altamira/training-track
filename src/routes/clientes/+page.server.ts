@@ -160,9 +160,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
 	const envSite = env.PUBLIC_SITE_URL?.replace(/\/?$/, '') || '';
 	const origin = url.origin?.replace(/\/?$/, '') || '';
-	const siteUrl =
-		(envSite && !envSite.includes('localhost') ? envSite : origin) ||
-		'https://training-track.vercel.app';
+	const siteUrl = envSite && !envSite.includes('localhost') ? envSite : origin;
 
 	const isOwner = locals.session.user.email?.toLowerCase() === OWNER_EMAIL;
 	const trainerAdmin = isOwner ? await fetchTrainerAdminData() : null;

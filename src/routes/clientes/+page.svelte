@@ -1,14 +1,13 @@
 <script lang="ts">
-	import { env } from '$env/dynamic/public';
-import type { ClientSummary } from '$lib/types';
-import { goto } from '$app/navigation';
+	import type { ClientSummary } from '$lib/types';
+	import { goto } from '$app/navigation';
 
-let { data, form } = $props();
-const OWNER_EMAIL = 'juanpabloaltamira@protonmail.com';
-let clients = (data?.clients ?? []) as ClientSummary[];
-let trainerAdmin = data?.trainerAdmin ?? null;
-let isOwner = data?.isOwner ?? false;
-	const SITE_URL = (data?.siteUrl ?? 'https://training-track.vercel.app').replace(/\/?$/, '');
+	let { data, form } = $props();
+	const OWNER_EMAIL = 'juanpabloaltamira@protonmail.com';
+	let clients = (data?.clients ?? []) as ClientSummary[];
+	let trainerAdmin = data?.trainerAdmin ?? null;
+	let isOwner = data?.isOwner ?? false;
+	const SITE_URL = (data?.siteUrl ?? '').replace(/\/?$/, '');
 	let deleteTarget = $state<ClientSummary | null>(null);
 	let deleteConfirm = $state('');
 	let openingId = $state<string | null>(null);

@@ -78,9 +78,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 
 	const envSite = env.PUBLIC_SITE_URL?.replace(/\/?$/, '') || '';
 	const origin = url.origin?.replace(/\/?$/, '') || '';
-	const siteUrl =
-		(envSite && !envSite.includes('localhost') ? envSite : origin) ||
-		'https://training-track.vercel.app';
+	const siteUrl = envSite && !envSite.includes('localhost') ? envSite : origin;
 
 	const { data: otherClients } = await supabase
 		.from('clients')

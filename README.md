@@ -23,7 +23,7 @@ npm install
 PUBLIC_SUPABASE_URL=TU_URL
 PUBLIC_SUPABASE_ANON_KEY=TU_ANON_KEY
 SUPABASE_SERVICE_ROLE=TU_SERVICE_ROLE  # solo para endpoints de servidor
-PUBLIC_SITE_URL=http://localhost:5173   # o tu dominio en Vercel
+PUBLIC_SITE_URL=http://localhost:5173   # o tu dominio en Netlify
 ```
 
 3) Levantar en desarrollo:
@@ -39,11 +39,14 @@ Abrí http://localhost:5173.
 
 ## Despliegue
 
-1) Deploy frontend en Vercel (se usa `@sveltejs/adapter-vercel`).
+1) Deploy frontend en Netlify (se usa `@sveltejs/adapter-netlify`).
+   - Base directory: `training-track`
+   - Build command: `npm run build`
+   - Publish directory: `build`
 2) En Supabase, configura:
-   - Site URL: tu dominio (ej. `https://training-track.vercel.app`).
+   - Site URL: tu dominio (ej. `https://training-track.netlify.app`).
    - Redirect URLs: producción + `http://localhost:5173` para pruebas.
-3) Copiá tus claves al entorno de Vercel (`PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_ANON_KEY`) y al entorno privado (`SUPABASE_SERVICE_ROLE` si usas endpoints server-side).
+3) Copiá tus claves al entorno de Netlify (`PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_ANON_KEY`) y al entorno privado (`SUPABASE_SERVICE_ROLE_KEY` o `SUPABASE_SERVICE_ROLE` si usas endpoints server-side).
 
 ## Notas funcionales
 

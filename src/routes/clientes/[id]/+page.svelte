@@ -1,27 +1,27 @@
 <script lang="ts">
-import { WEEK_DAYS, getTargetSets } from '$lib/routines';
-import type { ProgressState, RoutineExercise, RoutinePlan } from '$lib/types';
+	import { WEEK_DAYS, getTargetSets } from '$lib/routines';
+	import type { ProgressState, RoutineExercise, RoutinePlan } from '$lib/types';
 
-let { data } = $props();
+	let { data } = $props();
 
-let plan: RoutinePlan = $state(structuredClone(data.plan));
-let progress: ProgressState = $state(structuredClone(data.progress));
-let selectedDay = $state(WEEK_DAYS[0].key);
-let saving = $state(false);
-let feedback = $state('');
-let statusMessage = $state('');
-let clientStatus = $state(data.client.status as 'active' | 'archived');
-let showDeleteConfirm = $state(false);
-let deleteConfirmText = $state('');
-let showArchiveConfirm = $state(false);
-let copiedLink = $state(false);
-let showCopyModal = $state(false);
-let selectedSource = $state('');
-const MAX_EXERCISES_PER_DAY = 50;
-const otherClients = data.otherClients ?? [];
-const hasSuspicious = WEEK_DAYS.some((d) => progress[d.key]?.suspicious);
+	let plan: RoutinePlan = $state(structuredClone(data.plan));
+	let progress: ProgressState = $state(structuredClone(data.progress));
+	let selectedDay = $state(WEEK_DAYS[0].key);
+	let saving = $state(false);
+	let feedback = $state('');
+	let statusMessage = $state('');
+	let clientStatus = $state(data.client.status as 'active' | 'archived');
+	let showDeleteConfirm = $state(false);
+	let deleteConfirmText = $state('');
+	let showArchiveConfirm = $state(false);
+	let copiedLink = $state(false);
+	let showCopyModal = $state(false);
+	let selectedSource = $state('');
+	const MAX_EXERCISES_PER_DAY = 50;
+	const otherClients = data.otherClients ?? [];
+	const hasSuspicious = WEEK_DAYS.some((d) => progress[d.key]?.suspicious);
 
-	const SITE_URL = (data.siteUrl ?? 'https://training-track.vercel.app').replace(/\/?$/, '');
+	const SITE_URL = (data.siteUrl ?? '').replace(/\/?$/, '');
 	const link = `${SITE_URL}/r/${data.client.client_code}`;
 
 	const freshProgress = (): ProgressState =>

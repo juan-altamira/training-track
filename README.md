@@ -40,7 +40,7 @@ Abrí http://localhost:5173.
 ## Despliegue
 
 1) Deploy frontend en Netlify (se usa `@sveltejs/adapter-netlify`).
-   - Base directory: `training-track`
+   - Base directory: (dejar vacío)
    - Build command: `npm run build`
    - Publish directory: `build`
 2) En Supabase, configura:

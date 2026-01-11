@@ -157,6 +157,35 @@ export const actions: Actions = {
 		const existing = normalizeProgress(existingRow?.progress as ProgressState | null);
 		const routinePlan = normalizePlan(routineRow?.plan as RoutinePlan | null);
 
+		// Merge: para cada día y ejercicio, tomar el valor máximo entre existente y nuevo
+		// Esto previene pérdida de datos por race conditions
+		for (const day of WEEK_DAYS) {
+			const existingDay = existing[day.key];
+			const parsedDay = parsed[day.key];
+			if (existingDay && parsedDay) {
+				const mergedExercises = { ...(parsedDay.exercises ?? {}) };
+				for (const exId of Object.keys(existingDay.exercises ?? {})) {
+					const existingVal = existingDay.exercises?.[exId] ?? 0;
+					const parsedVal = parsedDay.exercises?.[exId] ?? 0;
+					// Tomar el máximo para no perder progreso
+					mergedExercises[exId] = Math.max(existingVal, parsedVal);
+				}
+				parsed[day.key] = {
+					...parsedDay,
+					exercises: mergedExercises
+				};
+				// Recalcular completed después del merge
+				const dayPlan = routinePlan[day.key];
+				if (dayPlan) {
+					parsed[day.key].completed = dayPlan.exercises.every((ex) => {
+						const target = Math.max(1, getTargetSets(ex) || 0);
+						const done = mergedExercises[ex.id] ?? 0;
+						return done >= target;
+					});
+				}
+			}
+		}
+
 		// Snapshots
 		const firstSetMap: Record<string, string | null> = existing._meta?.first_set_ts ?? {};
 		const baselineSets: Record<string, number> = existing._meta?.baseline_sets ?? {};

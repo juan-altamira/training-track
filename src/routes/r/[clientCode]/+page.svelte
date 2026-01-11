@@ -16,6 +16,9 @@ let sessionStarts = $state<Record<string, string>>({});
 let firstSeriesTs = $state<Record<string, string>>({});
 let lastSeriesTs = $state<Record<string, string>>({});
 let baselineProgress = $state<Record<string, boolean>>({});
+let saveTimeout: ReturnType<typeof setTimeout> | null = null;
+let pendingSaveDay: string | null = null;
+let saveInFlight = false;
 
 	const adjustSets = (dayKey: string, exerciseId: string, delta: number) => {
 		const dayPlan = plan[dayKey];
@@ -57,7 +60,9 @@ let baselineProgress = $state<Record<string, boolean>>({});
 		expanded = { ...expanded, [dayKey]: !expanded[dayKey] };
 	};
 
-	const saveProgress = async (dayKey?: string) => {
+	const doSaveProgress = async (dayKey?: string) => {
+		if (saveInFlight) return;
+		saveInFlight = true;
 		saving = true;
 		message = '';
 		const formData = new FormData();
@@ -74,12 +79,41 @@ let baselineProgress = $state<Record<string, boolean>>({});
 				formData.set('ts_ultima_serie', lastSeriesTs[dayKey]);
 			}
 		}
-		const res = await fetch('?/saveProgress', {
-			method: 'POST',
-			body: formData
-		});
-		// Silenciar feedback visual, pero mantener guardado
-		saving = false;
+		try {
+			await fetch('?/saveProgress', {
+				method: 'POST',
+				body: formData
+			});
+		} catch (e) {
+			console.error('Error saving progress:', e);
+		} finally {
+			saveInFlight = false;
+			saving = false;
+			// Si hay un guardado pendiente, ejecutarlo
+			if (pendingSaveDay !== null) {
+				const nextDay = pendingSaveDay;
+				pendingSaveDay = null;
+				doSaveProgress(nextDay);
+			}
+		}
+	};
+
+	const saveProgress = (dayKey?: string) => {
+		// Debounce: esperar 300ms antes de guardar para agrupar clics rápidos
+		if (saveTimeout) {
+			clearTimeout(saveTimeout);
+		}
+		pendingSaveDay = dayKey ?? null;
+		saveTimeout = setTimeout(() => {
+			saveTimeout = null;
+			if (saveInFlight) {
+				// Ya hay un guardado en progreso, se ejecutará después
+				return;
+			}
+			const day = pendingSaveDay;
+			pendingSaveDay = null;
+			doSaveProgress(day ?? undefined);
+		}, 300);
 	};
 
 	const resetProgress = async () => {

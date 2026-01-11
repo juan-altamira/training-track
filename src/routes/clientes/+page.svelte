@@ -228,7 +228,7 @@
 											: 'bg-slate-800 text-slate-400 border border-slate-700'
 									}`}
 								>
-									{client.status === 'active' ? 'Activo' : 'Archivado'}
+									{client.status === 'active' ? 'Activo' : 'Inactivo'}
 								</span>
 							</div>
 							<div class="text-base text-slate-300 mb-3">

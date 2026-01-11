@@ -5,6 +5,8 @@ import { error, fail } from '@sveltejs/kit';
 import { nowIsoUtc } from '$lib/time';
 import type { Actions, PageServerLoad } from './$types';
 
+const OWNER_EMAIL = 'juanpabloaltamira@protonmail.com';
+
 const fetchClient = async (clientCode: string) => {
 	const { data, error: clientError } = await supabaseAdmin
 		.from('clients')
@@ -23,10 +25,15 @@ const isTrainerAllowed = async (trainerId: string) => {
 
 	if (!trainer) return false;
 
+	const emailLower = trainer.email?.toLowerCase();
+	
+	// Owner always has access
+	if (emailLower === OWNER_EMAIL) return true;
+
 	const { data: accessRow } = await supabaseAdmin
 		.from('trainer_access')
 		.select('active')
-		.eq('email', trainer.email?.toLowerCase())
+		.eq('email', emailLower)
 		.maybeSingle();
 
 	const accessActive = accessRow?.active === true;

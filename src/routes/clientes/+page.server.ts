@@ -197,6 +197,20 @@ export const actions: Actions = {
 
 		const supabase = locals.supabase;
 
+		// Verificar si ya existe un cliente con el mismo nombre exacto para este entrenador
+		const { data: existingClient } = await supabase
+			.from('clients')
+			.select('id,name')
+			.eq('trainer_id', locals.session.user.id)
+			.ilike('name', name)
+			.maybeSingle();
+
+		if (existingClient) {
+			return fail(400, {
+				message: 'Ya existe un cliente con ese nombre. Te sugiero agregar también el apellido para diferenciarlo mejor.'
+			});
+		}
+
 		const { count: activeCount, error: countError } = await supabase
 			.from('clients')
 			.select('id', { count: 'exact', head: true })

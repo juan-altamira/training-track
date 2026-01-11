@@ -166,7 +166,7 @@
 						type="button"
 						on:click={() => (showArchiveConfirm = true)}
 					>
-						Archivar cliente
+						Desactivar cliente
 					</button>
 				{:else}
 					<button
@@ -450,8 +450,8 @@
 		<div class="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm px-4">
 			<div class="w-full max-w-md rounded-2xl border border-slate-800 bg-[#0f111b] p-6 shadow-2xl shadow-black/40 text-slate-100">
 				<div class="space-y-3">
-					<h2 class="text-xl font-semibold text-amber-200">Archivar cliente</h2>
-					<p class="text-sm text-slate-300">¿Estás seguro que deseas archivar a este cliente?</p>
+					<h2 class="text-xl font-semibold text-amber-200">Desactivar cliente</h2>
+					<p class="text-sm text-slate-300">¿Estás seguro que deseas desactivar el acceso a este cliente?</p>
 				</div>
 				<div class="mt-5 flex items-center justify-end gap-3">
 					<button

@@ -43,11 +43,6 @@
 		return 'text-red-600';
 	};
 
-	const handleCreated = () => {
-		if (form?.message) {
-			alert(form.message as string);
-		}
-	};
 
 	const openClient = async (client: ClientSummary) => {
 		openingId = client.id;
@@ -286,8 +281,7 @@
 		<form
 			method="post"
 			action="?/create"
-			on:submit={handleCreated}
-				class="space-y-5 rounded-xl border border-slate-800 bg-[#0f111b] p-7 shadow-lg shadow-black/30"
+			class="space-y-5 rounded-xl border border-slate-800 bg-[#0f111b] p-7 shadow-lg shadow-black/30"
 		>
 			<div class="space-y-2">
 				<h2 class="text-2xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 via-cyan-300 to-slate-50">
@@ -326,7 +320,10 @@
 			</p>
 
 			{#if form?.message}
-				<p class="rounded-lg bg-red-900/40 px-3 py-2 text-sm text-red-200">
+				<p class="flex items-center gap-2 rounded-lg bg-red-900/40 px-3 py-2 text-sm text-red-200">
+					<svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+					</svg>
 					{form.message}
 				</p>
 			{/if}

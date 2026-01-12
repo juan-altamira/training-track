@@ -1,0 +1,131 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e6]:
+        - img "Training Track logo" [ref=e7]
+        - paragraph [ref=e9]: Training Track
+    - main [ref=e10]:
+      - generic [ref=e11]:
+        - generic [ref=e12]:
+          - heading "Roger Ver" [level=1] [ref=e14]
+          - generic [ref=e15]:
+            - generic [ref=e16]:
+              - button "Copiar link de la rutina" [ref=e17] [cursor=pointer]
+              - button "Copiar rutina de otro cliente" [ref=e18] [cursor=pointer]
+            - generic [ref=e19]:
+              - button "Reactivar cliente" [ref=e20] [cursor=pointer]
+              - button "Eliminar cliente" [ref=e21] [cursor=pointer]
+        - link "Volver al panel" [ref=e23] [cursor=pointer]:
+          - /url: /clientes
+          - generic [ref=e24]: ↩︎
+          - generic [ref=e25]: Volver al panel
+        - generic [ref=e26]:
+          - generic [ref=e27]:
+            - generic [ref=e28]:
+              - heading "Rutina" [level=2] [ref=e29]
+              - button "Guardar cambios" [ref=e30] [cursor=pointer]
+            - generic [ref=e31]:
+              - button "Lunes" [ref=e32] [cursor=pointer]
+              - button "Martes" [ref=e33] [cursor=pointer]
+              - button "Miércoles" [ref=e34] [cursor=pointer]
+              - button "Jueves" [ref=e35] [cursor=pointer]
+              - button "Viernes" [ref=e36] [cursor=pointer]
+              - button "Sábado" [ref=e37] [cursor=pointer]
+              - button "Domingo" [ref=e38] [cursor=pointer]
+            - generic [ref=e39]:
+              - generic [ref=e40]:
+                - generic [ref=e41]:
+                  - paragraph [ref=e42]: Ejercicio 1
+                  - button "Quitar" [ref=e43] [cursor=pointer]
+                - generic [ref=e44]:
+                  - generic [ref=e45]:
+                    - text: Nombre
+                    - textbox "Nombre" [ref=e46]:
+                      - /placeholder: Nuevo ejercicio
+                      - text: press banca
+                  - generic [ref=e47]:
+                    - text: Series/reps (texto)
+                    - textbox "Series/reps (texto)" [ref=e48]: 3x10
+                  - generic [ref=e49]:
+                    - text: Series totales (para progreso)
+                    - spinbutton "Series totales (para progreso)" [ref=e50]: "3"
+                  - generic [ref=e51]:
+                    - text: Nota (opcional)
+                    - textbox "Nota (opcional)" [ref=e52]
+              - generic [ref=e53]:
+                - generic [ref=e54]:
+                  - paragraph [ref=e55]: Ejercicio 2
+                  - button "Quitar" [ref=e56] [cursor=pointer]
+                - generic [ref=e57]:
+                  - generic [ref=e58]:
+                    - text: Nombre
+                    - textbox "Nombre" [ref=e59]:
+                      - /placeholder: Nuevo ejercicio
+                      - text: sentadilla
+                  - generic [ref=e60]:
+                    - text: Series/reps (texto)
+                    - textbox "Series/reps (texto)" [ref=e61]: 3x10
+                  - generic [ref=e62]:
+                    - text: Series totales (para progreso)
+                    - spinbutton "Series totales (para progreso)" [ref=e63]: "3"
+                  - generic [ref=e64]:
+                    - text: Nota (opcional)
+                    - textbox "Nota (opcional)" [ref=e65]
+              - generic [ref=e66]:
+                - generic [ref=e67]:
+                  - paragraph [ref=e68]: Ejercicio 3
+                  - button "Quitar" [ref=e69] [cursor=pointer]
+                - generic [ref=e70]:
+                  - generic [ref=e71]:
+                    - text: Nombre
+                    - textbox "Nombre" [ref=e72]:
+                      - /placeholder: Nuevo ejercicio
+                      - text: press militar
+                  - generic [ref=e73]:
+                    - text: Series/reps (texto)
+                    - textbox "Series/reps (texto)" [ref=e74]: 3x10
+                  - generic [ref=e75]:
+                    - text: Series totales (para progreso)
+                    - spinbutton "Series totales (para progreso)" [ref=e76]: "3"
+                  - generic [ref=e77]:
+                    - text: Nota (opcional)
+                    - textbox "Nota (opcional)" [ref=e78]
+              - generic [ref=e79]:
+                - button "+ Agregar ejercicio" [ref=e80] [cursor=pointer]
+                - button "Guardar cambios" [ref=e81] [cursor=pointer]
+          - generic [ref=e82]:
+            - generic [ref=e85]:
+              - paragraph [ref=e86]: Link de la rutina
+              - paragraph [ref=e87]: https://training-track.vercel.app/r/1e7fb023041c
+              - paragraph [ref=e88]: El cliente accede sin login; si está archivado verá “acceso desactivado”.
+            - generic [ref=e89]:
+              - heading "Semana actual" [level=3] [ref=e92]
+              - list [ref=e93]:
+                - listitem [ref=e94]:
+                  - generic [ref=e95]:
+                    - paragraph [ref=e96]: Lunes
+                    - paragraph [ref=e97]: 3/3 ejercicios completos
+                  - generic [ref=e98]: Completado
+                - listitem [ref=e99]:
+                  - generic [ref=e100]:
+                    - paragraph [ref=e101]: Martes
+                    - paragraph [ref=e102]: 4/4 ejercicios completos
+                  - generic [ref=e103]: Completado
+                - listitem [ref=e104]:
+                  - generic [ref=e105]:
+                    - paragraph [ref=e106]: Miércoles
+                    - paragraph [ref=e107]: 0/3 ejercicios completos
+                  - generic [ref=e108]: En progreso
+                - listitem [ref=e109]:
+                  - generic [ref=e110]:
+                    - paragraph [ref=e111]: Viernes
+                    - paragraph [ref=e112]: 0/2 ejercicios completos
+                  - generic [ref=e113]: En progreso
+            - generic [ref=e114]:
+              - paragraph [ref=e115]: Última actualización
+              - paragraph [ref=e116]: 12/11/2025, 9:20:35 PM
+  - generic [ref=e117]: Training Track
+```

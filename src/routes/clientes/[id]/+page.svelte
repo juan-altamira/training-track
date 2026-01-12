@@ -242,15 +242,6 @@
 					Eliminar cliente
 				</button>
 			</div>
-			<div class="flex flex-col md:flex-row items-stretch md:items-center gap-3 justify-between">
-				<button
-					class="w-full md:w-1/2 rounded-2xl border border-slate-600/60 bg-gradient-to-r from-slate-700 to-slate-600 px-5 py-3 text-base font-semibold text-slate-50 shadow-lg shadow-slate-900/30 transition hover:-translate-y-0.5 hover:shadow-slate-900/50 hover:brightness-110"
-					type="button"
-					on:click={() => (showResetConfirm = true)}
-				>
-					Resetear progreso semanal
-				</button>
-			</div>
 		</div>
 	</div>
 
@@ -372,24 +363,29 @@
 					{/each}
 				{/if}
 
-				<div class="flex flex-wrap gap-3">
+				<div class="grid grid-cols-3 gap-3">
 					<button
-						class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-2.5 text-base font-medium text-slate-100 hover:bg-[#1b1f30]"
+						class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-3 text-base font-medium text-slate-100 hover:bg-[#1b1f30] disabled:opacity-50 disabled:cursor-not-allowed"
 						on:click={() => addExercise(selectedDay)}
 						type="button"
 						disabled={plan[selectedDay].exercises.length >= MAX_EXERCISES_PER_DAY}
 					>
 						+ Agregar ejercicio
 					</button>
-					{#if plan[selectedDay].exercises.length > 0}
-						<button
-							class="save-cta rounded-lg bg-[#1c2338] px-4 py-2.5 text-base font-medium text-slate-100 hover:bg-[#222b43] disabled:cursor-not-allowed disabled:opacity-70"
-							on:click={saveRoutine}
-							disabled={saving}
-						>
-							<span>{saving ? 'Guardando...' : 'Guardar cambios'}</span>
-						</button>
-					{/if}
+					<button
+						class="save-cta rounded-lg bg-[#1c2338] px-4 py-3 text-base font-medium text-slate-100 hover:bg-[#222b43] disabled:cursor-not-allowed disabled:opacity-70"
+						on:click={saveRoutine}
+						disabled={saving || plan[selectedDay].exercises.length === 0}
+					>
+						<span>{saving ? 'Guardando...' : 'Guardar cambios'}</span>
+					</button>
+					<button
+						class="rounded-lg border border-amber-600/50 bg-amber-900/40 px-4 py-3 text-base font-medium text-amber-200 hover:bg-amber-900/60"
+						on:click={() => (showResetConfirm = true)}
+						type="button"
+					>
+						Resetear progreso
+					</button>
 				</div>
 			</div>
 

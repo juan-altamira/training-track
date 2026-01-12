@@ -136,8 +136,7 @@ export const actions: Actions = {
 			.from('routines')
 			.upsert({
 				client_id: params.id,
-				plan,
-				reset_progress_on_change: true
+				plan
 			})
 			.eq('client_id', params.id);
 
@@ -145,14 +144,6 @@ export const actions: Actions = {
 			console.error(updateError);
 			return fail(500, { message: 'No pudimos guardar la rutina' });
 		}
-
-		await supabase
-			.from('progress')
-			.update({
-				progress: normalizeProgress(null, { last_reset_utc: nowUtc, last_activity_utc: nowUtc }),
-				last_completed_at: null
-			})
-			.eq('client_id', params.id);
 
 		return { success: true };
 	},

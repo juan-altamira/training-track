@@ -14,6 +14,7 @@
 	let showDeleteConfirm = $state(false);
 	let deleteConfirmText = $state('');
 	let showArchiveConfirm = $state(false);
+	let showResetConfirm = $state(false);
 	let copiedLink = $state(false);
 	let showCopyModal = $state(false);
 	let selectedSource = $state('');
@@ -148,8 +149,7 @@
 			body: formData
 		});
 		if (res.ok) {
-			progress = freshProgress();
-			feedback = 'Rutina guardada y progreso reseteado';
+			feedback = 'Rutina guardada';
 		} else {
 			feedback = 'No pudimos guardar la rutina';
 		}
@@ -240,6 +240,15 @@
 					}}
 				>
 					Eliminar cliente
+				</button>
+			</div>
+			<div class="flex flex-col md:flex-row items-stretch md:items-center gap-3 justify-between">
+				<button
+					class="w-full md:w-1/2 rounded-2xl border border-slate-600/60 bg-gradient-to-r from-slate-700 to-slate-600 px-5 py-3 text-base font-semibold text-slate-50 shadow-lg shadow-slate-900/30 transition hover:-translate-y-0.5 hover:shadow-slate-900/50 hover:brightness-110"
+					type="button"
+					on:click={() => (showResetConfirm = true)}
+				>
+					Resetear progreso semanal
 				</button>
 			</div>
 		</div>
@@ -524,6 +533,39 @@
 						}}
 					>
 						Confirmar
+					</button>
+				</div>
+			</div>
+		</div>
+	{/if}
+
+	{#if showResetConfirm}
+		<div class="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm px-4">
+			<div class="w-full max-w-md rounded-2xl border border-slate-800 bg-[#0f111b] p-6 shadow-2xl shadow-black/40 text-slate-100">
+				<div class="space-y-3">
+					<h2 class="text-xl font-semibold text-amber-200">Resetear progreso</h2>
+					<p class="text-sm text-slate-300">
+						¿Estás seguro que deseas reiniciar el progreso de <span class="font-semibold">{data.client.name}</span>?
+						Esto borrará todas las series completadas de esta semana.
+					</p>
+				</div>
+				<div class="mt-5 flex items-center justify-end gap-3">
+					<button
+						type="button"
+						class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-2 text-slate-200 hover:bg-[#1b1f30]"
+						on:click={() => (showResetConfirm = false)}
+					>
+						Cancelar
+					</button>
+					<button
+						type="button"
+						class="rounded-lg border border-amber-500/50 bg-amber-900/60 px-4 py-2 text-amber-100 hover:bg-amber-900/80"
+						on:click={async () => {
+							showResetConfirm = false;
+							await resetProgress();
+						}}
+					>
+						Resetear progreso
 					</button>
 				</div>
 			</div>

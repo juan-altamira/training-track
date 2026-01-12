@@ -452,7 +452,7 @@
 				</ul>
 				{#if hasSuspicious}
 					<p class="mt-3 text-sm text-amber-200">
-						El cliente marcó todas las series del día en menos de 60 segundos. Es posible que las haya marcado sin haber entrenado.
+						Posible engaño significa que el cliente marcó todas las series del día en menos de 60 segundos. Es posible que las haya marcado sin haber entrenado.
 					</p>
 				{/if}
 			</div>

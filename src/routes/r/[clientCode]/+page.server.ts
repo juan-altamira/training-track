@@ -19,26 +19,26 @@ const fetchClient = async (clientCode: string) => {
 const isTrainerAllowed = async (trainerId: string) => {
 	const { data: trainer } = await supabaseAdmin
 		.from('trainers')
-		.select('status,email')
+		.select('email')
 		.eq('id', trainerId)
 		.maybeSingle();
 
 	if (!trainer) return false;
 
 	const emailLower = trainer.email?.toLowerCase();
+	if (!emailLower) return false;
 	
 	// Owner always has access
 	if (emailLower === OWNER_EMAIL) return true;
 
+	// Check trainer_access (consistent with panel logic)
 	const { data: accessRow } = await supabaseAdmin
 		.from('trainer_access')
 		.select('active')
 		.eq('email', emailLower)
 		.maybeSingle();
 
-	const accessActive = accessRow?.active === true;
-	const statusActive = trainer.status === 'active';
-	return accessActive && statusActive;
+	return accessRow?.active === true;
 };
 
 export const load: PageServerLoad = async ({ params }) => {

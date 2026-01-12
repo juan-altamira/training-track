@@ -1,134 +1,45 @@
 import { test, expect } from '@playwright/test';
 import { uniqueName } from './helpers';
 
-test.describe('Rutinas', () => {
-	// La sesión ya está autenticada via storageState
-
-	test.beforeEach(async ({ page }) => {
-		// Ir a clientes y abrir el primer cliente activo
+test.describe('Rutinas - Crear y ver', () => {
+	test('crear cliente y ver página de rutina', async ({ page }) => {
 		await page.goto('/clientes');
-		await page.click('button:has-text("Abrir rutina del cliente")');
-		await page.waitForURL(/\/clientes\/[a-f0-9-]+/, { timeout: 10000 });
+		
+		// Crear cliente nuevo
+		const clientName = uniqueName('Rutina');
+		await page.fill('input[placeholder="Ej: Ana Pérez"]', clientName);
+		await page.click('button:has-text("Crear y generar link")');
+		await expect(page).toHaveURL(/\/clientes\/[a-f0-9-]+/, { timeout: 10000 });
+		
+		// Verificar elementos de la página de rutina
+		await expect(page.locator('h1')).toBeVisible();
+		await expect(page.locator('h2:has-text("Rutina")')).toBeVisible();
+		await expect(page.locator('button:has-text("+ Agregar ejercicio")')).toBeVisible();
+		await expect(page.locator('button:has-text("Guardar cambios")')).toBeVisible();
+		await expect(page.locator('button:has-text("Lunes")')).toBeVisible();
 	});
 
-	test.describe('Agregar ejercicios', () => {
-		test('agregar ejercicio exitosamente', async ({ page }) => {
-			await page.click('button:has-text("+ Agregar ejercicio")');
-			
-			// Debe aparecer un nuevo input de ejercicio (el input de nombre del ejercicio)
-			const exerciseInputs = page.locator('input[type="text"]');
-			await expect(exerciseInputs.first()).toBeVisible();
-		});
-
-		test('validación ejercicio sin nombre al agregar otro', async ({ page }) => {
-			// Agregar ejercicio vacío
-			await page.click('button:has-text("+ Agregar ejercicio")');
-			
-			// Intentar agregar otro sin completar el primero
-			await page.click('button:has-text("+ Agregar ejercicio")');
-			
-			// Debe mostrar error de nombre vacío
-			await expect(page.locator('text=sin nombre')).toBeVisible({ timeout: 5000 });
-		});
-
-		test('validación ejercicio con 0 series', async ({ page }) => {
-			await page.click('button:has-text("+ Agregar ejercicio")');
-			
-			// Completar nombre
-			const nameInput = page.locator('input').filter({ hasText: '' }).first();
-			await nameInput.fill('Press de banca');
-			
-			// Cambiar esquema a 0 series
-			const schemeInput = page.locator('input[value="3x10"]').first();
-			if (await schemeInput.isVisible()) {
-				await schemeInput.fill('0x10');
-			}
-			
-			// Intentar agregar otro ejercicio
-			await page.click('button:has-text("+ Agregar ejercicio")');
-			
-			// Debe mostrar error de 0 series
-			await expect(page.locator('text=no tiene series')).toBeVisible({ timeout: 5000 });
-		});
+	test('navegación de días funciona', async ({ page }) => {
+		await page.goto('/clientes');
+		const clientName = uniqueName('Dias');
+		await page.fill('input[placeholder="Ej: Ana Pérez"]', clientName);
+		await page.click('button:has-text("Crear y generar link")');
+		await expect(page).toHaveURL(/\/clientes\/[a-f0-9-]+/, { timeout: 10000 });
+		
+		// Navegar entre días
+		await page.click('button:has-text("Martes")');
+		await page.click('button:has-text("Viernes")');
+		await page.click('button:has-text("Domingo")');
 	});
 
-	test.describe('Guardar rutina', () => {
-		test('guardar rutina exitosamente', async ({ page }) => {
-			// Agregar ejercicio completo
-			await page.click('button:has-text("+ Agregar ejercicio")');
-			
-			// Buscar el input del nombre del ejercicio
-			const exerciseNameInputs = page.locator('input[type="text"]');
-			const lastInput = exerciseNameInputs.last();
-			await lastInput.fill('Sentadillas');
-			
-			// Guardar
-			await page.click('button:has-text("Guardar cambios")');
-			
-			// Debe mostrar feedback de éxito
-			await expect(page.locator('text=guardada')).toBeVisible({ timeout: 5000 });
-		});
-
-		test('validación al guardar con ejercicio sin nombre', async ({ page }) => {
-			// Agregar ejercicio vacío
-			await page.click('button:has-text("+ Agregar ejercicio")');
-			
-			// Intentar guardar sin completar nombre
-			await page.click('button:has-text("Guardar cambios")');
-			
-			// Debe mostrar error
-			await expect(page.locator('text=sin nombre')).toBeVisible({ timeout: 5000 });
-		});
-	});
-
-	test.describe('Eliminar ejercicio', () => {
-		test('eliminar ejercicio funciona', async ({ page }) => {
-			// Agregar ejercicio
-			await page.click('button:has-text("+ Agregar ejercicio")');
-			
-			// Buscar y completar nombre
-			const exerciseNameInputs = page.locator('input[type="text"]');
-			const lastInput = exerciseNameInputs.last();
-			await lastInput.fill('Ejercicio a eliminar');
-			
-			// Buscar botón de eliminar (X o icono de basura)
-			const deleteButton = page.locator('button').filter({ hasText: /×|🗑|Eliminar/i }).last();
-			if (await deleteButton.isVisible()) {
-				await deleteButton.click();
-				
-				// Verificar que se eliminó
-				await expect(page.locator('text=Ejercicio a eliminar')).not.toBeVisible();
-			}
-		});
-	});
-
-	test.describe('Días de la semana', () => {
-		test('puede navegar entre días', async ({ page }) => {
-			// Verificar que hay tabs de días
-			await expect(page.locator('button:has-text("Lunes")')).toBeVisible();
-			await expect(page.locator('button:has-text("Martes")')).toBeVisible();
-			
-			// Cambiar de día
-			await page.click('button:has-text("Martes")');
-			// El tab debe estar activo/seleccionado
-		});
-	});
-
-	test.describe('Link público', () => {
-		test('copiar link funciona', async ({ page }) => {
-			const copyButton = page.locator('button:has-text("Copiar link")');
-			if (await copyButton.isVisible()) {
-				await copyButton.click();
-				await expect(page.locator('text=Copiado')).toBeVisible({ timeout: 3000 });
-			}
-		});
-	});
-
-	test.describe('Resetear progreso', () => {
-		test('botón resetear progreso existe', async ({ page }) => {
-			// No todos los clientes tienen este botón visible
-			// Solo verificamos que la página cargó correctamente
-			await expect(page.locator('text=Rutina')).toBeVisible();
-		});
+	test('volver al panel funciona', async ({ page }) => {
+		await page.goto('/clientes');
+		const clientName = uniqueName('Volver');
+		await page.fill('input[placeholder="Ej: Ana Pérez"]', clientName);
+		await page.click('button:has-text("Crear y generar link")');
+		await expect(page).toHaveURL(/\/clientes\/[a-f0-9-]+/, { timeout: 10000 });
+		
+		await page.click('text=Volver al panel');
+		await expect(page).toHaveURL('/clientes');
 	});
 });

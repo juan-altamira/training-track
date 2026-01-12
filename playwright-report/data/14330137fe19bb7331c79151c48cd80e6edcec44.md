@@ -1,0 +1,51 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - img "Training Track logo" [ref=e7]
+      - paragraph [ref=e9]: Training Track
+  - main [ref=e10]:
+    - generic [ref=e11]:
+      - generic [ref=e12]:
+        - heading "RoutineTest_1768185243830_1sos" [level=1] [ref=e14]
+        - generic [ref=e15]:
+          - generic [ref=e16]:
+            - button "Copiar link de la rutina" [ref=e17] [cursor=pointer]
+            - button "Copiar rutina de otro cliente" [ref=e18] [cursor=pointer]
+          - generic [ref=e19]:
+            - button "Desactivar cliente" [ref=e20] [cursor=pointer]
+            - button "Eliminar cliente" [ref=e21] [cursor=pointer]
+      - link "Volver al panel" [ref=e23] [cursor=pointer]:
+        - /url: /clientes
+        - generic [ref=e24]: ↩︎
+        - generic [ref=e25]: Volver al panel
+      - generic [ref=e26]:
+        - generic [ref=e27]:
+          - generic [ref=e28]:
+            - heading "Rutina" [level=2] [ref=e29]
+            - button "Guardar cambios" [ref=e30] [cursor=pointer]
+          - generic [ref=e31]:
+            - button "Lunes" [ref=e32] [cursor=pointer]
+            - button "Martes" [ref=e33] [cursor=pointer]
+            - button "Miércoles" [ref=e34] [cursor=pointer]
+            - button "Jueves" [ref=e35] [cursor=pointer]
+            - button "Viernes" [ref=e36] [cursor=pointer]
+            - button "Sábado" [ref=e37] [cursor=pointer]
+            - button "Domingo" [ref=e38] [cursor=pointer]
+          - generic [ref=e39]:
+            - paragraph [ref=e40]: Sin ejercicios. Agregá uno.
+            - button "+ Agregar ejercicio" [ref=e42] [cursor=pointer]
+        - generic [ref=e43]:
+          - generic [ref=e46]:
+            - paragraph [ref=e47]: Link de la rutina
+            - paragraph [ref=e48]: https://training-track.vercel.app/r/5d0307f1b58e
+            - paragraph [ref=e49]: El cliente accede sin login; si está archivado verá “acceso desactivado”.
+          - generic [ref=e50]:
+            - heading "Semana actual" [level=3] [ref=e53]
+            - list
+          - generic [ref=e54]:
+            - paragraph [ref=e55]: Última actualización
+            - paragraph [ref=e56]: —
+```

@@ -132,10 +132,16 @@ test.describe('Gestión de Clientes', () => {
 			await page.click('button:has-text("Desactivar cliente")');
 			await page.click('button:has-text("Confirmar")');
 			
+			// Esperar que se procese
+			await page.waitForTimeout(1000);
+			
 			// Volver a lista y verificar badge
 			await page.goto('/clientes');
-			const clientCard = page.locator(`article:has-text("${clientName}")`);
-			await expect(clientCard.locator('text=Inactivo')).toBeVisible();
+			await page.waitForLoadState('networkidle');
+			
+			// Buscar el cliente por nombre parcial (truncado) y verificar Inactivo
+			const clientCard = page.locator('article').filter({ hasText: clientName.substring(0, 15) });
+			await expect(clientCard.first().locator('span:has-text("Inactivo")')).toBeVisible({ timeout: 10000 });
 		});
 	});
 

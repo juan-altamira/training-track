@@ -1,0 +1,369 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - img "Training Track logo" [ref=e7]
+      - paragraph [ref=e9]: Training Track
+  - main [ref=e10]:
+    - generic [ref=e11]:
+      - generic [ref=e12]:
+        - paragraph [ref=e14]: EN ESTE PANEL VERAS A TUS CLIENTES
+        - button "Cerrar sesión" [ref=e16] [cursor=pointer]
+      - generic [ref=e18]:
+        - generic [ref=e19]:
+          - generic [ref=e20]: Buscar cliente
+          - textbox "Buscar cliente" [ref=e21]
+        - button "Buscar" [ref=e22] [cursor=pointer]
+      - generic [ref=e23]:
+        - generic [ref=e25]:
+          - article [ref=e26]:
+            - generic [ref=e27]:
+              - generic [ref=e28]:
+                - paragraph [ref=e29]: Roger Ver
+                - paragraph [ref=e30]: Hipertrofia
+              - generic [ref=e31]: Activo
+            - paragraph [ref=e33]: "Última actividad: Hace 31 días"
+            - generic [ref=e34]:
+              - button "Abrir rutina del cliente" [ref=e35] [cursor=pointer]
+              - generic [ref=e36]:
+                - button "Eliminar cliente" [ref=e37] [cursor=pointer]
+                - button "Copiar link público" [ref=e38] [cursor=pointer]
+          - article [ref=e39]:
+            - generic [ref=e40]:
+              - generic [ref=e41]:
+                - paragraph [ref=e42]: Marta
+                - paragraph [ref=e43]: bajar de peso
+              - generic [ref=e44]: Activo
+            - paragraph [ref=e46]: "Última actividad: Hoy"
+            - generic [ref=e47]:
+              - button "Abrir rutina del cliente" [ref=e48] [cursor=pointer]
+              - generic [ref=e49]:
+                - button "Eliminar cliente" [ref=e50] [cursor=pointer]
+                - button "Copiar link público" [ref=e51] [cursor=pointer]
+          - article [ref=e52]:
+            - generic [ref=e53]:
+              - generic [ref=e54]:
+                - paragraph [ref=e55]: Juan Pablo
+                - paragraph [ref=e56]: Hipertrofia
+              - generic [ref=e57]: Activo
+            - paragraph [ref=e59]: "Última actividad: Hace 30 días"
+            - generic [ref=e60]:
+              - button "Abrir rutina del cliente" [ref=e61] [cursor=pointer]
+              - generic [ref=e62]:
+                - button "Eliminar cliente" [ref=e63] [cursor=pointer]
+                - button "Copiar link público" [ref=e64] [cursor=pointer]
+          - article [ref=e65]:
+            - generic [ref=e66]:
+              - generic [ref=e67]:
+                - paragraph [ref=e68]: David
+                - paragraph [ref=e69]: fuerza
+              - generic [ref=e70]: Activo
+            - paragraph [ref=e72]: "Última actividad: Hoy"
+            - generic [ref=e73]:
+              - button "Abrir rutina del cliente" [ref=e74] [cursor=pointer]
+              - generic [ref=e75]:
+                - button "Eliminar cliente" [ref=e76] [cursor=pointer]
+                - button "Copiar link público" [ref=e77] [cursor=pointer]
+          - article [ref=e78]:
+            - generic [ref=e79]:
+              - generic [ref=e80]:
+                - paragraph [ref=e81]: Ana Perez
+                - paragraph [ref=e82]: perdida de grasa
+              - generic [ref=e83]: Activo
+            - paragraph [ref=e85]: "Última actividad: Hace 30 días"
+            - generic [ref=e86]:
+              - button "Abrir rutina del cliente" [ref=e87] [cursor=pointer]
+              - generic [ref=e88]:
+                - button "Eliminar cliente" [ref=e89] [cursor=pointer]
+                - button "Copiar link público" [ref=e90] [cursor=pointer]
+          - article [ref=e91]:
+            - generic [ref=e92]:
+              - generic [ref=e93]:
+                - paragraph [ref=e94]: ToCancel_1768183931589_x3iz
+                - paragraph [ref=e95]: Sin objetivo
+              - generic [ref=e96]: Activo
+            - paragraph [ref=e98]: "Última actividad: Hoy"
+            - generic [ref=e99]:
+              - button "Abrir rutina del cliente" [ref=e100] [cursor=pointer]
+              - generic [ref=e101]:
+                - button "Eliminar cliente" [ref=e102] [cursor=pointer]
+                - button "Copiar link público" [ref=e103] [cursor=pointer]
+          - article [ref=e104]:
+            - generic [ref=e105]:
+              - generic [ref=e106]:
+                - paragraph [ref=e107]: TestClient_1768183938215_h780
+                - paragraph [ref=e108]: Sin objetivo
+              - generic [ref=e109]: Activo
+            - paragraph [ref=e111]: "Última actividad: Hoy"
+            - generic [ref=e112]:
+              - button "Abrir rutina del cliente" [ref=e113] [cursor=pointer]
+              - generic [ref=e114]:
+                - button "Eliminar cliente" [ref=e115] [cursor=pointer]
+                - button "Copiar link público" [ref=e116] [cursor=pointer]
+          - article [ref=e117]:
+            - generic [ref=e118]:
+              - generic [ref=e119]:
+                - paragraph [ref=e120]: DuplicateTest_1768184001759_xre7
+                - paragraph [ref=e121]: Sin objetivo
+              - generic [ref=e122]: Activo
+            - paragraph [ref=e124]: "Última actividad: Hoy"
+            - generic [ref=e125]:
+              - button "Abrir rutina del cliente" [ref=e126] [cursor=pointer]
+              - generic [ref=e127]:
+                - button "Eliminar cliente" [ref=e128] [cursor=pointer]
+                - button "Copiar link público" [ref=e129] [cursor=pointer]
+          - article [ref=e130]:
+            - generic [ref=e131]:
+              - generic [ref=e132]:
+                - paragraph [ref=e133]: ToDeactivate_1768184001759_vxrk
+                - paragraph [ref=e134]: Sin objetivo
+              - generic [ref=e135]: Activo
+            - paragraph [ref=e137]: "Última actividad: Hoy"
+            - generic [ref=e138]:
+              - button "Abrir rutina del cliente" [ref=e139] [cursor=pointer]
+              - generic [ref=e140]:
+                - button "Eliminar cliente" [ref=e141] [cursor=pointer]
+                - button "Copiar link público" [ref=e142] [cursor=pointer]
+          - article [ref=e143]:
+            - generic [ref=e144]:
+              - generic [ref=e145]:
+                - paragraph [ref=e146]: ToCancel_1768184037141_vywa
+                - paragraph [ref=e147]: Sin objetivo
+              - generic [ref=e148]: Activo
+            - paragraph [ref=e150]: "Última actividad: Hoy"
+            - generic [ref=e151]:
+              - button "Abrir rutina del cliente" [ref=e152] [cursor=pointer]
+              - generic [ref=e153]:
+                - button "Eliminar cliente" [ref=e154] [cursor=pointer]
+                - button "Copiar link público" [ref=e155] [cursor=pointer]
+          - article [ref=e156]:
+            - generic [ref=e157]:
+              - generic [ref=e158]:
+                - paragraph [ref=e159]: ToDeactivate_1768184054174_2lui
+                - paragraph [ref=e160]: Sin objetivo
+              - generic [ref=e161]: Activo
+            - paragraph [ref=e163]: "Última actividad: Hoy"
+            - generic [ref=e164]:
+              - button "Abrir rutina del cliente" [ref=e165] [cursor=pointer]
+              - generic [ref=e166]:
+                - button "Eliminar cliente" [ref=e167] [cursor=pointer]
+                - button "Copiar link público" [ref=e168] [cursor=pointer]
+          - article [ref=e169]:
+            - generic [ref=e170]:
+              - generic [ref=e171]:
+                - paragraph [ref=e172]: TestClient_1768184337600_bgjk
+                - paragraph [ref=e173]: Sin objetivo
+              - generic [ref=e174]: Activo
+            - paragraph [ref=e176]: "Última actividad: Hoy"
+            - generic [ref=e177]:
+              - button "Abrir rutina del cliente" [ref=e178] [cursor=pointer]
+              - generic [ref=e179]:
+                - button "Eliminar cliente" [ref=e180] [cursor=pointer]
+                - button "Copiar link público" [ref=e181] [cursor=pointer]
+          - article [ref=e182]:
+            - generic [ref=e183]:
+              - generic [ref=e184]:
+                - paragraph [ref=e185]: DuplicateTest_1768184353380_i26f
+                - paragraph [ref=e186]: Sin objetivo
+              - generic [ref=e187]: Activo
+            - paragraph [ref=e189]: "Última actividad: Hoy"
+            - generic [ref=e190]:
+              - button "Abrir rutina del cliente" [ref=e191] [cursor=pointer]
+              - generic [ref=e192]:
+                - button "Eliminar cliente" [ref=e193] [cursor=pointer]
+                - button "Copiar link público" [ref=e194] [cursor=pointer]
+          - article [ref=e195]:
+            - generic [ref=e196]:
+              - generic [ref=e197]:
+                - paragraph [ref=e198]: ToCancel_1768184378535_xoro
+                - paragraph [ref=e199]: Sin objetivo
+              - generic [ref=e200]: Activo
+            - paragraph [ref=e202]: "Última actividad: Hoy"
+            - generic [ref=e203]:
+              - button "Abrir rutina del cliente" [ref=e204] [cursor=pointer]
+              - generic [ref=e205]:
+                - button "Eliminar cliente" [ref=e206] [cursor=pointer]
+                - button "Copiar link público" [ref=e207] [cursor=pointer]
+          - article [ref=e208]:
+            - generic [ref=e209]:
+              - generic [ref=e210]:
+                - paragraph [ref=e211]: ToDeactivate_1768184394240_qglv
+                - paragraph [ref=e212]: Sin objetivo
+              - generic [ref=e213]: Inactivo
+            - paragraph [ref=e215]: "Última actividad: Hoy"
+            - generic [ref=e216]:
+              - button "Abrir rutina del cliente" [ref=e217] [cursor=pointer]
+              - generic [ref=e218]:
+                - button "Eliminar cliente" [ref=e219] [cursor=pointer]
+                - button "Copiar link público" [ref=e220] [cursor=pointer]
+          - article [ref=e221]:
+            - generic [ref=e222]:
+              - generic [ref=e223]:
+                - paragraph [ref=e224]: RoutineTest_1768184421646_6got
+                - paragraph [ref=e225]: Sin objetivo
+              - generic [ref=e226]: Activo
+            - paragraph [ref=e228]: "Última actividad: Hoy"
+            - generic [ref=e229]:
+              - button "Abrir rutina del cliente" [ref=e230] [cursor=pointer]
+              - generic [ref=e231]:
+                - button "Eliminar cliente" [ref=e232] [cursor=pointer]
+                - button "Copiar link público" [ref=e233] [cursor=pointer]
+          - article [ref=e234]:
+            - generic [ref=e235]:
+              - generic [ref=e236]:
+                - paragraph [ref=e237]: RoutineTest_1768184493312_fy17
+                - paragraph [ref=e238]: Sin objetivo
+              - generic [ref=e239]: Activo
+            - paragraph [ref=e241]: "Última actividad: Hoy"
+            - generic [ref=e242]:
+              - button "Abrir rutina del cliente" [ref=e243] [cursor=pointer]
+              - generic [ref=e244]:
+                - button "Eliminar cliente" [ref=e245] [cursor=pointer]
+                - button "Copiar link público" [ref=e246] [cursor=pointer]
+          - article [ref=e247]:
+            - generic [ref=e248]:
+              - generic [ref=e249]:
+                - paragraph [ref=e250]: RoutineTest_1768184522385_a755
+                - paragraph [ref=e251]: Sin objetivo
+              - generic [ref=e252]: Activo
+            - paragraph [ref=e254]: "Última actividad: Hoy"
+            - generic [ref=e255]:
+              - button "Abrir rutina del cliente" [ref=e256] [cursor=pointer]
+              - generic [ref=e257]:
+                - button "Eliminar cliente" [ref=e258] [cursor=pointer]
+                - button "Copiar link público" [ref=e259] [cursor=pointer]
+          - article [ref=e260]:
+            - generic [ref=e261]:
+              - generic [ref=e262]:
+                - paragraph [ref=e263]: TestClient_1768184807330_8pkn
+                - paragraph [ref=e264]: Sin objetivo
+              - generic [ref=e265]: Activo
+            - paragraph [ref=e267]: "Última actividad: Hoy"
+            - generic [ref=e268]:
+              - button "Abrir rutina del cliente" [ref=e269] [cursor=pointer]
+              - generic [ref=e270]:
+                - button "Eliminar cliente" [ref=e271] [cursor=pointer]
+                - button "Copiar link público" [ref=e272] [cursor=pointer]
+          - article [ref=e273]:
+            - generic [ref=e274]:
+              - generic [ref=e275]:
+                - paragraph [ref=e276]: DuplicateTest_1768184820866_c25v
+                - paragraph [ref=e277]: Sin objetivo
+              - generic [ref=e278]: Activo
+            - paragraph [ref=e280]: "Última actividad: Hoy"
+            - generic [ref=e281]:
+              - button "Abrir rutina del cliente" [ref=e282] [cursor=pointer]
+              - generic [ref=e283]:
+                - button "Eliminar cliente" [ref=e284] [cursor=pointer]
+                - button "Copiar link público" [ref=e285] [cursor=pointer]
+          - article [ref=e286]:
+            - generic [ref=e287]:
+              - generic [ref=e288]:
+                - paragraph [ref=e289]: ToCancel_1768184850594_6nu3
+                - paragraph [ref=e290]: Sin objetivo
+              - generic [ref=e291]: Activo
+            - paragraph [ref=e293]: "Última actividad: Hoy"
+            - generic [ref=e294]:
+              - button "Abrir rutina del cliente" [ref=e295] [cursor=pointer]
+              - generic [ref=e296]:
+                - button "Eliminar cliente" [ref=e297] [cursor=pointer]
+                - button "Copiar link público" [ref=e298] [cursor=pointer]
+          - article [ref=e299]:
+            - generic [ref=e300]:
+              - generic [ref=e301]:
+                - paragraph [ref=e302]: TestClient_1768184889279_7vmg
+                - paragraph [ref=e303]: Sin objetivo
+              - generic [ref=e304]: Activo
+            - paragraph [ref=e306]: "Última actividad: Hoy"
+            - generic [ref=e307]:
+              - button "Abrir rutina del cliente" [ref=e308] [cursor=pointer]
+              - generic [ref=e309]:
+                - button "Eliminar cliente" [ref=e310] [cursor=pointer]
+                - button "Copiar link público" [ref=e311] [cursor=pointer]
+          - article [ref=e312]:
+            - generic [ref=e313]:
+              - generic [ref=e314]:
+                - paragraph [ref=e315]: ToDeactivate_1768184889275_3re3
+                - paragraph [ref=e316]: Sin objetivo
+              - generic [ref=e317]: Activo
+            - paragraph [ref=e319]: "Última actividad: Hoy"
+            - generic [ref=e320]:
+              - button "Abrir rutina del cliente" [ref=e321] [cursor=pointer]
+              - generic [ref=e322]:
+                - button "Eliminar cliente" [ref=e323] [cursor=pointer]
+                - button "Copiar link público" [ref=e324] [cursor=pointer]
+          - article [ref=e325]:
+            - generic [ref=e326]:
+              - generic [ref=e327]:
+                - paragraph [ref=e328]: DuplicateTest_1768184921026_k9z2
+                - paragraph [ref=e329]: Sin objetivo
+              - generic [ref=e330]: Activo
+            - paragraph [ref=e332]: "Última actividad: Hoy"
+            - generic [ref=e333]:
+              - button "Abrir rutina del cliente" [ref=e334] [cursor=pointer]
+              - generic [ref=e335]:
+                - button "Eliminar cliente" [ref=e336] [cursor=pointer]
+                - button "Copiar link público" [ref=e337] [cursor=pointer]
+          - article [ref=e338]:
+            - generic [ref=e339]:
+              - generic [ref=e340]:
+                - paragraph [ref=e341]: RoutineTest_1768184967397_kzpq
+                - paragraph [ref=e342]: Sin objetivo
+              - generic [ref=e343]: Activo
+            - paragraph [ref=e345]: "Última actividad: Hoy"
+            - generic [ref=e346]:
+              - button "Abrir rutina del cliente" [ref=e347] [cursor=pointer]
+              - generic [ref=e348]:
+                - button "Eliminar cliente" [ref=e349] [cursor=pointer]
+                - button "Copiar link público" [ref=e350] [cursor=pointer]
+          - article [ref=e351]:
+            - generic [ref=e352]:
+              - generic [ref=e353]:
+                - paragraph [ref=e354]: ToCancel_1768184974480_gg25
+                - paragraph [ref=e355]: Sin objetivo
+              - generic [ref=e356]: Activo
+            - paragraph [ref=e358]: "Última actividad: Hoy"
+            - generic [ref=e359]:
+              - button "Abrir rutina del cliente" [ref=e360] [cursor=pointer]
+              - generic [ref=e361]:
+                - button "Eliminar cliente" [ref=e362] [cursor=pointer]
+                - button "Copiar link público" [ref=e363] [cursor=pointer]
+          - article [ref=e364]:
+            - generic [ref=e365]:
+              - generic [ref=e366]:
+                - paragraph [ref=e367]: RoutineTest_1768185003940_t73j
+                - paragraph [ref=e368]: Sin objetivo
+              - generic [ref=e369]: Activo
+            - paragraph [ref=e371]: "Última actividad: Hoy"
+            - generic [ref=e372]:
+              - button "Abrir rutina del cliente" [ref=e373] [cursor=pointer]
+              - generic [ref=e374]:
+                - button "Eliminar cliente" [ref=e375] [cursor=pointer]
+                - button "Copiar link público" [ref=e376] [cursor=pointer]
+          - article [ref=e377]:
+            - generic [ref=e378]:
+              - generic [ref=e379]:
+                - paragraph [ref=e380]: ToDeactivate_1768185006491_6bcb
+                - paragraph [ref=e381]: Sin objetivo
+              - generic [ref=e382]: Activo
+            - paragraph [ref=e384]: "Última actividad: Hoy"
+            - generic [ref=e385]:
+              - button "Abrir rutina del cliente" [ref=e386] [cursor=pointer]
+              - generic [ref=e387]:
+                - button "Eliminar cliente" [ref=e388] [cursor=pointer]
+                - button "Copiar link público" [ref=e389] [cursor=pointer]
+        - generic [ref=e390]:
+          - heading "Crear cliente" [level=2] [ref=e392]
+          - generic [ref=e393]:
+            - text: Nombre
+            - textbox "Nombre" [ref=e394]:
+              - /placeholder: "Ej: Ana Pérez"
+          - generic [ref=e395]:
+            - text: Objetivo (opcional)
+            - textbox "Objetivo (opcional)" [ref=e396]:
+              - /placeholder: Hipertrofia, fuerza, recomposición...
+          - button "Crear y generar link" [ref=e397] [cursor=pointer]: Crear y generar link
+          - paragraph [ref=e399]: Al hacer click crearás un cliente y un link para que él pueda acceder a su rutina.
+```

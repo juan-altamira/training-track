@@ -216,13 +216,13 @@
 				<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
 					{#each filteredClients() as client (client.id)}
 						<article class="flex flex-col gap-3 rounded-xl border border-slate-800 bg-[#0f111b] p-5 shadow-lg shadow-black/30">
-							<div class="flex items-start justify-between gap-2">
-								<div>
-									<p class="text-lg font-semibold text-slate-50">{client.name}</p>
-									<p class="text-sm text-slate-400">{client.objective ?? 'Sin objetivo'}</p>
+							<div class="flex items-start justify-between gap-3">
+								<div class="min-w-0 flex-1">
+									<p class="text-lg font-semibold text-slate-50 truncate" title={client.name}>{client.name}</p>
+									<p class="text-sm text-slate-400 truncate">{client.objective ?? 'Sin objetivo'}</p>
 								</div>
 								<span
-									class={`rounded-full px-3 py-1 text-sm font-semibold ${
+									class={`flex-shrink-0 rounded-full px-3 py-1 text-sm font-semibold ${
 										client.status === 'active'
 											? 'bg-emerald-900/50 text-emerald-300 border border-emerald-600/50'
 											: 'bg-slate-800 text-slate-400 border border-slate-700'

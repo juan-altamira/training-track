@@ -8,25 +8,23 @@ test.describe('Gestión de Clientes', () => {
 
 	test.describe('Panel de clientes', () => {
 		test('muestra lista de clientes', async ({ page }) => {
-			await expect(page.locator('h2:has-text("Crear cliente")')).toBeVisible();
-			await expect(page.locator('input[placeholder="Nombre del cliente"]')).toBeVisible();
+			await expect(page.locator('text=Crear cliente')).toBeVisible();
+			await expect(page.locator('input[placeholder="Ej: Ana Pérez"]')).toBeVisible();
 		});
 
 		test('buscador de clientes funciona', async ({ page }) => {
-			const searchInput = page.locator('input[placeholder*="Buscar"]');
-			if (await searchInput.isVisible()) {
-				await searchInput.fill('NonExistentClient123');
-				// Esperar un momento para que filtre
-				await page.waitForTimeout(500);
-			}
+			const searchInput = page.locator('input[placeholder="Buscar cliente"]');
+			await expect(searchInput).toBeVisible();
+			await searchInput.fill('NonExistentClient123');
+			await page.waitForTimeout(500);
 		});
 	});
 
 	test.describe('Crear cliente', () => {
 		test('crear cliente exitosamente', async ({ page }) => {
 			const clientName = uniqueName('TestClient');
-			await page.fill('input[placeholder="Nombre del cliente"]', clientName);
-			await page.click('button:has-text("Crear cliente")');
+			await page.fill('input[placeholder="Ej: Ana Pérez"]', clientName);
+			await page.click('button:has-text("Crear y generar link")');
 			
 			// Debe redirigir a la página del cliente
 			await expect(page).toHaveURL(/\/clientes\/[a-f0-9-]+/, { timeout: 10000 });
@@ -34,8 +32,8 @@ test.describe('Gestión de Clientes', () => {
 		});
 
 		test('validación nombre vacío', async ({ page }) => {
-			await page.fill('input[placeholder="Nombre del cliente"]', '');
-			const createButton = page.locator('button:has-text("Crear cliente")');
+			await page.fill('input[placeholder="Ej: Ana Pérez"]', '');
+			const createButton = page.locator('button:has-text("Crear y generar link")');
 			// El botón debería estar deshabilitado o mostrar error
 			await createButton.click();
 			// Verificar que no redirige (sigue en /clientes)
@@ -47,14 +45,14 @@ test.describe('Gestión de Clientes', () => {
 			const clientName = uniqueName('DuplicateTest');
 			
 			// Crear primer cliente
-			await page.fill('input[placeholder="Nombre del cliente"]', clientName);
-			await page.click('button:has-text("Crear cliente")');
+			await page.fill('input[placeholder="Ej: Ana Pérez"]', clientName);
+			await page.click('button:has-text("Crear y generar link")');
 			await expect(page).toHaveURL(/\/clientes\/[a-f0-9-]+/, { timeout: 10000 });
 			
 			// Volver y crear otro con el mismo nombre
 			await page.goto('/clientes');
-			await page.fill('input[placeholder="Nombre del cliente"]', clientName);
-			await page.click('button:has-text("Crear cliente")');
+			await page.fill('input[placeholder="Ej: Ana Pérez"]', clientName);
+			await page.click('button:has-text("Crear y generar link")');
 			
 			// Debe mostrar error de nombre duplicado
 			await expect(page.locator('text=Ya existe un cliente')).toBeVisible({ timeout: 5000 });
@@ -65,8 +63,8 @@ test.describe('Gestión de Clientes', () => {
 		test('eliminar cliente exitosamente', async ({ page }) => {
 			// Crear cliente para eliminar
 			const clientName = uniqueName('ToDelete');
-			await page.fill('input[placeholder="Nombre del cliente"]', clientName);
-			await page.click('button:has-text("Crear cliente")');
+			await page.fill('input[placeholder="Ej: Ana Pérez"]', clientName);
+			await page.click('button:has-text("Crear y generar link")');
 			await expect(page).toHaveURL(/\/clientes\/[a-f0-9-]+/, { timeout: 10000 });
 			
 			// Volver a lista de clientes
@@ -88,8 +86,8 @@ test.describe('Gestión de Clientes', () => {
 		test('cancelar eliminación', async ({ page }) => {
 			// Crear cliente
 			const clientName = uniqueName('ToCancel');
-			await page.fill('input[placeholder="Nombre del cliente"]', clientName);
-			await page.click('button:has-text("Crear cliente")');
+			await page.fill('input[placeholder="Ej: Ana Pérez"]', clientName);
+			await page.click('button:has-text("Crear y generar link")');
 			await expect(page).toHaveURL(/\/clientes\/[a-f0-9-]+/, { timeout: 10000 });
 			
 			await page.goto('/clientes');
@@ -126,13 +124,13 @@ test.describe('Gestión de Clientes', () => {
 		test('desactivar cliente muestra badge "Inactivo"', async ({ page }) => {
 			// Crear cliente
 			const clientName = uniqueName('ToDeactivate');
-			await page.fill('input[placeholder="Nombre del cliente"]', clientName);
-			await page.click('button:has-text("Crear cliente")');
+			await page.fill('input[placeholder="Ej: Ana Pérez"]', clientName);
+			await page.click('button:has-text("Crear y generar link")');
 			await expect(page).toHaveURL(/\/clientes\/[a-f0-9-]+/, { timeout: 10000 });
 			
 			// Desactivar desde la página del cliente
 			await page.click('button:has-text("Desactivar cliente")');
-			await page.click('button:has-text("Sí, desactivar")');
+			await page.click('button:has-text("Confirmar")');
 			
 			// Volver a lista y verificar badge
 			await page.goto('/clientes');

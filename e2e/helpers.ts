@@ -2,8 +2,8 @@ import { Page, expect } from '@playwright/test';
 
 // Test credentials - usar variables de entorno en CI
 export const TEST_USER = {
-	email: process.env.TEST_EMAIL || 'juanpabloaltamira@protonmail.com',
-	password: process.env.TEST_PASSWORD || 'test123456'
+	email: process.env.TEST_EMAIL || 'juampiluduena@gmail.com',
+	password: process.env.TEST_PASSWORD || 'juan1998'
 };
 
 // Helper para login

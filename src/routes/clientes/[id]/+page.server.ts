@@ -39,6 +39,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 		.from('clients')
 		.select('id,name,objective,status,client_code,created_at')
 		.eq('id', clientId)
+		.eq('trainer_id', locals.session.user.id)
 		.single();
 
 	if (clientError || !client) {
@@ -130,7 +131,18 @@ export const actions: Actions = {
 		}
 
 		const supabase = locals.supabase;
-		const nowUtc = nowIsoUtc();
+
+		// Verificar que el cliente pertenece a este entrenador
+		const { data: client } = await supabase
+			.from('clients')
+			.select('id')
+			.eq('id', params.id)
+			.eq('trainer_id', locals.session.user.id)
+			.maybeSingle();
+
+		if (!client) {
+			return fail(403, { message: 'No autorizado' });
+		}
 
 		const { error: updateError } = await supabase
 			.from('routines')
@@ -156,6 +168,18 @@ export const actions: Actions = {
 		if (!allowed) {
 			await locals.supabase?.auth.signOut();
 			throw redirect(303, '/login');
+		}
+
+		// Verificar que el cliente pertenece a este entrenador
+		const { data: client } = await locals.supabase
+			.from('clients')
+			.select('id')
+			.eq('id', params.id)
+			.eq('trainer_id', locals.session.user.id)
+			.maybeSingle();
+
+		if (!client) {
+			return fail(403, { message: 'No autorizado' });
 		}
 
 		const nowUtc = nowIsoUtc();
@@ -188,7 +212,11 @@ export const actions: Actions = {
 		}
 		const formData = await request.formData();
 		const status = String(formData.get('status') || 'active');
-		await locals.supabase.from('clients').update({ status }).eq('id', params.id);
+		await locals.supabase
+			.from('clients')
+			.update({ status })
+			.eq('id', params.id)
+			.eq('trainer_id', locals.session.user.id);
 		return { success: true };
 	},
 	delete: async ({ request, params, locals }) => {

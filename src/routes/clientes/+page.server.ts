@@ -100,6 +100,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const { data: clients, error } = await supabase
 		.from('clients')
 		.select('id,name,client_code,status,objective')
+		.eq('trainer_id', locals.session.user.id)
 		.order('created_at', { ascending: true });
 
 	if (error) {

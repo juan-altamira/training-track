@@ -158,16 +158,20 @@
 
 	const resetProgress = async () => {
 		try {
-			const res = await fetch('?/resetProgress', { method: 'POST' });
-			if (res.ok || res.status === 200 || res.status === 303) {
+			const res = await fetch('?/resetProgress', {
+				method: 'POST',
+				headers: { 'Accept': 'application/json' }
+			});
+			const result = await res.json();
+			if (result?.type === 'success' || result?.success) {
 				progress = freshProgress();
 				feedback = 'Progreso reiniciado';
 			} else {
-				feedback = 'Error al reiniciar progreso';
+				feedback = `Error: ${result?.message || result?.type || 'desconocido'}`;
 			}
 		} catch (e) {
-			console.error(e);
-			feedback = 'Error al reiniciar progreso';
+			console.error('Reset error:', e);
+			feedback = `Error: ${e instanceof Error ? e.message : 'desconocido'}`;
 		}
 	};
 
@@ -370,7 +374,7 @@
 					{/each}
 				{/if}
 
-				<div class="grid grid-cols-3 gap-3">
+				<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
 					<button
 						class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-3 text-base font-medium text-slate-100 hover:bg-[#1b1f30] disabled:opacity-50 disabled:cursor-not-allowed"
 						on:click={() => addExercise(selectedDay)}

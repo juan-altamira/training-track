@@ -152,7 +152,7 @@ const handleSubmit = () => {
 			</div>
 		</div>
 
-		<form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }} class="space-y-5">
+		<form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }} class="space-y-6">
 			<label class="block text-base font-medium text-slate-200">
 				Email
 				<input
@@ -221,7 +221,7 @@ const handleSubmit = () => {
 			<button
 				type="submit"
 				disabled={loading || !email || !password || (mode === 'register' && !confirmPassword)}
-				class="w-full rounded-xl bg-emerald-600 px-4 py-3 text-lg font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+				class="mt-2 w-full rounded-xl bg-emerald-600 px-4 py-3 text-lg font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
 			>
 				{#if loading}
 					{mode === 'register' ? 'Creando cuenta...' : 'Ingresando...'}

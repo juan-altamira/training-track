@@ -336,6 +336,7 @@ export const actions: Actions = {
 		const formData = await request.formData();
 		const clientId = String(formData.get('client_id') || '');
 		const confirm = String(formData.get('confirm_text') || '').trim().toLowerCase();
+		const userEmail = locals.session.user.email?.toLowerCase();
 
 		if (!clientId) {
 			return fail(400, { message: 'Cliente inválido' });
@@ -345,22 +346,28 @@ export const actions: Actions = {
 			return fail(400, { message: 'Debes escribir "eliminar" para confirmar' });
 		}
 
-		// Verificar que el cliente pertenece al trainer usando supabaseAdmin
-		const { data: client, error: fetchError } = await supabaseAdmin
-			.from('clients')
-			.select('id')
-			.eq('id', clientId)
-			.eq('trainer_id', locals.session.user.id)
-			.maybeSingle();
+		// Owner puede eliminar cualquier cliente, trainers solo los suyos
+		let query = supabaseAdmin.from('clients').select('id').eq('id', clientId);
+		if (userEmail !== OWNER_EMAIL) {
+			query = query.eq('trainer_id', locals.session.user.id);
+		}
+		
+		const { data: client, error: fetchError } = await query.maybeSingle();
 
 		if (fetchError || !client) {
+			console.error('Delete client error:', { fetchError, clientId, userId: locals.session.user.id });
 			return fail(403, { message: 'No podés eliminar este cliente' });
 		}
 
 		// Usar supabaseAdmin para eliminar (bypass RLS)
-		await supabaseAdmin.from('progress').delete().eq('client_id', clientId);
-		await supabaseAdmin.from('routines').delete().eq('client_id', clientId);
-		await supabaseAdmin.from('clients').delete().eq('id', clientId);
+		const { error: progressErr } = await supabaseAdmin.from('progress').delete().eq('client_id', clientId);
+		const { error: routineErr } = await supabaseAdmin.from('routines').delete().eq('client_id', clientId);
+		const { error: clientErr } = await supabaseAdmin.from('clients').delete().eq('id', clientId);
+
+		if (progressErr || routineErr || clientErr) {
+			console.error('Delete errors:', { progressErr, routineErr, clientErr });
+			return fail(500, { message: 'Error al eliminar el cliente. Intentá de nuevo.' });
+		}
 
 		throw redirect(303, '/clientes');
 	}

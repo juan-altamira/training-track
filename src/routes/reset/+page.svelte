@@ -156,7 +156,7 @@ const updatePassword = async () => {
 				</a>
 			</div>
 		{:else if mode === 'request'}
-			<form onsubmit={(e) => { e.preventDefault(); requestReset(); }} class="space-y-5">
+			<form onsubmit={(e) => { e.preventDefault(); requestReset(); }} class="space-y-6">
 				<label class="block text-base font-medium text-slate-200">
 					Email
 					<input
@@ -181,13 +181,13 @@ const updatePassword = async () => {
 				<button
 					type="submit"
 					disabled={loading || !email}
-					class="w-full rounded-xl bg-emerald-600 px-4 py-3 text-lg font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+					class="mt-2 w-full rounded-xl bg-emerald-600 px-4 py-3 text-lg font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
 				>
 					{loading ? 'Enviando...' : 'Enviar enlace de recuperación'}
 				</button>
 			</form>
 		{:else}
-			<form onsubmit={(e) => { e.preventDefault(); updatePassword(); }} class="space-y-5">
+			<form onsubmit={(e) => { e.preventDefault(); updatePassword(); }} class="space-y-6">
 				{#if message}
 					<p class="flex items-center gap-2 rounded-lg bg-emerald-900/40 px-4 py-3 text-sm text-emerald-200 border border-emerald-700/50">
 						<svg class="h-4 w-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
@@ -242,7 +242,7 @@ const updatePassword = async () => {
 				<button
 					type="submit"
 					disabled={loading || !newPassword || !confirmPassword}
-					class="w-full rounded-xl bg-emerald-600 px-4 py-3 text-lg font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+					class="mt-2 w-full rounded-xl bg-emerald-600 px-4 py-3 text-lg font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
 				>
 					{loading ? 'Guardando...' : 'Guardar nueva contraseña'}
 				</button>

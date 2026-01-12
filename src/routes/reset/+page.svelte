@@ -4,15 +4,15 @@ import { env } from '$env/dynamic/public';
 import { supabaseClient } from '$lib/supabaseClient';
 import { onMount } from 'svelte';
 
-let email = '';
-let newPassword = '';
-let confirmPassword = '';
-let showPwd = false;
-let showConfirm = false;
-let message = '';
-let error = '';
-let loading = false;
-let mode: 'request' | 'update' = 'request';
+let email = $state('');
+let newPassword = $state('');
+let confirmPassword = $state('');
+let showPassword = $state(false);
+let message = $state('');
+let error = $state('');
+let loading = $state(false);
+let mode = $state<'request' | 'update'>('request');
+let success = $state(false);
 const SITE_URL = (env.PUBLIC_SITE_URL ?? 'http://localhost:5173').replace(/\/?$/, '');
 
 const parseHashParams = (hash: string) => {
@@ -32,7 +32,6 @@ onMount(async () => {
 	// Prefer hash tokens (Supabase recovery flow sends them)
 	if (hashParams.access_token && hashParams.refresh_token) {
 		loading = true;
-		error = '';
 		const { error: setError } = await supabaseClient.auth.setSession({
 			access_token: hashParams.access_token,
 			refresh_token: hashParams.refresh_token
@@ -40,11 +39,14 @@ onMount(async () => {
 		if (setError) {
 			console.error(setError);
 			error = 'No pudimos validar el link. Pedí uno nuevo.';
+			mode = 'request';
 		} else {
 			mode = 'update';
 			message = 'Link verificado. Ingresá tu nueva contraseña.';
+			error = ''; // Limpiar cualquier error previo
 		}
 		loading = false;
+		return;
 	}
 
 	// Fallback: code param (older flow)
@@ -58,8 +60,10 @@ onMount(async () => {
 		} else {
 			mode = 'update';
 			message = 'Link verificado. Ingresá tu nueva contraseña.';
+			error = ''; // Limpiar cualquier error previo
 		}
 		loading = false;
+		return;
 	}
 
 	// Si ya hay sesión (por ejemplo setSession se aplicó en otro momento), pasar a update
@@ -67,151 +71,191 @@ onMount(async () => {
 	if (sessionData.session) {
 		mode = 'update';
 		if (!message) {
-			message = 'Link verificado. Ingresá tu nueva contraseña.';
+			message = 'Ingresá tu nueva contraseña.';
 		}
 	}
 });
 
-	const requestReset = async () => {
-		loading = true;
-		error = '';
-		message = '';
-		const { error: resetError } = await supabaseClient.auth.resetPasswordForEmail(email.trim(), {
-			redirectTo: `${SITE_URL}/reset`
-		});
-		if (resetError) {
-			error = 'No pudimos enviar el link. Revisá el email e intentá de nuevo.';
-			console.error(resetError);
-		} else {
-			message = 'Te enviamos un link para restablecer tu contraseña. Revisá tu correo.';
-		}
-		loading = false;
-	};
+const requestReset = async () => {
+	loading = true;
+	error = '';
+	message = '';
+	success = false;
+	const { error: resetError } = await supabaseClient.auth.resetPasswordForEmail(email.trim(), {
+		redirectTo: `${SITE_URL}/reset`
+	});
+	if (resetError) {
+		error = 'No pudimos enviar el link. Revisá el email e intentá de nuevo.';
+		console.error(resetError);
+	} else {
+		success = true;
+		message = 'Te enviamos un link para restablecer tu contraseña. Revisá tu correo.';
+	}
+	loading = false;
+};
 
-	const updatePassword = async () => {
-		if (newPassword !== confirmPassword) {
-			error = 'Las contraseñas no coinciden.';
-			return;
-		}
-		loading = true;
-		error = '';
-		message = '';
-		const { error: updateError } = await supabaseClient.auth.updateUser({ password: newPassword });
-		if (updateError) {
-			error = 'No pudimos actualizar la contraseña. Probá de nuevo.';
-			console.error(updateError);
-		} else {
-			message = 'Contraseña actualizada. Te redirigimos al login.';
-			setTimeout(() => goto('/login'), 1000);
-		}
-		loading = false;
-	};
+const updatePassword = async () => {
+	if (newPassword !== confirmPassword) {
+		error = 'Las contraseñas no coinciden.';
+		return;
+	}
+	if (newPassword.length < 6) {
+		error = 'La contraseña debe tener al menos 6 caracteres.';
+		return;
+	}
+	loading = true;
+	error = '';
+	message = '';
+	const { error: updateError } = await supabaseClient.auth.updateUser({ password: newPassword });
+	if (updateError) {
+		error = 'No pudimos actualizar la contraseña. Probá de nuevo.';
+		console.error(updateError);
+	} else {
+		message = 'Contraseña actualizada. Te redirigimos al login.';
+		setTimeout(() => goto('/login'), 1500);
+	}
+	loading = false;
+};
 </script>
 
-<section class="min-h-screen flex items-start justify-center pt-16 pb-12 px-4 text-slate-100">
-	<div class="w-full max-w-lg space-y-6 rounded-2xl border border-slate-800 bg-[#0f111b] p-8 shadow-lg shadow-black/30">
-		<div class="space-y-2 text-center">
-			<p class="text-sm font-semibold uppercase tracking-wide text-slate-400">
-				{mode === 'request' ? 'Restablecer' : 'Nueva contraseña'}
-			</p>
-			<h1 class="text-2xl font-semibold text-slate-50">
-				{mode === 'request' ? 'Recuperá tu acceso' : 'Ingresá tu nueva contraseña'}
+<div class="min-h-screen bg-gradient-to-br from-[#0b1626] via-[#0f1f36] to-[#0a1222] flex items-center justify-center px-4 py-10">
+	<div class="w-full max-w-lg rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur dark:border-[#1f3554] dark:bg-[#0f1f36]/90">
+		<div class="mb-6 text-center space-y-3">
+			<h1 class="text-3xl font-semibold text-white">
+				{mode === 'request' ? 'Recuperar contraseña' : 'Nueva contraseña'}
 			</h1>
-			<p class="text-sm text-slate-400">
-				{mode === 'request'
-					? 'Te enviaremos un link seguro a tu correo.'
-					: 'Elige una contraseña segura y fácil de recordar.'}
-			</p>
-			<p class="text-xs text-slate-500">
-				<a class="text-emerald-300 hover:underline" href="/login">Volver a entrar</a>
+			<p class="text-sm text-neutral-200">
+				{mode === 'request' 
+					? 'Ingresá tu email y te enviaremos un enlace para restablecer tu clave.'
+					: 'Elegí una contraseña segura y fácil de recordar.'}
 			</p>
 		</div>
 
-		{#if mode === 'request'}
+		{#if success}
 			<div class="space-y-4">
-				<label class="block text-sm font-medium text-slate-200">
-					Email
+				<div class="flex justify-center">
+					<div class="grid h-16 w-16 place-items-center rounded-full border border-green-400/40 bg-green-500/15 text-green-100">
+						<svg class="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="m5 13 4 4L19 7" />
+						</svg>
+					</div>
+				</div>
+				<div class="space-y-3 rounded-xl bg-green-500/15 px-4 py-3 text-sm font-semibold text-green-100">
+					<p>{message}</p>
+				</div>
+				<a
+					href="/login"
+					class="inline-flex w-full items-center justify-center rounded-2xl bg-[#7c3aed] px-4 py-3 text-base font-semibold text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7c3aed]"
+				>
+					Volver a ingresar
+				</a>
+			</div>
+		{:else if mode === 'request'}
+			<form onsubmit={(e) => { e.preventDefault(); requestReset(); }} class="space-y-6">
+				<div class="space-y-3">
+					<label for="email" class="text-sm font-medium text-white">Email</label>
 					<input
-						class="mt-1 w-full rounded-lg border border-slate-700 bg-[#151827] px-3 py-2 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
-						placeholder="entrenador@tu-mail.com"
+						id="email"
+						name="email"
 						type="email"
+						class="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-white shadow-sm outline-none transition focus:border-[#7c3aed] focus:ring-2 focus:ring-[#7c3aed]/40 placeholder:text-neutral-400"
+						placeholder="Introduce tu email"
 						required
 						bind:value={email}
+						autocomplete="email"
 					/>
-				</label>
+				</div>
+
+				{#if error}
+					<p class="flex items-center gap-2 rounded-xl bg-red-500/15 px-4 py-3 text-sm font-semibold text-red-200">
+						<svg class="h-4 w-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M4.93 19h14.14a1 1 0 0 0 .9-1.45L12.9 4.55a1 1 0 0 0-1.8 0L4.03 17.55A1 1 0 0 0 4.93 19Z" />
+						</svg>
+						{error}
+					</p>
+				{/if}
+
 				<button
-					on:click|preventDefault={requestReset}
-					class="w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-70"
+					type="submit"
 					disabled={loading || !email}
+					class="flex w-full items-center justify-center rounded-2xl bg-[#7c3aed] px-4 py-3 text-base font-semibold text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7c3aed] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
 				>
-					{#if loading}
-						Enviando...
-					{:else}
-						Enviar link de recuperación
-					{/if}
+					{loading ? 'Enviando...' : 'Enviar enlace'}
 				</button>
-			</div>
+
+				<div class="text-center text-sm text-neutral-300">
+					<a href="/login" class="hover:underline">Volver al login</a>
+				</div>
+			</form>
 		{:else}
-			<div class="space-y-4">
-				<label class="block text-sm font-medium text-slate-200">
-					Nueva contraseña
-					<div class="relative mt-1">
+			<form onsubmit={(e) => { e.preventDefault(); updatePassword(); }} class="space-y-6">
+				{#if message}
+					<p class="flex items-center gap-2 rounded-xl bg-green-500/15 px-4 py-3 text-sm font-semibold text-green-200">
+						<svg class="h-4 w-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="m5 13 4 4L19 7" />
+						</svg>
+						{message}
+					</p>
+				{/if}
+
+				<div class="space-y-3">
+					<label for="newPassword" class="text-sm font-medium text-white">Nueva contraseña</label>
+					<div class="relative">
 						<input
-							class="w-full rounded-lg border border-slate-700 bg-[#151827] px-3 py-2 pr-10 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
-							placeholder="••••••••"
-							type={showPwd ? 'text' : 'password'}
+							id="newPassword"
+							name="newPassword"
+							type={showPassword ? 'text' : 'password'}
+							class="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 pr-16 text-white shadow-sm outline-none transition focus:border-[#7c3aed] focus:ring-2 focus:ring-[#7c3aed]/40 placeholder:text-neutral-400"
+							placeholder="Creá una contraseña segura"
 							required
 							bind:value={newPassword}
+							autocomplete="new-password"
 						/>
 						<button
 							type="button"
-							class="absolute inset-y-0 right-0 px-3 text-slate-400 hover:text-slate-200"
-							on:click={() => (showPwd = !showPwd)}
-							aria-label="Mostrar u ocultar contraseña"
+							class="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg px-3 py-2 text-xs font-semibold text-neutral-100 transition hover:bg-white/10"
+							onclick={() => (showPassword = !showPassword)}
 						>
-							{showPwd ? 'Ocultar' : 'Ver'}
+							{showPassword ? 'Ocultar' : 'Ver'}
 						</button>
 					</div>
-				</label>
-				<label class="block text-sm font-medium text-slate-200">
-					Confirmar contraseña
-					<div class="relative mt-1">
-						<input
-							class="w-full rounded-lg border border-slate-700 bg-[#151827] px-3 py-2 pr-10 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
-							placeholder="••••••••"
-							type={showConfirm ? 'text' : 'password'}
-							required
-							bind:value={confirmPassword}
-						/>
-						<button
-							type="button"
-							class="absolute inset-y-0 right-0 px-3 text-slate-400 hover:text-slate-200"
-							on:click={() => (showConfirm = !showConfirm)}
-							aria-label="Mostrar u ocultar contraseña"
-						>
-							{showConfirm ? 'Ocultar' : 'Ver'}
-						</button>
-					</div>
-				</label>
-				<button
-					on:click|preventDefault={updatePassword}
-					class="w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-70"
-					disabled={loading || !newPassword || !confirmPassword}
-				>
-					{#if loading}
-						Actualizando...
-					{:else}
-						Guardar nueva contraseña
-					{/if}
-				</button>
-			</div>
-		{/if}
+				</div>
 
-		{#if message}
-			<p class="rounded-lg bg-emerald-900/40 px-3 py-2 text-sm text-emerald-200 border border-emerald-700/50">{message}</p>
-		{/if}
-		{#if error}
-			<p class="rounded-lg bg-red-900/40 px-3 py-2 text-sm text-red-200 border border-red-700/50">{error}</p>
+				<div class="space-y-3">
+					<label for="confirmPassword" class="text-sm font-medium text-white">Confirmar contraseña</label>
+					<input
+						id="confirmPassword"
+						name="confirmPassword"
+						type={showPassword ? 'text' : 'password'}
+						class="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-white shadow-sm outline-none transition focus:border-[#7c3aed] focus:ring-2 focus:ring-[#7c3aed]/40 placeholder:text-neutral-400"
+						placeholder="Repetí tu contraseña"
+						required
+						bind:value={confirmPassword}
+						autocomplete="new-password"
+					/>
+				</div>
+
+				{#if error}
+					<p class="flex items-center gap-2 rounded-xl bg-red-500/15 px-4 py-3 text-sm font-semibold text-red-200">
+						<svg class="h-4 w-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M4.93 19h14.14a1 1 0 0 0 .9-1.45L12.9 4.55a1 1 0 0 0-1.8 0L4.03 17.55A1 1 0 0 0 4.93 19Z" />
+						</svg>
+						{error}
+					</p>
+				{/if}
+
+				<button
+					type="submit"
+					disabled={loading || !newPassword || !confirmPassword}
+					class="flex w-full items-center justify-center rounded-2xl bg-[#7c3aed] px-4 py-3 text-base font-semibold text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7c3aed] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+				>
+					{loading ? 'Guardando...' : 'Guardar nueva contraseña'}
+				</button>
+
+				<div class="text-center text-sm text-neutral-300">
+					<a href="/login" class="hover:underline">Volver al login</a>
+				</div>
+			</form>
 		{/if}
 	</div>
-</section>
+</div>

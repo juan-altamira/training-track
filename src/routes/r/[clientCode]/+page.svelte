@@ -248,7 +248,13 @@ let saveInFlight = false;
 	.client-shell {
 		max-width: 960px;
 		margin: 0 auto;
-		padding: 1.5rem 1.25rem 2rem;
+		padding: 1.5rem 0.5rem 2rem;
+	}
+
+	@media (min-width: 640px) {
+		.client-shell {
+			padding: 1.5rem 1.25rem 2rem;
+		}
 	}
 
 	.hero {
@@ -393,7 +399,13 @@ let saveInFlight = false;
 		align-items: center;
 		justify-content: space-between;
 		gap: 0.75rem;
-		margin-top: 0.85rem;
+		margin-top: 1.5rem;
+	}
+
+	@media (min-width: 640px) {
+		.exercise-controls {
+			margin-top: 0.85rem;
+		}
 	}
 
 	.pill-btn {

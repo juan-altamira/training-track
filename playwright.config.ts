@@ -15,9 +15,20 @@ export default defineConfig({
 		video: 'retain-on-failure',
 	},
 	projects: [
+		// Setup project - login una sola vez
+		{
+			name: 'setup',
+			testMatch: /.*\.setup\.ts/,
+		},
+		// Tests que requieren autenticación
 		{
 			name: 'chromium',
-			use: { ...devices['Desktop Chrome'] },
+			use: { 
+				...devices['Desktop Chrome'],
+				storageState: 'e2e/.auth/user.json',
+			},
+			dependencies: ['setup'],
+			testIgnore: /.*\.setup\.ts/,
 		},
 	],
 	webServer: process.env.CI ? undefined : {

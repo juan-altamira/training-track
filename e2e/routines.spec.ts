@@ -1,26 +1,14 @@
 import { test, expect } from '@playwright/test';
-import { login, uniqueName } from './helpers';
+import { uniqueName } from './helpers';
 
 test.describe('Rutinas', () => {
-	let clientUrl: string;
-	let clientName: string;
-
-	test.beforeAll(async ({ browser }) => {
-		const page = await browser.newPage();
-		await login(page);
-		
-		// Crear cliente para tests de rutinas
-		clientName = uniqueName('RoutineTest');
-		await page.fill('input[placeholder="Ej: Ana Pérez"]', clientName);
-		await page.click('button:has-text("Crear y generar link")');
-		await page.waitForURL(/\/clientes\/[a-f0-9-]+/, { timeout: 10000 });
-		clientUrl = page.url();
-		await page.close();
-	});
+	// La sesión ya está autenticada via storageState
 
 	test.beforeEach(async ({ page }) => {
-		await login(page);
-		await page.goto(clientUrl);
+		// Ir a clientes y abrir el primer cliente activo
+		await page.goto('/clientes');
+		await page.click('button:has-text("Abrir rutina del cliente")');
+		await page.waitForURL(/\/clientes\/[a-f0-9-]+/, { timeout: 10000 });
 	});
 
 	test.describe('Agregar ejercicios', () => {

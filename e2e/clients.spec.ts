@@ -1,9 +1,10 @@
 import { test, expect } from '@playwright/test';
-import { login, uniqueName } from './helpers';
+import { uniqueName } from './helpers';
 
 test.describe('Gestión de Clientes', () => {
+	// La sesión ya está autenticada via storageState (auth.setup.ts)
 	test.beforeEach(async ({ page }) => {
-		await login(page);
+		await page.goto('/clientes');
 	});
 
 	test.describe('Panel de clientes', () => {

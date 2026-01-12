@@ -345,8 +345,8 @@ export const actions: Actions = {
 			return fail(400, { message: 'Debes escribir "eliminar" para confirmar' });
 		}
 
-		const supabase = locals.supabase;
-		const { data: client, error: fetchError } = await supabase
+		// Verificar que el cliente pertenece al trainer usando supabaseAdmin
+		const { data: client, error: fetchError } = await supabaseAdmin
 			.from('clients')
 			.select('id')
 			.eq('id', clientId)
@@ -357,9 +357,10 @@ export const actions: Actions = {
 			return fail(403, { message: 'No podés eliminar este cliente' });
 		}
 
-		await supabase.from('progress').delete().eq('client_id', clientId);
-		await supabase.from('routines').delete().eq('client_id', clientId);
-		await supabase.from('clients').delete().eq('id', clientId);
+		// Usar supabaseAdmin para eliminar (bypass RLS)
+		await supabaseAdmin.from('progress').delete().eq('client_id', clientId);
+		await supabaseAdmin.from('routines').delete().eq('client_id', clientId);
+		await supabaseAdmin.from('clients').delete().eq('id', clientId);
 
 		throw redirect(303, '/clientes');
 	}

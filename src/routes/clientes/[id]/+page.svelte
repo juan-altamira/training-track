@@ -30,8 +30,36 @@
 			return acc;
 		}, {} as ProgressState);
 
+	const MAX_EXERCISE_NAME_LENGTH = 100;
+
+	const validateExercises = (dayKey: string): string | null => {
+		const exercises = plan[dayKey].exercises;
+		for (const ex of exercises) {
+			if (!ex.name || ex.name.trim() === '') {
+				return 'Hay ejercicios sin nombre. Completá el nombre antes de continuar.';
+			}
+			if (ex.name.length > MAX_EXERCISE_NAME_LENGTH) {
+				return `El nombre del ejercicio "${ex.name.slice(0, 20)}..." es demasiado largo (máx ${MAX_EXERCISE_NAME_LENGTH} caracteres).`;
+			}
+			const sets = getTargetSets(ex);
+			if (sets === 0) {
+				return `El ejercicio "${ex.name}" no tiene series. Revisá el esquema (ej: 3x10).`;
+			}
+		}
+		return null;
+	};
+
 	const addExercise = (dayKey: string) => {
 		const exercises = plan[dayKey].exercises;
+		
+		// Validar ejercicios existentes antes de agregar uno nuevo
+		const validationError = validateExercises(dayKey);
+		if (validationError) {
+			feedback = validationError;
+			setTimeout(() => (feedback = ''), 4000);
+			return;
+		}
+		
 		if (exercises.length >= MAX_EXERCISES_PER_DAY) {
 			feedback = 'Límite de 50 ejercicios para este día.';
 			setTimeout(() => (feedback = ''), 2500);
@@ -87,6 +115,32 @@
 	const saveRoutine = async () => {
 		saving = true;
 		feedback = '';
+		
+		// Validar todos los días antes de guardar
+		for (const day of WEEK_DAYS) {
+			const exercises = plan[day.key].exercises;
+			if (exercises.length === 0) continue;
+			
+			for (const ex of exercises) {
+				if (!ex.name || ex.name.trim() === '') {
+					feedback = `${day.label}: Hay ejercicios sin nombre. Completá el nombre antes de guardar.`;
+					saving = false;
+					return;
+				}
+				if (ex.name.length > MAX_EXERCISE_NAME_LENGTH) {
+					feedback = `${day.label}: El nombre "${ex.name.slice(0, 20)}..." es demasiado largo.`;
+					saving = false;
+					return;
+				}
+				const sets = getTargetSets(ex);
+				if (sets === 0) {
+					feedback = `${day.label}: "${ex.name}" no tiene series. Revisá el esquema (ej: 3x10).`;
+					saving = false;
+					return;
+				}
+			}
+		}
+		
 		const formData = new FormData();
 		formData.set('plan', JSON.stringify(plan));
 		const res = await fetch('?/saveRoutine', {

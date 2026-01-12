@@ -53,6 +53,12 @@ const register = async () => {
 	error = '';
 	message = '';
 	
+	if (email.trim().length > 100) {
+		error = 'El email es demasiado largo (máximo 100 caracteres).';
+		loading = false;
+		return;
+	}
+	
 	if (password !== confirmPassword) {
 		error = 'Las contraseñas no coinciden.';
 		loading = false;
@@ -61,6 +67,12 @@ const register = async () => {
 	
 	if (password.length < 6) {
 		error = 'La contraseña debe tener al menos 6 caracteres.';
+		loading = false;
+		return;
+	}
+	
+	if (password.length > 72) {
+		error = 'La contraseña es demasiado larga (máximo 72 caracteres).';
 		loading = false;
 		return;
 	}

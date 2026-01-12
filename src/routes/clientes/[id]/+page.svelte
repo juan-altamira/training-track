@@ -269,7 +269,7 @@
 	{/if}
 
 	<section class="grid gap-6 lg:grid-cols-[2fr,1fr]">
-		<div class="space-y-5 rounded-2xl border border-slate-800 bg-[#0f111b] p-6 shadow-lg shadow-black/30">
+		<div class="space-y-5 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 md:p-6 shadow-lg shadow-black/30">
 			<div class="flex items-center justify-between">
 				<h2 class="text-3xl font-extrabold uppercase tracking-wide text-slate-50">Rutina</h2>
 				<button
@@ -297,16 +297,16 @@
 				{/each}
 			</div>
 
-			<div class="space-y-3 rounded-xl border border-slate-800 bg-[#0b0d14] p-5">
+			<div class="space-y-3 rounded-xl border border-slate-800 bg-[#0b0d14] p-3 md:p-5">
 				{#if plan[selectedDay].exercises.length === 0}
 					<p class="text-base text-slate-400">Sin ejercicios. Agregá uno.</p>
 				{:else}
 					{#each plan[selectedDay].exercises as exercise, index (exercise.id)}
-						<div class="rounded-lg border border-slate-800 bg-[#111423] p-4 shadow-sm">
-							<div class="flex flex-wrap items-center justify-between gap-2">
+						<div class="rounded-lg border border-slate-800 bg-[#111423] p-3 md:p-4 shadow-sm">
+							<div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-2">
 								<p class="text-base font-semibold text-slate-100">Ejercicio {index + 1}</p>
 								<button
-									class="rounded border border-red-700 bg-red-900/40 px-2.5 py-1.5 text-sm text-red-200 hover:bg-red-900/60"
+									class="rounded border border-red-700 bg-red-900/40 px-2.5 py-1.5 text-sm text-red-200 hover:bg-red-900/60 w-full md:w-auto"
 									on:click={() => removeExercise(selectedDay, exercise.id)}
 								>
 									Quitar
@@ -404,7 +404,7 @@
 		</div>
 
 		<div class="space-y-3">
-			<div class="rounded-2xl border border-slate-800 bg-gradient-to-br from-[#0f172a] to-[#0b1224] p-6 shadow-lg shadow-black/30 space-y-3">
+			<div class="rounded-2xl border border-slate-800 bg-gradient-to-br from-[#0f172a] to-[#0b1224] p-4 md:p-6 shadow-lg shadow-black/30 space-y-3">
 				<div class="flex items-center justify-between">
 					<div>
 						<p class="text-sm font-semibold uppercase tracking-[0.12em] text-slate-400">Link de la rutina</p>
@@ -414,7 +414,7 @@
 				</div>
 			</div>
 
-			<div class="rounded-2xl border border-slate-800 bg-[#0f111b] p-6 shadow-lg shadow-black/30">
+			<div class="rounded-2xl border border-slate-800 bg-[#0f111b] p-4 md:p-6 shadow-lg shadow-black/30">
 				<div class="flex items-center justify-between">
 					<div class="flex flex-col gap-1">
 						<h3 class="text-xl font-semibold uppercase tracking-wide text-slate-50">Semana actual</h3>

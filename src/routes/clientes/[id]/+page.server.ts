@@ -58,7 +58,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 
 	let plan = normalizePlan(routineRow?.plan as RoutinePlan | null);
 	if (!routineRow) {
-		await supabase.from('routines').insert({ client_id: clientId, plan });
+		await supabase.from('routines').insert({ client_id: clientId, plan, last_saved_at: nowIsoUtc() });
 	}
 
 	const { data: progressRow, error: progressError } = await supabase
@@ -144,11 +144,14 @@ export const actions: Actions = {
 			return fail(403, { message: 'No autorizado' });
 		}
 
+		const nowUtc = nowIsoUtc();
+
 		const { error: updateError } = await supabase
 			.from('routines')
 			.upsert({
 				client_id: params.id,
-				plan
+				plan,
+				last_saved_at: nowUtc
 			})
 			.eq('client_id', params.id);
 

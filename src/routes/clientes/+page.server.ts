@@ -1,6 +1,6 @@
 import { createEmptyPlan, normalizeProgress, WEEK_DAYS } from '$lib/routines';
 import type { ClientSummary } from '$lib/types';
-import { daysBetweenUtc, getCurrentWeekStartUtc, nowIsoUtc } from '$lib/time';
+import { daysBetweenUtc, getCurrentWeekStartUtc, monthsBetweenUtc, nowIsoUtc } from '$lib/time';
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { env } from '$env/dynamic/public';
@@ -8,6 +8,7 @@ import { supabaseAdmin } from '$lib/server/supabaseAdmin';
 
 const OWNER_EMAIL = 'juanpabloaltamira@protonmail.com';
 const MAX_CLIENTS_PER_TRAINER = 100;
+const INACTIVITY_MONTHS = 6;
 
 const ensureTrainerAccess = async (rawEmail: string | null | undefined) => {
 	const email = rawEmail?.toLowerCase();
@@ -113,6 +114,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		string,
 		{ last_completed_at: string | null; progress: any }
 	>();
+	const routineMap = new Map<string, { last_saved_at: string | null }>();
 
 	if (clientIds.length > 0) {
 		const { data: progressRows, error: progressError } = await supabase
@@ -131,6 +133,50 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 				progress: row.progress
 			});
 		});
+
+		// Obtener last_saved_at de las rutinas para verificar inactividad
+		const { data: routineRows } = await supabase
+			.from('routines')
+			.select('client_id,last_saved_at')
+			.in('client_id', clientIds);
+
+		routineRows?.forEach((row) => {
+			routineMap.set(row.client_id, { last_saved_at: row.last_saved_at });
+		});
+
+		// Verificar inactividad y archivar clientes que no han tenido guardado en 6+ meses
+		const nowUtc = nowIsoUtc();
+		const clientsToArchive: string[] = [];
+
+		for (const client of clients ?? []) {
+			if (client.status !== 'active') continue;
+			
+			const routineInfo = routineMap.get(client.id);
+			const lastSaved = routineInfo?.last_saved_at;
+			
+			// Si no tiene last_saved_at, no lo archivamos (es un cliente nuevo o anterior a esta feature)
+			if (!lastSaved) continue;
+			
+			const monthsInactive = monthsBetweenUtc(lastSaved, nowUtc);
+			if (monthsInactive !== null && monthsInactive >= INACTIVITY_MONTHS) {
+				clientsToArchive.push(client.id);
+			}
+		}
+
+		// Archivar clientes inactivos (si hay alguno)
+		if (clientsToArchive.length > 0) {
+			await supabase
+				.from('clients')
+				.update({ status: 'archived' })
+				.in('id', clientsToArchive);
+			
+			// Actualizar el estado local para reflejarlo inmediatamente
+			clients?.forEach((c) => {
+				if (clientsToArchive.includes(c.id)) {
+					c.status = 'archived';
+				}
+			});
+		}
 	}
 
 	const list: ClientSummary[] =
@@ -245,11 +291,10 @@ export const actions: Actions = {
 		}
 
 		const defaultPlan = createEmptyPlan();
+		const nowUtc = nowIsoUtc();
 		const { error: routineError } = await supabase
 			.from('routines')
-			.insert({ client_id: client.id, plan: defaultPlan });
-
-		const nowUtc = nowIsoUtc();
+			.insert({ client_id: client.id, plan: defaultPlan, last_saved_at: nowUtc });
 		const { error: progressError } = await supabase.from('progress').insert({
 			client_id: client.id,
 			progress: normalizeProgress(null, { last_reset_utc: nowUtc, last_activity_utc: nowUtc }),

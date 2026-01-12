@@ -157,10 +157,17 @@
 	};
 
 	const resetProgress = async () => {
-		const res = await fetch('?/resetProgress', { method: 'POST' });
-		if (res.ok) {
-			progress = freshProgress();
-			feedback = 'Progreso reiniciado';
+		try {
+			const res = await fetch('?/resetProgress', { method: 'POST' });
+			if (res.ok || res.status === 200 || res.status === 303) {
+				progress = freshProgress();
+				feedback = 'Progreso reiniciado';
+			} else {
+				feedback = 'Error al reiniciar progreso';
+			}
+		} catch (e) {
+			console.error(e);
+			feedback = 'Error al reiniciar progreso';
 		}
 	};
 

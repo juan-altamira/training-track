@@ -157,21 +157,19 @@
 	};
 
 	const resetProgress = async () => {
-		try {
-			const res = await fetch('?/resetProgress', {
-				method: 'POST',
-				headers: { 'Accept': 'application/json' }
-			});
-			const result = await res.json();
-			if (result?.type === 'success' || result?.success) {
-				progress = freshProgress();
-				feedback = 'Progreso reiniciado';
+		const formData = new FormData();
+		formData.set('reset', 'true');
+		const res = await fetch('?/resetProgress', { method: 'POST', body: formData });
+		if (res.ok) {
+			const data = await res.json();
+			if (data?.data?.progress) {
+				progress = data.data.progress as ProgressState;
 			} else {
-				feedback = `Error: ${result?.message || result?.type || 'desconocido'}`;
+				progress = freshProgress();
 			}
-		} catch (e) {
-			console.error('Reset error:', e);
-			feedback = `Error: ${e instanceof Error ? e.message : 'desconocido'}`;
+			feedback = 'Progreso reiniciado';
+		} else {
+			feedback = 'No se pudo reiniciar. Intentá de nuevo.';
 		}
 	};
 

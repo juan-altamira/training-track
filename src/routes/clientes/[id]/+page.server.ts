@@ -159,15 +159,22 @@ export const actions: Actions = {
 		}
 
 		const nowUtc = nowIsoUtc();
-		await locals.supabase
+		const cleared = normalizeProgress(null, {
+			last_activity_utc: nowUtc,
+			last_reset_utc: nowUtc
+		});
+
+		const { error: updateError } = await supabaseAdmin
 			.from('progress')
-			.update({
-				progress: normalizeProgress(null, { last_reset_utc: nowUtc, last_activity_utc: nowUtc }),
-				last_completed_at: null
-			})
+			.update({ progress: cleared, last_completed_at: null })
 			.eq('client_id', params.id);
 
-		return { success: true };
+		if (updateError) {
+			console.error(updateError);
+			return fail(500, { message: 'No pudimos reiniciar el progreso' });
+		}
+
+		return { success: true, progress: cleared };
 	},
 	setStatus: async ({ request, params, locals }) => {
 		if (!locals.session) {

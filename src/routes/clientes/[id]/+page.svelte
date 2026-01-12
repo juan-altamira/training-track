@@ -19,7 +19,7 @@
 	let selectedSource = $state('');
 	const MAX_EXERCISES_PER_DAY = 50;
 	const otherClients = data.otherClients ?? [];
-	const hasSuspicious = WEEK_DAYS.some((d) => progress[d.key]?.suspicious);
+	const hasSuspicious = WEEK_DAYS.some((d) => progress[d.key]?.suspicious && progress[d.key]?.completed);
 
 	const SITE_URL = (data.siteUrl ?? '').replace(/\/?$/, '');
 	const link = `${SITE_URL}/r/${data.client.client_code}`;
@@ -419,14 +419,14 @@
 								</div>
 								<span
 									class={`rounded-full px-3.5 py-1.5 text-sm font-semibold whitespace-nowrap ${
-										progress[day.key]?.suspicious
+										progress[day.key]?.suspicious && completion.completed
 											? 'bg-amber-900/50 text-amber-200'
 											: completion.completed
 												? 'bg-emerald-900/50 text-emerald-300'
 												: 'bg-slate-800 text-slate-300'
 									}`}
 								>
-									{progress[day.key]?.suspicious
+									{progress[day.key]?.suspicious && completion.completed
 										? 'Posible engaño'
 										: completion.completed
 											? 'Completado'

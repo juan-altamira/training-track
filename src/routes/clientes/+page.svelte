@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { ClientSummary } from '$lib/types';
 	import { goto } from '$app/navigation';
+	import { enhance } from '$app/forms';
 
 	let { data, form } = $props();
 	const OWNER_EMAIL = 'juanpabloaltamira@protonmail.com';
@@ -13,6 +14,8 @@
 	let openingId = $state<string | null>(null);
 	let copiedId = $state<string | null>(null);
 	let searchTerm = $state('');
+	let creating = $state(false);
+	let formMessage = $state<string | null>(null);
 
 	const copyLink = async (client: ClientSummary) => {
 		const link = `${SITE_URL}/r/${client.client_code}`;
@@ -282,6 +285,19 @@
 			method="post"
 			action="?/create"
 			class="space-y-5 rounded-xl border border-slate-800 bg-[#0f111b] p-7 shadow-lg shadow-black/30"
+			use:enhance={() => {
+				creating = true;
+				formMessage = null;
+				return async ({ result, update }) => {
+					creating = false;
+					if (result.type === 'failure' && result.data?.message) {
+						formMessage = result.data.message as string;
+					} else if (result.type === 'redirect') {
+						formMessage = null;
+					}
+					await update({ reset: result.type === 'redirect' });
+				};
+			}}
 		>
 			<div class="space-y-2">
 				<h2 class="text-2xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 via-cyan-300 to-slate-50">
@@ -296,6 +312,7 @@
 					name="name"
 					placeholder="Ej: Ana Pérez"
 					required
+					disabled={creating}
 				/>
 			</label>
 
@@ -305,26 +322,28 @@
 					class="mt-1 w-full rounded-lg border border-slate-700 bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
 					name="objective"
 					placeholder="Hipertrofia, fuerza, recomposición..."
+					disabled={creating}
 				/>
 			</label>
 
 			<button
 				type="submit"
-				class="relative w-full overflow-hidden rounded-xl bg-emerald-600 px-5 py-3 text-lg text-white transition hover:bg-emerald-500"
+				class="relative w-full overflow-hidden rounded-xl bg-emerald-600 px-5 py-3 text-lg text-white transition hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
+				disabled={creating}
 			>
 				<span class="absolute inset-0 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500 opacity-0 animate-pulse blur-sm"></span>
-				<span class="relative">Crear y generar link</span>
+				<span class="relative">{creating ? 'Creando...' : 'Crear y generar link'}</span>
 			</button>
 			<p class="text-sm text-slate-400">
 				Al hacer click crearás un cliente y un link para que él pueda acceder a su rutina.
 			</p>
 
-			{#if form?.message}
+			{#if formMessage}
 				<p class="flex items-center gap-2 rounded-lg bg-red-900/40 px-3 py-2 text-sm text-red-200">
 					<svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
 					</svg>
-					{form.message}
+					{formMessage}
 				</p>
 			{/if}
 		</form>

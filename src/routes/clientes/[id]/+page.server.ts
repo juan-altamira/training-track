@@ -308,7 +308,7 @@ export const actions: Actions = {
 			return fail(400, { message: 'No se encontró la rutina origen' });
 		}
 
-		const plan = normalizePlan(sourceRoutine.plan as RoutinePlan | null);
+		const plan = normalizePlan(sourceRoutine.plan as RoutinePlan | null, true);
 		const nowUtc = nowIsoUtc();
 
 		const { error: updateError } = await supabase

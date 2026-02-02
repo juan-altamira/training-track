@@ -23,7 +23,7 @@ export const createEmptyPlan = (): RoutinePlan =>
 		return acc;
 	}, {} as RoutinePlan);
 
-export const normalizePlan = (plan?: RoutinePlan | null): RoutinePlan => {
+export const normalizePlan = (plan?: RoutinePlan | null, regenerateIds = false): RoutinePlan => {
 	const base = createEmptyPlan();
 	if (!plan) return base;
 	for (const day of WEEK_DAYS) {
@@ -33,7 +33,7 @@ export const normalizePlan = (plan?: RoutinePlan | null): RoutinePlan => {
 				label: day.label,
 				exercises: (plan[day.key]?.exercises || []).map((ex, idx) => ({
 					...ex,
-					id: ex.id || uuid(),
+					id: regenerateIds ? uuid() : (ex.id || uuid()),
 					order: ex.order ?? idx
 				}))
 			};
@@ -80,6 +80,47 @@ export const parseTotalSets = (scheme: string): number | undefined => {
 
 export const getTargetSets = (exercise: RoutineExercise): number => {
 	return exercise.totalSets ?? parseTotalSets(exercise.scheme) ?? 0;
+};
+
+export const formatPrescription = (exercise: RoutineExercise): string => {
+	const sets = getTargetSets(exercise);
+	const repsMin = exercise.repsMin;
+	const repsMax = exercise.repsMax;
+	
+	if (!sets || sets === 0) return '';
+	
+	let repsText = '';
+	if (repsMin != null && repsMin > 0) {
+		if (repsMax != null && repsMax > repsMin) {
+			repsText = `${repsMin}–${repsMax} reps`;
+		} else {
+			repsText = `${repsMin} reps`;
+		}
+	}
+	
+	if (repsText) {
+		return `${sets} series · ${repsText}`;
+	}
+	return `${sets} series`;
+};
+
+export const formatPrescriptionLong = (exercise: RoutineExercise): string => {
+	const sets = getTargetSets(exercise);
+	const repsMin = exercise.repsMin;
+	const repsMax = exercise.repsMax;
+	
+	if (!sets || sets === 0) return '';
+	
+	const seriesWord = sets === 1 ? 'serie' : 'series';
+	
+	if (repsMin != null && repsMin > 0) {
+		if (repsMax != null && repsMax > repsMin) {
+			return `${sets} ${seriesWord} de ${repsMin}–${repsMax} repeticiones`;
+		}
+		const repWord = repsMin === 1 ? 'repetición' : 'repeticiones';
+		return `${sets} ${seriesWord} de ${repsMin} ${repWord}`;
+	}
+	return `${sets} ${seriesWord}`;
 };
 
 export const computeDayCompletion = (dayKey: string, plan: RoutinePlan, progress: ProgressState) => {

@@ -1,5 +1,5 @@
 <script lang="ts">
-import { WEEK_DAYS, getTargetSets } from '$lib/routines';
+import { WEEK_DAYS, getTargetSets, formatPrescriptionLong } from '$lib/routines';
 import type { ProgressState, RoutinePlan } from '$lib/types';
 
 	let { data } = $props();
@@ -189,7 +189,7 @@ let saveInFlight = false;
 										<div class="exercise-head">
 											<div>
 												<p class="exercise-name">{exercise.name}</p>
-												<p class="exercise-scheme">{exercise.scheme}</p>
+												<p class="exercise-scheme">{formatPrescriptionLong(exercise) || exercise.scheme}</p>
 											</div>
 											{#if (progress[day.key]?.exercises?.[exercise.id] ?? 0) >= Math.max(1, getTargetSets(exercise) || 0)}
 												<span class="badge success">Completado</span>

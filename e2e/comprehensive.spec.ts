@@ -54,7 +54,7 @@ test.describe('Navegación', () => {
 
 	test('validación cliente sin nombre', async ({ page }) => {
 		await page.goto('/clientes');
-		await page.fill('input[placeholder="Ej: Ana Pérez"]', '');
+		await page.fill('input[place holder="Ej: Ana Pérez"]', '');
 		await page.click('button:has-text("Crear y generar link")');
 		await page.waitForTimeout(500);
 		await expect(page).toHaveURL(/\/clientes$/);

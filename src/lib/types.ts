@@ -5,6 +5,9 @@ export type RoutineExercise = {
 	order: number;
 	note?: string;
 	totalSets?: number;
+	repsMin?: number;
+	repsMax?: number | null;
+	showRange?: boolean;
 };
 
 export type RoutineDay = {

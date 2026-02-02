@@ -9,6 +9,8 @@
 	let selectedDay = $state(WEEK_DAYS[0].key);
 	let saving = $state(false);
 	let feedback = $state('');
+	let feedbackType = $state<'success' | 'warning' | 'error'>('success');
+	let showValidationErrors = $state(false);
 	let statusMessage = $state('');
 	let clientStatus = $state(data.client.status as 'active' | 'archived');
 	let showDeleteConfirm = $state(false);
@@ -44,7 +46,7 @@
 			}
 			const sets = getTargetSets(ex);
 			if (sets === 0) {
-				return `El ejercicio "${ex.name}" no tiene series. Revisá el esquema (ej: 3x10).`;
+				return `El ejercicio "${ex.name}" no tiene series. Completá el campo Series.`;
 			}
 		}
 		return null;
@@ -57,21 +59,26 @@
 		const validationError = validateExercises(dayKey);
 		if (validationError) {
 			feedback = validationError;
+			feedbackType = 'warning';
 			setTimeout(() => (feedback = ''), 4000);
 			return;
 		}
 		
 		if (exercises.length >= MAX_EXERCISES_PER_DAY) {
 			feedback = 'Límite de 50 ejercicios para este día.';
+			feedbackType = 'warning';
 			setTimeout(() => (feedback = ''), 2500);
 			return;
 		}
 		const newExercise: RoutineExercise = {
 			id: crypto.randomUUID(),
 			name: '',
-			scheme: '3x10',
+			scheme: '',
 			order: exercises.length,
-			totalSets: 3
+			totalSets: undefined,
+			repsMin: undefined,
+			repsMax: null,
+			showRange: false
 		};
 		plan = {
 			...plan,
@@ -79,7 +86,7 @@
 		};
 	};
 
-	const updateExercise = (dayKey: string, id: string, field: keyof RoutineExercise, value: string | number) => {
+	const updateExercise = (dayKey: string, id: string, field: keyof RoutineExercise, value: string | number | boolean | null) => {
 		const exercises = plan[dayKey].exercises.map((ex) =>
 			ex.id === id ? { ...ex, [field]: value } : ex
 		);
@@ -116,6 +123,7 @@
 	const saveRoutine = async () => {
 		saving = true;
 		feedback = '';
+		showValidationErrors = true;
 		
 		// Validar todos los días antes de guardar
 		for (const day of WEEK_DAYS) {
@@ -125,17 +133,24 @@
 			for (const ex of exercises) {
 				if (!ex.name || ex.name.trim() === '') {
 					feedback = `${day.label}: Hay ejercicios sin nombre. Completá el nombre antes de guardar.`;
+					feedbackType = 'warning';
 					saving = false;
 					return;
 				}
 				if (ex.name.length > MAX_EXERCISE_NAME_LENGTH) {
 					feedback = `${day.label}: El nombre "${ex.name.slice(0, 20)}..." es demasiado largo.`;
+					feedbackType = 'warning';
 					saving = false;
 					return;
 				}
 				const sets = getTargetSets(ex);
 				if (sets === 0) {
-					feedback = `${day.label}: "${ex.name}" no tiene series. Revisá el esquema (ej: 3x10).`;
+					feedback = `${day.label}: "${ex.name}" no tiene series. Completá el campo Series.`;
+					feedbackType = 'warning';
+					saving = false;
+					return;
+				}
+				if (ex.showRange && (ex.repsMax ?? 0) > 0 && (ex.repsMax ?? 0) < (ex.repsMin ?? 0)) {
 					saving = false;
 					return;
 				}
@@ -150,8 +165,11 @@
 		});
 		if (res.ok) {
 			feedback = 'Rutina guardada';
+			feedbackType = 'success';
+			showValidationErrors = false;
 		} else {
 			feedback = 'No pudimos guardar la rutina';
+			feedbackType = 'error';
 		}
 		saving = false;
 	};
@@ -168,8 +186,10 @@
 				progress = freshProgress();
 			}
 			feedback = 'Progreso reiniciado';
+			feedbackType = 'success';
 		} else {
 			feedback = 'No se pudo reiniciar. Intentá de nuevo.';
+			feedbackType = 'error';
 		}
 	};
 
@@ -312,52 +332,108 @@
 									Quitar
 								</button>
 							</div>
-							<div class="mt-3 grid gap-3 md:grid-cols-2">
+							<div class="mt-3 space-y-3">
 								<label class="block text-sm font-medium text-slate-300">
 									Nombre
 									<input
-										class="mt-1 w-full rounded-lg border border-slate-700 bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
+										class="mt-1 w-full rounded-lg border {showValidationErrors && (!exercise.name || exercise.name.trim() === '') ? 'border-red-500' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
 										value={exercise.name}
 										placeholder="Nuevo ejercicio"
 										on:input={(e) =>
 											updateExercise(selectedDay, exercise.id, 'name', (e.target as HTMLInputElement).value)}
 									/>
 								</label>
-								<label class="block text-sm font-medium text-slate-300">
-									Series/reps (texto)
-									<input
-										class="mt-1 w-full rounded-lg border border-slate-700 bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
-										value={exercise.scheme}
-										on:input={(e) =>
-											updateExercise(
-												selectedDay,
-												exercise.id,
-												'scheme',
-												(e.target as HTMLInputElement).value
-											)}
-									/>
-								</label>
-								<label class="block text-sm font-medium text-slate-300">
-									Series totales (para progreso)
-									<input
-										type="number"
-										min="0"
-										class="mt-1 w-full rounded-lg border border-slate-700 bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
-										value={exercise.totalSets ?? getTargetSets(exercise)}
-										on:input={(e) =>
-											updateExercise(
-												selectedDay,
-												exercise.id,
-												'totalSets',
-												Number((e.target as HTMLInputElement).value)
-											)}
-									/>
-								</label>
+								
+								<div class="grid gap-3 md:grid-cols-2">
+									<label class="block text-sm font-medium text-slate-300">
+										Series
+										<input
+											type="number"
+											min="1"
+											max="99"
+											class="mt-1 w-full rounded-lg border {showValidationErrors && (!exercise.totalSets || exercise.totalSets === 0) ? 'border-red-500' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
+											value={exercise.totalSets ?? ''}
+											placeholder="Ej: 4"
+											on:input={(e) =>
+												updateExercise(
+													selectedDay,
+													exercise.id,
+													'totalSets',
+													Number((e.target as HTMLInputElement).value) || 0
+												)}
+										/>
+									</label>
+									
+									<div class="block text-sm font-medium text-slate-300">
+										Repeticiones
+										<div class="mt-1 flex items-center gap-2">
+											<input
+												type="number"
+												min="1"
+												max="999"
+												class="w-full rounded-lg border border-slate-700 bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
+												value={exercise.repsMin ?? ''}
+												placeholder="Ej: 8"
+												on:input={(e) =>
+													updateExercise(
+														selectedDay,
+														exercise.id,
+														'repsMin',
+														Number((e.target as HTMLInputElement).value) || 0
+													)}
+											/>
+											{#if exercise.showRange}
+												<span class="text-slate-400">–</span>
+												<input
+													type="number"
+													min="1"
+													max="999"
+													class="w-full rounded-lg border {(exercise.repsMax ?? 0) > 0 && (exercise.repsMax ?? 0) < (exercise.repsMin ?? 0) ? 'border-red-500' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
+													value={exercise.repsMax ?? ''}
+													placeholder="máx"
+													on:input={(e) =>
+														updateExercise(
+															selectedDay,
+															exercise.id,
+															'repsMax',
+															Number((e.target as HTMLInputElement).value) || null
+														)}
+												/>
+												<button
+													type="button"
+													class="flex-shrink-0 rounded p-1.5 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+													title="Quitar rango"
+													on:click={() => {
+														updateExercise(selectedDay, exercise.id, 'showRange', false);
+														updateExercise(selectedDay, exercise.id, 'repsMax', null);
+													}}
+												>
+													<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+													</svg>
+												</button>
+											{:else}
+												<button
+													type="button"
+													class="flex-shrink-0 whitespace-nowrap rounded-lg border border-slate-600 px-4 py-3 text-sm text-slate-300 hover:bg-slate-700"
+													on:click={() => updateExercise(selectedDay, exercise.id, 'showRange', true)}
+												>
+													agregar rango
+												</button>
+											{/if}
+										</div>
+										{#if exercise.showRange && (exercise.repsMax ?? 0) > 0 && (exercise.repsMax ?? 0) < (exercise.repsMin ?? 0)}
+											<p class="mt-1 text-xs text-red-400">El máximo debe ser igual o mayor que el mínimo</p>
+										{/if}
+									</div>
+								</div>
+								
 								<label class="block text-sm font-medium text-slate-300">
 									Nota (opcional)
 									<input
 										class="mt-1 w-full rounded-lg border border-slate-700 bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
 										value={exercise.note ?? ''}
+										placeholder="Ej: RPE, RIR, dropset, etc."
 										on:input={(e) =>
 											updateExercise(
 												selectedDay,
@@ -399,7 +475,22 @@
 			</div>
 
 			{#if feedback}
-				<p class="rounded-lg bg-emerald-900/40 px-4 py-2.5 text-base text-emerald-200 border border-emerald-700/50">{feedback}</p>
+				<div class="flex items-center gap-2 rounded-lg px-4 py-2.5 text-base border {feedbackType === 'success' ? 'bg-emerald-900/40 text-emerald-200 border-emerald-700/50' : feedbackType === 'warning' ? 'bg-amber-900/40 text-amber-200 border-amber-700/50' : 'bg-red-900/40 text-red-200 border-red-700/50'}">
+					{#if feedbackType === 'warning'}
+						<svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+						</svg>
+					{:else if feedbackType === 'error'}
+						<svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+						</svg>
+					{:else}
+						<svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+						</svg>
+					{/if}
+					<span>{feedback}</span>
+				</div>
 			{/if}
 		</div>
 

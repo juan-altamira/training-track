@@ -91,6 +91,18 @@
 			ex.id === id ? { ...ex, [field]: value } : ex
 		);
 		plan = { ...plan, [dayKey]: { ...plan[dayKey], exercises } };
+		
+		// Limpiar advertencia si el usuario corrigió el error
+		if (showValidationErrors && feedbackType === 'warning' && (field === 'name' || field === 'totalSets')) {
+			const updatedExercises = plan[dayKey].exercises;
+			const hasErrors = updatedExercises.some(ex => 
+				!ex.name || ex.name.trim() === '' || !ex.totalSets || ex.totalSets === 0
+			);
+			if (!hasErrors) {
+				feedback = '';
+				showValidationErrors = false;
+			}
+		}
 	};
 
 	const removeExercise = (dayKey: string, id: string) => {
@@ -300,6 +312,21 @@
 					<span>{saving ? 'Guardando...' : 'Guardar cambios'}</span>
 				</button>
 			</div>
+
+			{#if feedback && feedbackType !== 'success'}
+				<div class="flex items-center gap-2 rounded-lg px-4 py-2.5 text-base border {feedbackType === 'warning' ? 'bg-amber-900/40 text-amber-200 border-amber-700/50' : 'bg-red-900/40 text-red-200 border-red-700/50'}">
+					{#if feedbackType === 'warning'}
+						<svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+						</svg>
+					{:else}
+						<svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+						</svg>
+					{/if}
+					<span>{feedback}</span>
+				</div>
+			{/if}
 
 			<div class="flex flex-wrap gap-2">
 				{#each WEEK_DAYS as day}

@@ -598,24 +598,26 @@
 							{@const completion = dayCompletion(day.key)}
 							<li class="rounded-lg border border-slate-800 bg-[#111423] overflow-hidden hover:bg-[#151827] transition-colors cursor-pointer">
 								<button type="button" class="w-full text-left px-4 py-4 sm:py-5" onclick={() => toggleDayDetail(day.key)}>
-									<div class="flex items-center gap-3 sm:gap-4">
+									<div class="grid grid-cols-[auto_1fr_auto] items-center gap-3 sm:gap-4">
 										<p class="font-semibold text-slate-100">{day.label}</p>
-										<span
-											class={`rounded-full px-3 py-1 text-sm font-semibold whitespace-nowrap ${
-												progress[day.key]?.suspicious && completion.completed
-													? 'bg-amber-900/50 text-amber-200'
+										<div class="flex justify-center">
+											<span
+												class={`rounded-full px-3 py-1 text-sm font-semibold whitespace-nowrap ${
+													progress[day.key]?.suspicious && completion.completed
+														? 'bg-amber-900/50 text-amber-200'
+														: completion.completed
+															? 'bg-emerald-900/50 text-emerald-300'
+															: 'bg-slate-800 text-slate-300'
+												}`}
+											>
+												{progress[day.key]?.suspicious && completion.completed
+													? 'Posible engaño'
 													: completion.completed
-														? 'bg-emerald-900/50 text-emerald-300'
-														: 'bg-slate-800 text-slate-300'
-											}`}
-										>
-											{progress[day.key]?.suspicious && completion.completed
-												? 'Posible engaño'
-												: completion.completed
-													? 'Completado'
-													: 'En progreso'}
-										</span>
-										<div class="flex items-center gap-1.5 text-sm text-slate-300 ml-auto">
+														? 'Completado'
+														: 'En progreso'}
+											</span>
+										</div>
+										<div class="flex items-center gap-1.5 text-sm text-slate-300">
 											<span class="hidden sm:inline">Detalle</span>
 											<svg class="w-4 h-4 transition-transform {expandedDay === day.key ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />

@@ -60,6 +60,17 @@ let saveInFlight = false;
 		expanded = { ...expanded, [dayKey]: !expanded[dayKey] };
 	};
 
+	// Calcula si el día está realmente completado basado en el estado actual
+	const isDayCompleted = (dayKey: string): boolean => {
+		const dayPlan = plan[dayKey];
+		if (!dayPlan || dayPlan.exercises.length === 0) return false;
+		return dayPlan.exercises.every((ex) => {
+			const target = Math.max(1, getTargetSets(ex) || 0);
+			const done = progress[dayKey]?.exercises?.[ex.id] ?? 0;
+			return done >= target;
+		});
+	};
+
 	const doSaveProgress = async (dayKey?: string) => {
 		if (saveInFlight) return;
 		saveInFlight = true;
@@ -171,11 +182,11 @@ let saveInFlight = false;
 		<div class="days">
 			{#each WEEK_DAYS as day}
 				{#if plan[day.key] && plan[day.key].exercises.length > 0}
-					<article class={`day-card ${expanded[day.key] ? 'is-open' : ''} ${progress[day.key]?.completed ? 'is-done' : ''}`}>
+					<article class={`day-card ${expanded[day.key] ? 'is-open' : ''} ${isDayCompleted(day.key) ? 'is-done' : ''}`}>
 						<button class="day-header" type="button" onclick={() => toggleExpanded(day.key)}>
 							<div class="day-left">
 								<span class="day-name">{day.label}</span>
-								{#if progress[day.key]?.completed}
+								{#if isDayCompleted(day.key)}
 									<span class="badge success">Día completado</span>
 								{/if}
 							</div>

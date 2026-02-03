@@ -287,14 +287,14 @@
 				<button
 					class="w-full md:w-1/2 rounded-2xl border border-emerald-700/40 bg-gradient-to-r from-emerald-700 to-teal-600 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-emerald-900/30 transition hover:-translate-y-0.5 hover:shadow-emerald-900/50 hover:brightness-110"
 					type="button"
-					on:click={copyLink}
+					onclick={copyLink}
 				>
 					{copiedLink ? '✓ Copiado' : 'Copiar link de la rutina'}
 				</button>
 				<button
 					class="w-full md:w-1/2 rounded-2xl border border-cyan-700/40 bg-gradient-to-r from-cyan-700 to-sky-600 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-cyan-900/30 transition hover:-translate-y-0.5 hover:shadow-cyan-900/50 hover:brightness-110"
 					type="button"
-					on:click={() => {
+					onclick={() => {
 						selectedSource = '';
 						showCopyModal = true;
 					}}
@@ -307,7 +307,7 @@
 					<button
 						class="w-full md:w-1/2 rounded-2xl border border-amber-500/60 bg-gradient-to-r from-amber-700 to-orange-600 px-5 py-3 text-base font-semibold text-amber-50 shadow-lg shadow-amber-900/30 transition hover:-translate-y-0.5 hover:shadow-amber-900/50 hover:brightness-110"
 						type="button"
-						on:click={() => (showArchiveConfirm = true)}
+						onclick={() => (showArchiveConfirm = true)}
 					>
 						Desactivar cliente
 					</button>
@@ -315,7 +315,7 @@
 					<button
 						class="w-full md:w-1/2 rounded-2xl border border-emerald-500/60 bg-gradient-to-r from-emerald-700 to-green-600 px-5 py-3 text-base font-semibold text-emerald-50 shadow-lg shadow-emerald-900/30 transition hover:-translate-y-0.5 hover:shadow-emerald-900/50 hover:brightness-110"
 						type="button"
-						on:click={() => setStatus('active')}
+						onclick={() => setStatus('active')}
 					>
 						Reactivar cliente
 					</button>
@@ -323,7 +323,7 @@
 				<button
 					class="w-full md:w-1/2 rounded-2xl border border-red-700/70 bg-gradient-to-r from-red-800 to-rose-700 px-5 py-3 text-base font-semibold text-red-50 shadow-lg shadow-red-900/30 transition hover:-translate-y-0.5 hover:shadow-red-900/50 hover:brightness-110"
 					type="button"
-					on:click={() => {
+					onclick={() => {
 						showDeleteConfirm = true;
 						deleteConfirmText = '';
 					}}
@@ -354,7 +354,7 @@
 				<h2 class="text-3xl font-extrabold uppercase tracking-wide text-slate-50">Rutina</h2>
 				<button
 					class="save-cta rounded-lg bg-[#1c2338] px-4 py-2.5 text-base font-medium text-slate-100 hover:bg-[#222b43] disabled:cursor-not-allowed disabled:opacity-70"
-					on:click={saveRoutine}
+					onclick={saveRoutine}
 					disabled={saving}
 				>
 					<span>{saving ? 'Guardando...' : 'Guardar cambios'}</span>
@@ -385,7 +385,7 @@
 								? 'bg-[#16223d] text-white border-slate-600'
 								: 'bg-[#070c1d] text-slate-300 border-[#0f162b] hover:bg-[#0d152b]'
 						}`}
-						on:click={() => (selectedDay = day.key)}
+						onclick={() => (selectedDay = day.key)}
 					>
 						{day.label}
 					</button>
@@ -402,7 +402,7 @@
 								<p class="text-base font-semibold text-slate-100">Ejercicio {index + 1}</p>
 								<button
 									class="rounded border border-red-700 bg-red-900/40 px-2.5 py-1.5 text-sm text-red-200 hover:bg-red-900/60 w-full md:w-auto"
-									on:click={() => removeExercise(selectedDay, exercise.id)}
+									onclick={() => removeExercise(selectedDay, exercise.id)}
 								>
 									Quitar
 								</button>
@@ -414,7 +414,7 @@
 										class="mt-1 w-full rounded-lg border {showValidationErrors && (!exercise.name || exercise.name.trim() === '') ? 'border-red-500' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
 										value={exercise.name}
 										placeholder="Nuevo ejercicio"
-										on:input={(e) =>
+										oninput={(e) =>
 											updateExercise(selectedDay, exercise.id, 'name', (e.target as HTMLInputElement).value)}
 									/>
 								</label>
@@ -429,7 +429,7 @@
 											class="mt-1 w-full rounded-lg border {showValidationErrors && (!exercise.totalSets || exercise.totalSets === 0) ? 'border-red-500' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
 											value={exercise.totalSets ?? ''}
 											placeholder="Ej: 4"
-											on:input={(e) =>
+											oninput={(e) =>
 												updateExercise(
 													selectedDay,
 													exercise.id,
@@ -449,7 +449,7 @@
 												class="w-full rounded-lg border border-slate-700 bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
 												value={exercise.repsMin ?? ''}
 												placeholder="Ej: 8"
-												on:input={(e) =>
+												oninput={(e) =>
 													updateExercise(
 														selectedDay,
 														exercise.id,
@@ -466,7 +466,7 @@
 													class="w-full rounded-lg border {(exercise.repsMax ?? 0) > 0 && (exercise.repsMax ?? 0) < (exercise.repsMin ?? 0) ? 'border-red-500' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
 													value={exercise.repsMax ?? ''}
 													placeholder="máx"
-													on:input={(e) =>
+													oninput={(e) =>
 														updateExercise(
 															selectedDay,
 															exercise.id,
@@ -478,7 +478,7 @@
 													type="button"
 													class="flex-shrink-0 rounded p-1.5 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
 													title="Quitar rango"
-													on:click={() => {
+													onclick={() => {
 														updateExercise(selectedDay, exercise.id, 'showRange', false);
 														updateExercise(selectedDay, exercise.id, 'repsMax', null);
 													}}
@@ -491,7 +491,7 @@
 												<button
 													type="button"
 													class="flex-shrink-0 whitespace-nowrap rounded-lg border border-slate-600 px-4 py-3 text-sm text-slate-300 hover:bg-slate-700"
-													on:click={() => updateExercise(selectedDay, exercise.id, 'showRange', true)}
+													onclick={() => updateExercise(selectedDay, exercise.id, 'showRange', true)}
 												>
 													agregar rango
 												</button>
@@ -509,7 +509,7 @@
 										class="mt-1 w-full rounded-lg border border-slate-700 bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
 										value={exercise.note ?? ''}
 										placeholder="Ej: RPE, RIR, dropset, etc."
-										on:input={(e) =>
+										oninput={(e) =>
 											updateExercise(
 												selectedDay,
 												exercise.id,
@@ -526,7 +526,7 @@
 				<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
 					<button
 						class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-3 text-base font-medium text-slate-100 hover:bg-[#1b1f30] disabled:opacity-50 disabled:cursor-not-allowed"
-						on:click={() => addExercise(selectedDay)}
+						onclick={() => addExercise(selectedDay)}
 						type="button"
 						disabled={plan[selectedDay].exercises.length >= MAX_EXERCISES_PER_DAY}
 					>
@@ -534,14 +534,14 @@
 					</button>
 					<button
 						class="save-cta rounded-lg bg-[#1c2338] px-4 py-3 text-base font-medium text-slate-100 hover:bg-[#222b43] disabled:cursor-not-allowed disabled:opacity-70"
-						on:click={saveRoutine}
+						onclick={saveRoutine}
 						disabled={saving || plan[selectedDay].exercises.length === 0}
 					>
 						<span>{saving ? 'Guardando...' : 'Guardar cambios'}</span>
 					</button>
 					<button
 						class="rounded-lg border border-amber-600/50 bg-amber-900/40 px-4 py-3 text-base font-medium text-amber-200 hover:bg-amber-900/60"
-						on:click={() => (showResetConfirm = true)}
+						onclick={() => (showResetConfirm = true)}
 						type="button"
 					>
 						Resetear progreso
@@ -702,7 +702,7 @@
 						<button
 							type="button"
 							class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-2 text-slate-200 hover:bg-[#1b1f30]"
-							on:click={() => {
+							onclick={() => {
 								showDeleteConfirm = false;
 								deleteConfirmText = '';
 							}}
@@ -733,14 +733,14 @@
 					<button
 						type="button"
 						class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-2 text-slate-200 hover:bg-[#1b1f30]"
-						on:click={() => (showArchiveConfirm = false)}
+						onclick={() => (showArchiveConfirm = false)}
 					>
 						Cancelar
 					</button>
 					<button
 						type="button"
 						class="rounded-lg border border-amber-500/50 bg-amber-900/60 px-4 py-2 text-amber-100 hover:bg-amber-900/80"
-						on:click={() => {
+						onclick={() => {
 							showArchiveConfirm = false;
 							setStatus('archived');
 						}}
@@ -766,14 +766,14 @@
 					<button
 						type="button"
 						class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-2 text-slate-200 hover:bg-[#1b1f30]"
-						on:click={() => (showResetConfirm = false)}
+						onclick={() => (showResetConfirm = false)}
 					>
 						Cancelar
 					</button>
 					<button
 						type="button"
 						class="rounded-lg border border-amber-500/50 bg-amber-900/60 px-4 py-2 text-amber-100 hover:bg-amber-900/80"
-						on:click={async () => {
+						onclick={async () => {
 							showResetConfirm = false;
 							await resetProgress();
 						}}
@@ -819,7 +819,7 @@
 					<button
 						type="button"
 						class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-2 text-slate-200 hover:bg-[#1b1f30]"
-						on:click={() => {
+						onclick={() => {
 							showCopyModal = false;
 							selectedSource = '';
 						}}
@@ -830,7 +830,7 @@
 						type="button"
 						class="rounded-lg bg-emerald-600 px-4 py-2 text-white shadow-md shadow-emerald-900/40 transition hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
 						disabled={!selectedSource}
-						on:click={copyRoutine}
+						onclick={copyRoutine}
 					>
 						Confirmar
 					</button>

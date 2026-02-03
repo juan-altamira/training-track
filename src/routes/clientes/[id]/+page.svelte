@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { WEEK_DAYS, getTargetSets } from '$lib/routines';
 	import type { ProgressState, RoutineExercise, RoutinePlan } from '$lib/types';
 
@@ -21,6 +22,7 @@
 	let showCopyModal = $state(false);
 	let selectedSource = $state('');
 	let expandedDay = $state<string | null>(null);
+	let navigatingBack = $state(false);
 	const MAX_EXERCISES_PER_DAY = 50;
 	const otherClients = data.otherClients ?? [];
 	const hasSuspicious = WEEK_DAYS.some((d) => progress[d.key]?.suspicious && progress[d.key]?.completed);
@@ -337,13 +339,20 @@
 	</div>
 
 		<div class="flex items-center gap-3">
-		<a
-			href="/clientes"
-			class="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-gradient-to-r from-[#151827] to-[#0f162b] px-4 py-2.5 text-base text-slate-100 shadow-md shadow-black/30 transition hover:-translate-y-0.5 hover:border-emerald-600 hover:shadow-emerald-900/30"
+		<button
+			type="button"
+			onclick={async () => { navigatingBack = true; await goto('/clientes'); }}
+			disabled={navigatingBack}
+			aria-busy={navigatingBack}
+			class={`back-btn relative inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-gradient-to-r from-[#151827] to-[#0f162b] px-4 py-2.5 text-base text-slate-100 shadow-md shadow-black/30 transition hover:-translate-y-0.5 hover:border-emerald-600 hover:shadow-emerald-900/30 overflow-hidden disabled:cursor-wait ${
+				navigatingBack ? 'loading' : ''
+			}`}
 		>
-			<span aria-hidden="true" class="text-lg leading-none">↩︎</span>
-			<span>Volver al panel</span>
-		</a>
+			<span class="btn-label flex items-center gap-2">
+				<span aria-hidden="true" class="text-lg leading-none">↩︎</span>
+				<span>{navigatingBack ? 'Cargando...' : 'Volver al panel'}</span>
+			</span>
+		</button>
 	</div>
 
 	{#if statusMessage}
@@ -872,6 +881,27 @@
 		}
 		100% {
 			transform: translateX(120%);
+		}
+	}
+	.back-btn.loading::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: linear-gradient(90deg, #10b981 0%, #34d399 100%);
+		transform-origin: left;
+		animation: fillbtn 2s ease-in-out infinite;
+		opacity: 0.9;
+	}
+	.back-btn .btn-label {
+		position: relative;
+		z-index: 1;
+	}
+	@keyframes fillbtn {
+		from {
+			transform: scaleX(0);
+		}
+		to {
+			transform: scaleX(1);
 		}
 	}
 </style>

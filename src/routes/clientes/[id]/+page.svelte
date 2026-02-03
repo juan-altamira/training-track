@@ -597,10 +597,10 @@
 						{#if plan[day.key] && plan[day.key].exercises.length > 0}
 							{@const completion = dayCompletion(day.key)}
 							<li class="rounded-lg border border-slate-800 bg-[#111423] overflow-hidden">
-								<div class="px-4 py-4">
+								<div class="px-4 py-4 sm:py-5">
 									<div class="flex items-center gap-4 justify-between">
 										<p class="font-semibold text-slate-100">{day.label}</p>
-										<div class="flex items-center gap-3">
+										<div class="flex items-center gap-3 sm:flex-1 sm:justify-center sm:max-w-md">
 											<span
 												class={`rounded-full px-3 py-1 text-sm font-semibold whitespace-nowrap ${
 													progress[day.key]?.suspicious && completion.completed
@@ -628,8 +628,8 @@
 											</button>
 										</div>
 									</div>
-									<p class="text-sm text-slate-400 mt-1.5">
-										{completion.done}/{completion.total} ejercicios completos
+									<p class="text-[13px] sm:text-sm text-slate-400 mt-1.5">
+										{completion.done}/{completion.total} ejercicios
 									</p>
 								</div>
 								{#if expandedDay === day.key}

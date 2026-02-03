@@ -70,7 +70,7 @@
 	<div class="flex flex-wrap items-center justify-between gap-4 mb-2">
 		<div>
 			<h1 class="text-2xl sm:text-3xl font-semibold tracking-tight">
-				<span class="bg-gradient-to-r from-slate-200 via-slate-100 to-slate-50 bg-clip-text text-transparent">
+				<span class="bg-gradient-to-r from-emerald-200 via-slate-100 to-slate-50 bg-clip-text text-transparent">
 					Gestioná rutinas, links y actividad.
 				</span>
 			</h1>

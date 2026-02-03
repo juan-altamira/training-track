@@ -43,7 +43,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 		.single();
 
 	if (clientError || !client) {
-		throw error(404, { message: 'Cliente no encontrado' });
+		throw error(404, { message: 'Alumno no encontrado' });
 	}
 
 	const { data: routineRow, error: routineError } = await supabase
@@ -125,7 +125,7 @@ export const actions: Actions = {
 		for (const day of Object.values(plan)) {
 			if (day.exercises.length > MAX_EXERCISES_PER_DAY) {
 				return fail(400, {
-					message: 'Límite de 50 ejercicios por día alcanzado para este cliente.'
+					message: 'Límite de 50 ejercicios por día alcanzado para este alumno.'
 				});
 			}
 		}
@@ -247,7 +247,7 @@ export const actions: Actions = {
 			.maybeSingle();
 
 		if (fetchError || !client) {
-			return fail(403, { message: 'No podés eliminar este cliente' });
+			return fail(403, { message: 'No podés eliminar este alumno' });
 		}
 
 		await supabase.from('progress').delete().eq('client_id', params.id);
@@ -272,11 +272,11 @@ export const actions: Actions = {
 		const targetClientId = params.id;
 
 		if (!sourceClientId) {
-			return fail(400, { message: 'Seleccioná un cliente origen' });
+			return fail(400, { message: 'Seleccioná un alumno origen' });
 		}
 
 		if (sourceClientId === targetClientId) {
-			return fail(400, { message: 'No tiene sentido copiar sobre el mismo cliente' });
+			return fail(400, { message: 'No tiene sentido copiar sobre el mismo alumno' });
 		}
 
 		const supabase = locals.supabase;

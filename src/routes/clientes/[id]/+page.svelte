@@ -212,7 +212,7 @@
 		const res = await fetch('?/setStatus', { method: 'POST', body: formData });
 		if (res.ok) {
 			clientStatus = status;
-			statusMessage = status === 'active' ? 'Cliente reactivado' : 'Cliente archivado (verá acceso desactivado)';
+			statusMessage = status === 'active' ? 'Alumno reactivado' : 'Alumno archivado (verá acceso desactivado)';
 			setTimeout(() => (statusMessage = ''), 2500);
 		}
 	};
@@ -301,7 +301,7 @@
 						showCopyModal = true;
 					}}
 				>
-					Copiar rutina de otro cliente
+					Copiar rutina de otro alumno
 				</button>
 			</div>
 			<div class="flex flex-col md:flex-row items-stretch md:items-center gap-3 justify-between">
@@ -311,7 +311,7 @@
 						type="button"
 						onclick={() => (showArchiveConfirm = true)}
 					>
-						Desactivar cliente
+						Desactivar alumno
 					</button>
 				{:else}
 					<button
@@ -319,7 +319,7 @@
 						type="button"
 						onclick={() => setStatus('active')}
 					>
-						Reactivar cliente
+						Reactivar alumno
 					</button>
 				{/if}
 				<button
@@ -330,7 +330,7 @@
 						deleteConfirmText = '';
 					}}
 				>
-					Eliminar cliente
+					Eliminar alumno
 				</button>
 			</div>
 		</div>
@@ -581,7 +581,7 @@
 					<div>
 						<p class="text-sm font-semibold uppercase tracking-[0.12em] text-slate-400">Link de la rutina</p>
 						<p class="mt-1 text-base font-semibold text-emerald-200 break-all">{link}</p>
-						<p class="mt-2 text-xs text-white">El cliente accede sin login; si está archivado verá “acceso desactivado”.</p>
+						<p class="mt-2 text-xs text-white">El alumno accede sin login; si está archivado verá “acceso desactivado”.</p>
 					</div>
 				</div>
 			</div>
@@ -598,30 +598,28 @@
 							{@const completion = dayCompletion(day.key)}
 							<li class="rounded-lg border border-slate-800 bg-[#111423] overflow-hidden hover:bg-[#151827] transition-colors cursor-pointer">
 								<button type="button" class="w-full text-left px-4 py-4 sm:py-5" onclick={() => toggleDayDetail(day.key)}>
-									<div class="flex items-center gap-4 justify-between">
+									<div class="flex items-center gap-3 sm:gap-4">
 										<p class="font-semibold text-slate-100">{day.label}</p>
-										<div class="flex items-center gap-3 sm:flex-1 sm:justify-center sm:max-w-md">
-											<span
-												class={`rounded-full px-3 py-1 text-sm font-semibold whitespace-nowrap ${
-													progress[day.key]?.suspicious && completion.completed
-														? 'bg-amber-900/50 text-amber-200'
-														: completion.completed
-															? 'bg-emerald-900/50 text-emerald-300'
-															: 'bg-slate-800 text-slate-300'
-												}`}
-											>
-												{progress[day.key]?.suspicious && completion.completed
-													? 'Posible engaño'
+										<span
+											class={`rounded-full px-3 py-1 text-sm font-semibold whitespace-nowrap ${
+												progress[day.key]?.suspicious && completion.completed
+													? 'bg-amber-900/50 text-amber-200'
 													: completion.completed
-														? 'Completado'
-														: 'En progreso'}
-											</span>
-											<div class="flex items-center gap-1.5 text-sm text-slate-300">
-												<span class="hidden sm:inline">Detalle</span>
-												<svg class="w-4 h-4 transition-transform {expandedDay === day.key ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-												</svg>
-											</div>
+														? 'bg-emerald-900/50 text-emerald-300'
+														: 'bg-slate-800 text-slate-300'
+											}`}
+										>
+											{progress[day.key]?.suspicious && completion.completed
+												? 'Posible engaño'
+												: completion.completed
+													? 'Completado'
+													: 'En progreso'}
+										</span>
+										<div class="flex items-center gap-1.5 text-sm text-slate-300 ml-auto">
+											<span class="hidden sm:inline">Detalle</span>
+											<svg class="w-4 h-4 transition-transform {expandedDay === day.key ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+											</svg>
 										</div>
 									</div>
 									<p class="text-[13px] sm:text-sm text-slate-400 mt-1.5">
@@ -664,7 +662,7 @@
 				</ul>
 				{#if hasSuspicious}
 					<p class="mt-3 text-sm text-amber-200">
-						Posible engaño significa que el cliente marcó todas las series del día en menos de 60 segundos. Es posible que las haya marcado sin haber entrenado.
+						Posible engaño significa que el alumno marcó todas las series del día en menos de 60 segundos. Es posible que las haya marcado sin haber entrenado.
 					</p>
 				{/if}
 			</div>
@@ -686,9 +684,9 @@
 		<div class="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm px-4">
 			<div class="w-full max-w-md rounded-2xl border border-slate-800 bg-[#0f111b] p-6 shadow-2xl shadow-black/40 text-slate-100">
 				<div class="space-y-2">
-					<h2 class="text-xl font-semibold text-red-200">Eliminar cliente</h2>
+					<h2 class="text-xl font-semibold text-red-200">Eliminar alumno</h2>
 					<p class="text-sm text-slate-300">
-						Para eliminar al cliente <span class="font-semibold">{data.client.name}</span> definitivamente,
+						Para eliminar al alumno <span class="font-semibold">{data.client.name}</span> definitivamente,
 						escribí la palabra <span class="font-semibold text-red-300">eliminar</span>.
 					</p>
 				</div>
@@ -730,8 +728,8 @@
 		<div class="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm px-4">
 			<div class="w-full max-w-md rounded-2xl border border-slate-800 bg-[#0f111b] p-6 shadow-2xl shadow-black/40 text-slate-100">
 				<div class="space-y-3">
-					<h2 class="text-xl font-semibold text-amber-200">Desactivar cliente</h2>
-					<p class="text-sm text-slate-300">¿Estás seguro que deseas desactivar el acceso a este cliente?</p>
+					<h2 class="text-xl font-semibold text-amber-200">Desactivar alumno</h2>
+					<p class="text-sm text-slate-300">¿Estás seguro que deseas desactivar el acceso a este alumno?</p>
 				</div>
 				<div class="mt-5 flex items-center justify-end gap-3">
 					<button
@@ -795,29 +793,29 @@
 				<div class="text-center">
 					<h2 class="text-2xl font-extrabold">
 						<span class="bg-gradient-to-r from-emerald-300 via-cyan-300 to-slate-100 bg-clip-text text-transparent">
-							Copiar rutina desde otro cliente
+							Copiar rutina desde otro alumno
 						</span>
 					</h2>
 					<p class="mt-6 mb-8 text-sm text-amber-200 flex items-center justify-center gap-2">
-						⚠️ Esto reemplaza la rutina actual. El progreso se reiniciará para este cliente. ⚠️
+						⚠️ Esto reemplaza la rutina actual. El progreso se reiniciará para este alumno. ⚠️
 					</p>
 				</div>
 				{#if otherClients.length > 0}
 					<label class="block text-sm font-medium text-slate-200 mt-6">
-						Seleccioná desde qué cliente querés copiar
+						Seleccioná desde qué alumno querés copiar
 						<select
 							class="mt-3 w-full rounded-xl border border-slate-600 bg-[#0f1322] px-4 py-3 pr-12 text-base text-slate-100 shadow-inner focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-600 appearance-none"
 							bind:value={selectedSource}
 							style="background-image: linear-gradient(45deg, transparent 50%, #94a3b8 50%), linear-gradient(135deg, #94a3b8 50%, transparent 50%); background-position: calc(100% - 18px) 50%, calc(100% - 12px) 50%; background-size: 6px 6px, 6px 6px; background-repeat: no-repeat;"
 						>
-							<option value="">Elegí un cliente</option>
+							<option value="">Elegí un alumno</option>
 							{#each otherClients as c}
 								<option value={c.id}>{c.name}</option>
 							{/each}
 						</select>
 					</label>
 				{:else}
-					<p class="text-sm text-slate-400">No tenés otros clientes para copiar.</p>
+					<p class="text-sm text-slate-400">No tenés otros alumnos para copiar.</p>
 				{/if}
 				<div class="flex justify-end gap-3">
 					<button

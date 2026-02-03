@@ -106,7 +106,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
 	if (error) {
 		console.error(error);
-		throw fail(500, { message: 'No pudimos cargar los clientes' });
+		throw fail(500, { message: 'No pudimos cargar los alumnos' });
 	}
 
 	const clientIds = clients?.map((c) => c.id) ?? [];
@@ -254,7 +254,7 @@ export const actions: Actions = {
 
 		if (existingClient) {
 			return fail(400, {
-				message: 'Ya existe un cliente con ese nombre. Te sugiero agregar también el apellido para diferenciarlo mejor.'
+				message: 'Ya existe un alumno con ese nombre. Te sugiero agregar también el apellido para diferenciarlo mejor.'
 			});
 		}
 
@@ -266,12 +266,12 @@ export const actions: Actions = {
 
 		if (countError) {
 			console.error(countError);
-			return fail(500, { message: 'No pudimos validar el límite de clientes' });
+			return fail(500, { message: 'No pudimos validar el límite de alumnos' });
 		}
 
 		if ((activeCount ?? 0) >= MAX_CLIENTS_PER_TRAINER) {
 			return fail(400, {
-				message: 'Límite de 100 clientes alcanzado. Eliminá o archivá uno para crear otro.'
+				message: 'Límite de 100 alumnos alcanzado. Eliminá o archivá uno para crear otro.'
 			});
 		}
 
@@ -287,7 +287,7 @@ export const actions: Actions = {
 
 		if (error || !client) {
 			console.error(error);
-			return fail(500, { message: 'No pudimos crear el cliente' });
+			return fail(500, { message: 'No pudimos crear el alumno' });
 		}
 
 		const defaultPlan = createEmptyPlan();
@@ -385,7 +385,7 @@ export const actions: Actions = {
 		const userEmail = locals.session.user.email?.toLowerCase();
 
 		if (!clientId) {
-			return fail(400, { message: 'Cliente inválido' });
+			return fail(400, { message: 'Alumno inválido' });
 		}
 
 		if (confirm !== 'eliminar') {
@@ -402,7 +402,7 @@ export const actions: Actions = {
 
 		if (fetchError || !client) {
 			console.error('Delete client error:', { fetchError, clientId, userId: locals.session.user.id });
-			return fail(403, { message: 'No podés eliminar este cliente' });
+			return fail(403, { message: 'No podés eliminar este alumno' });
 		}
 
 		// Usar supabaseAdmin para eliminar (bypass RLS)
@@ -412,7 +412,7 @@ export const actions: Actions = {
 
 		if (progressErr || routineErr || clientErr) {
 			console.error('Delete errors:', { progressErr, routineErr, clientErr });
-			return fail(500, { message: 'Error al eliminar el cliente. Intentá de nuevo.' });
+			return fail(500, { message: 'Error al eliminar el alumno. Intentá de nuevo.' });
 		}
 
 		throw redirect(303, '/clientes');

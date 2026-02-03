@@ -67,11 +67,13 @@
 </script>
 
 <section class="flex flex-col gap-8 text-slate-100">
-	<div class="flex flex-wrap items-center justify-between gap-3">
+	<div class="flex flex-wrap items-center justify-between gap-4 mb-2">
 		<div>
-			<p class="text-2xl font-extrabold tracking-wide text-emerald-80">
-				EN ESTE PANEL VERAS A TUS CLIENTES
-			</p>
+			<h1 class="text-2xl sm:text-3xl font-semibold tracking-tight">
+				<span class="bg-gradient-to-r from-emerald-300 via-cyan-200 to-slate-100 bg-clip-text text-transparent">
+					Gestioná rutinas, links y actividad.
+				</span>
+			</h1>
 		</div>
 		<form method="POST" action="/logout">
 				<button
@@ -89,11 +91,11 @@
 			on:submit|preventDefault={() => (searchTerm = searchTerm.trim())}
 		>
 			<label class="w-full text-base text-slate-200">
-				<span class="sr-only">Buscar cliente</span>
+				<span class="sr-only">Buscar alumno</span>
 				<input
 					class="w-full rounded-lg border border-slate-700 bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-600/50"
 					type="text"
-					placeholder="Buscar cliente"
+					placeholder="Buscar alumno"
 					bind:value={searchTerm}
 				/>
 			</label>
@@ -213,7 +215,7 @@
 		<div class="space-y-3">
 			{#if clients.length === 0}
 				<div class="rounded-xl border border-dashed border-slate-700 bg-[#0f111b] p-7 text-base text-slate-300">
-					Aún no tenés clientes. Creá uno y compartí el link público.
+					Aún no tenés alumnos. Creá uno y compartí el link público.
 				</div>
 			{:else}
 				<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -252,7 +254,7 @@
 									aria-busy={openingId === client.id}
 								>
 									<span class="btn-label">
-										{openingId === client.id ? 'Abriendo rutina...' : 'Abrir rutina del cliente'}
+										{openingId === client.id ? 'Abriendo rutina...' : 'Abrir rutina del alumno'}
 									</span>
 								</button>
 								<div class="grid grid-cols-2 gap-4">
@@ -264,7 +266,7 @@
 											deleteConfirm = '';
 										}}
 									>
-										Eliminar cliente
+										Eliminar alumno
 									</button>
 									<button
 										class="rounded-xl border border-slate-700 px-3.5 py-3 text-sm font-medium text-slate-100 hover:bg-[#151827]"
@@ -301,7 +303,7 @@
 		>
 			<div class="space-y-2">
 				<h2 class="text-2xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 via-cyan-300 to-slate-50">
-					Crear cliente
+					Crear alumno
 				</h2>
 			</div>
 
@@ -335,7 +337,7 @@
 				<span class="relative">{creating ? 'Creando...' : 'Crear y generar link'}</span>
 			</button>
 			<p class="text-sm text-slate-400">
-				Al hacer click crearás un cliente y un link para que él pueda acceder a su rutina.
+				Al hacer click crearás un alumno y un link para que pueda acceder a su rutina.
 			</p>
 
 			{#if formMessage}
@@ -353,9 +355,9 @@
 		<div class="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm px-4">
 			<div class="w-full max-w-md rounded-2xl border border-slate-800 bg-[#0f111b] p-6 shadow-2xl shadow-black/40 text-slate-100">
 				<div class="space-y-2">
-					<h2 class="text-xl font-semibold text-red-200">Eliminar cliente</h2>
+					<h2 class="text-xl font-semibold text-red-200">Eliminar alumno</h2>
 					<p class="text-sm text-slate-300">
-						Para eliminar al cliente <span class="font-semibold">{deleteTarget.name}</span> definitivamente, escribí la palabra
+						Para eliminar al alumno <span class="font-semibold">{deleteTarget.name}</span> definitivamente, escribí la palabra
 						<span class="font-semibold text-red-300">eliminar</span>.
 					</p>
 				</div>

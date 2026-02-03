@@ -198,31 +198,33 @@ export const actions: Actions = {
 			if (!Number.isNaN(start) && !Number.isNaN(end) && end > start) {
 				const durationSec = (end - start) / 1000;
 				const existingDay = existing[sessionDay];
-				const totalTargetSets =
-					routinePlan[sessionDay]?.exercises.reduce(
-						(acc, ex) => acc + Math.max(1, getTargetSets(ex) || 0),
-						0
-					) ?? 0;
-				const existingSets = Object.values(existingDay?.exercises ?? {}).reduce(
-					(acc, val) => acc + (val ?? 0),
+				const dayExercises = routinePlan[sessionDay]?.exercises ?? [];
+				const currentExerciseIds = new Set(dayExercises.map(ex => ex.id));
+				
+				// Calcular totales solo con ejercicios que ACTUALMENTE existen en la rutina
+				const totalTargetSets = dayExercises.reduce(
+					(acc, ex) => acc + Math.max(1, getTargetSets(ex) || 0),
 					0
 				);
-				const newSets = Object.values(parsed[sessionDay]?.exercises ?? {}).reduce(
-					(acc, val) => acc + (val ?? 0),
-					0
-				);
+				const existingSets = Object.entries(existingDay?.exercises ?? {})
+					.filter(([id]) => currentExerciseIds.has(id))
+					.reduce((acc, [, val]) => acc + (val ?? 0), 0);
+				const newSets = Object.entries(parsed[sessionDay]?.exercises ?? {})
+					.filter(([id]) => currentExerciseIds.has(id))
+					.reduce((acc, [, val]) => acc + (val ?? 0), 0);
 
 				// Registrar snapshot al primer set tras el reset
 				if (!firstSetMap[sessionDay] && newSets > existingSets) {
 					firstSetMap[sessionDay] = tsFirst || sessionStart || nowUtc;
 					baselineSets[sessionDay] = existingSets;
 				}
-
+				
+				// existingSets ya está filtrado por ejercicios actuales
 				const baselineForDay = baselineSets[sessionDay] ?? existingSets;
 				const hadProgressBefore =
 					hadProgressFlag
 						? hadProgressFlag === '1'
-						: (existingDay?.completed ?? false) || baselineForDay > 0;
+						: baselineForDay > 0;
 
 				const startRef = firstSetMap[sessionDay] ? Date.parse(firstSetMap[sessionDay] as string) : start;
 				const durationFromFirst =

@@ -30,9 +30,13 @@ let saveInFlight = false;
 		const nextValue = Math.min(Math.max(current + delta, 0), target);
 
 		if (baselineProgress[dayKey] === undefined) {
-			const existing = progress[dayKey];
-			const had = (existing?.completed ?? false) || Object.values(existing?.exercises ?? {}).some((v) => (v ?? 0) > 0);
-			baselineProgress = { ...baselineProgress, [dayKey]: had };
+			// Contar solo series de ejercicios que ACTUALMENTE existen en la rutina
+			const currentExerciseIds = new Set(dayPlan.exercises.map(ex => ex.id));
+			const existingExercises = progress[dayKey]?.exercises ?? {};
+			const relevantSets = Object.entries(existingExercises)
+				.filter(([id]) => currentExerciseIds.has(id))
+				.reduce((sum, [, val]) => sum + (val ?? 0), 0);
+			baselineProgress = { ...baselineProgress, [dayKey]: relevantSets > 0 };
 		}
 
 		if (!sessionStarts[dayKey]) {

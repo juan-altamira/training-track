@@ -115,7 +115,7 @@ export const formatPrescriptionLong = (exercise: RoutineExercise): string => {
 	
 	if (repsMin != null && repsMin > 0) {
 		if (repsMax != null && repsMax > repsMin) {
-			return `${sets} ${seriesWord} de ${repsMin}–${repsMax} repeticiones`;
+			return `${sets} ${seriesWord} de ${repsMin} a ${repsMax} repeticiones`;
 		}
 		const repWord = repsMin === 1 ? 'repetición' : 'repeticiones';
 		return `${sets} ${seriesWord} de ${repsMin} ${repWord}`;

@@ -596,8 +596,8 @@
 					{#each WEEK_DAYS as day}
 						{#if plan[day.key] && plan[day.key].exercises.length > 0}
 							{@const completion = dayCompletion(day.key)}
-							<li class="rounded-lg border border-slate-800 bg-[#111423] overflow-hidden">
-								<div class="px-4 py-4 sm:py-5">
+							<li class="rounded-lg border border-slate-800 bg-[#111423] overflow-hidden hover:bg-[#151827] transition-colors cursor-pointer">
+								<button type="button" class="w-full text-left px-4 py-4 sm:py-5" onclick={() => toggleDayDetail(day.key)}>
 									<div class="flex items-center gap-4 justify-between">
 										<p class="font-semibold text-slate-100">{day.label}</p>
 										<div class="flex items-center gap-3 sm:flex-1 sm:justify-center sm:max-w-md">
@@ -616,22 +616,18 @@
 														? 'Completado'
 														: 'En progreso'}
 											</span>
-											<button
-												type="button"
-												class="flex items-center gap-1.5 text-sm text-slate-300 hover:text-slate-100 transition-colors"
-												onclick={() => toggleDayDetail(day.key)}
-											>
+											<div class="flex items-center gap-1.5 text-sm text-slate-300">
 												<span class="hidden sm:inline">Detalle</span>
 												<svg class="w-4 h-4 transition-transform {expandedDay === day.key ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
 												</svg>
-											</button>
+											</div>
 										</div>
 									</div>
 									<p class="text-[13px] sm:text-sm text-slate-400 mt-1.5">
 										{completion.done}/{completion.total} ejercicios
 									</p>
-								</div>
+								</button>
 								{#if expandedDay === day.key}
 									{@const details = getExerciseDetails(day.key)}
 									<div class="border-t border-slate-800 bg-[#0d1019] px-4 py-3 space-y-1">

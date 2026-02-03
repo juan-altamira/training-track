@@ -20,6 +20,7 @@
 	let copiedLink = $state(false);
 	let showCopyModal = $state(false);
 	let selectedSource = $state('');
+	let expandedDay = $state<string | null>(null);
 	const MAX_EXERCISES_PER_DAY = 50;
 	const otherClients = data.otherClients ?? [];
 	const hasSuspicious = WEEK_DAYS.some((d) => progress[d.key]?.suspicious && progress[d.key]?.completed);
@@ -226,6 +227,53 @@
 			return target === 0 ? false : doneSets >= target;
 		}).length;
 		return { total, done, completed: state.completed };
+	};
+
+	const getExerciseDetails = (dayKey: string) => {
+		const dayPlan = plan[dayKey];
+		const state = progress[dayKey] ?? { completed: false, exercises: {} };
+		const progressExerciseIds = Object.keys(state.exercises ?? {});
+		
+		// Ejercicios actuales en la rutina
+		const currentExercises = dayPlan.exercises.map((ex) => {
+			const target = getTargetSets(ex);
+			const done = state.exercises?.[ex.id] ?? 0;
+			return {
+				id: ex.id,
+				name: ex.name || 'Sin nombre',
+				done,
+				target,
+				complete: target > 0 && done >= target,
+				exists: true
+			};
+		});
+		
+		// Ejercicios en progreso que ya no están en la rutina (fueron eliminados)
+		const currentIds = new Set(dayPlan.exercises.map(ex => ex.id));
+		const deletedExercises = progressExerciseIds
+			.filter(id => !currentIds.has(id) && (state.exercises?.[id] ?? 0) > 0)
+			.map(id => ({
+				id,
+				name: 'Ejercicio eliminado',
+				done: state.exercises?.[id] ?? 0,
+				target: state.exercises?.[id] ?? 0,
+				complete: true,
+				exists: false
+			}));
+		
+		const allExercises = [...currentExercises, ...deletedExercises];
+		const totalSeries = allExercises.reduce((sum, ex) => sum + ex.target, 0);
+		const doneSeries = allExercises.reduce((sum, ex) => sum + Math.min(ex.done, ex.target), 0);
+		
+		// Detectar si la rutina fue modificada después del progreso
+		const hasInconsistency = deletedExercises.length > 0 || 
+			currentExercises.some(ex => ex.done > ex.target);
+		
+		return { exercises: allExercises, totalSeries, doneSeries, hasInconsistency };
+	};
+
+	const toggleDayDetail = (dayKey: string) => {
+		expandedDay = expandedDay === dayKey ? null : dayKey;
 	};
 </script>
 
@@ -542,28 +590,70 @@
 					{#each WEEK_DAYS as day}
 						{#if plan[day.key] && plan[day.key].exercises.length > 0}
 							{@const completion = dayCompletion(day.key)}
-							<li class="flex flex-wrap items-center gap-4 justify-between rounded-lg border border-slate-800 bg-[#111423] px-4 py-3">
-								<div class="mr-auto">
-									<p class="font-semibold">{day.label}</p>
-									<p class="text-sm text-slate-400 mb-1">
-										{completion.done}/{completion.total} ejercicios completos
-									</p>
-								</div>
-								<span
-									class={`rounded-full px-3.5 py-1.5 text-sm font-semibold whitespace-nowrap ${
-										progress[day.key]?.suspicious && completion.completed
-											? 'bg-amber-900/50 text-amber-200'
+							<li class="rounded-lg border border-slate-800 bg-[#111423] overflow-hidden">
+								<div class="flex flex-wrap items-center gap-4 justify-between px-4 py-3">
+									<div class="mr-auto">
+										<p class="font-semibold">{day.label}</p>
+										<p class="text-sm text-slate-400 mb-1">
+											{completion.done}/{completion.total} ejercicios completos
+										</p>
+									</div>
+									<span
+										class={`rounded-full px-3.5 py-1.5 text-sm font-semibold whitespace-nowrap ${
+											progress[day.key]?.suspicious && completion.completed
+												? 'bg-amber-900/50 text-amber-200'
+												: completion.completed
+													? 'bg-emerald-900/50 text-emerald-300'
+													: 'bg-slate-800 text-slate-300'
+										}`}
+									>
+										{progress[day.key]?.suspicious && completion.completed
+											? 'Posible engaño'
 											: completion.completed
-												? 'bg-emerald-900/50 text-emerald-300'
-												: 'bg-slate-800 text-slate-300'
-									}`}
-								>
-									{progress[day.key]?.suspicious && completion.completed
-										? 'Posible engaño'
-										: completion.completed
-											? 'Completado'
-											: 'En progreso'}
-								</span>
+												? 'Completado'
+												: 'En progreso'}
+									</span>
+									<button
+										type="button"
+										class="flex items-center gap-1 text-sm text-slate-400 hover:text-slate-200 transition-colors"
+										onclick={() => toggleDayDetail(day.key)}
+									>
+										<span>{expandedDay === day.key ? 'Ocultar' : 'Ver detalle'}</span>
+										<svg class="w-4 h-4 transition-transform {expandedDay === day.key ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+										</svg>
+									</button>
+								</div>
+								{#if expandedDay === day.key}
+									{@const details = getExerciseDetails(day.key)}
+									<div class="border-t border-slate-800 bg-[#0d1019] px-4 py-3 space-y-2">
+										<p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Detalle</p>
+										<ul class="space-y-1.5">
+											{#each details.exercises as ex}
+												<li class="flex items-center justify-between text-sm">
+													<span class={ex.exists ? 'text-slate-300' : 'text-slate-500 italic'}>{ex.name}</span>
+													<span class={ex.complete ? 'text-emerald-400' : 'text-slate-400'}>
+														{ex.done}/{ex.target}
+														{#if ex.complete}
+															<svg class="inline w-3.5 h-3.5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+															</svg>
+														{/if}
+													</span>
+												</li>
+											{/each}
+										</ul>
+										<div class="flex items-center justify-between pt-2 border-t border-slate-800 text-sm font-medium">
+											<span class="text-slate-400">Total</span>
+											<span class="text-slate-200">{details.doneSeries}/{details.totalSeries} series</span>
+										</div>
+										{#if details.hasInconsistency}
+											<p class="text-xs text-amber-400/80 mt-2">
+												La rutina fue modificada después del progreso registrado.
+											</p>
+										{/if}
+									</div>
+								{/if}
 							</li>
 						{/if}
 					{/each}

@@ -597,40 +597,40 @@
 						{#if plan[day.key] && plan[day.key].exercises.length > 0}
 							{@const completion = dayCompletion(day.key)}
 							<li class="rounded-lg border border-slate-800 bg-[#111423] overflow-hidden">
-								<div class="flex items-center gap-4 justify-between px-4 py-3">
-									<div class="min-w-0 flex-1">
-										<p class="font-semibold">{day.label}</p>
-										<p class="text-sm text-slate-400">
-											{completion.done}/{completion.total} ejercicios completos
-										</p>
-									</div>
-									<div class="flex items-center gap-3 flex-shrink-0">
-										<span
-											class={`rounded-full px-3 py-1 text-sm font-semibold whitespace-nowrap ${
-												progress[day.key]?.suspicious && completion.completed
-													? 'bg-amber-900/50 text-amber-200'
+								<div class="px-4 py-3">
+									<div class="flex items-center gap-4 justify-between">
+										<p class="font-semibold text-slate-100">{day.label}</p>
+										<div class="flex items-center gap-3">
+											<span
+												class={`rounded-full px-3 py-1 text-sm font-semibold whitespace-nowrap ${
+													progress[day.key]?.suspicious && completion.completed
+														? 'bg-amber-900/50 text-amber-200'
+														: completion.completed
+															? 'bg-emerald-900/50 text-emerald-300'
+															: 'bg-slate-800 text-slate-300'
+												}`}
+											>
+												{progress[day.key]?.suspicious && completion.completed
+													? 'Posible engaño'
 													: completion.completed
-														? 'bg-emerald-900/50 text-emerald-300'
-														: 'bg-slate-800 text-slate-300'
-											}`}
-										>
-											{progress[day.key]?.suspicious && completion.completed
-												? 'Posible engaño'
-												: completion.completed
-													? 'Completado'
-													: 'En progreso'}
-										</span>
-										<button
-											type="button"
-											class="flex items-center gap-1 text-sm text-slate-400 hover:text-slate-200 transition-colors"
-											onclick={() => toggleDayDetail(day.key)}
-										>
-											<span class="hidden sm:inline">{expandedDay === day.key ? 'Ocultar' : 'Ver detalle'}</span>
-											<svg class="w-5 h-5 transition-transform {expandedDay === day.key ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-											</svg>
-										</button>
+														? 'Completado'
+														: 'En progreso'}
+											</span>
+											<button
+												type="button"
+												class="flex items-center gap-1 text-sm text-slate-400 hover:text-slate-200 transition-colors"
+												onclick={() => toggleDayDetail(day.key)}
+											>
+												<span class="hidden sm:inline">{expandedDay === day.key ? 'Ocultar' : 'Ver detalle'}</span>
+												<svg class="w-5 h-5 transition-transform {expandedDay === day.key ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+												</svg>
+											</button>
+										</div>
 									</div>
+									<p class="text-xs text-slate-500 mt-1">
+										{completion.done}/{completion.total} ejercicios completos
+									</p>
 								</div>
 								{#if expandedDay === day.key}
 									{@const details = getExerciseDetails(day.key)}

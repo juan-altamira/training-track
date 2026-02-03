@@ -350,7 +350,7 @@
 		>
 			<span class="btn-label flex items-center gap-2">
 				<span aria-hidden="true" class="text-lg leading-none">↩︎</span>
-				<span>{navigatingBack ? 'Cargando...' : 'Volver al panel'}</span>
+				<span>{navigatingBack ? 'Volviendo al panel...' : 'Volver al panel'}</span>
 			</span>
 		</button>
 	</div>

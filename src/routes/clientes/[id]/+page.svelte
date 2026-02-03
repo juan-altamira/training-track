@@ -224,9 +224,11 @@
 		const done = dayPlan.exercises.filter((ex) => {
 			const target = getTargetSets(ex);
 			const doneSets = state.exercises?.[ex.id] ?? 0;
-			return target === 0 ? false : doneSets >= target;
+			return target > 0 && doneSets >= target;
 		}).length;
-		return { total, done, completed: state.completed };
+		// Completado solo si hay ejercicios Y todos están completos
+		const isCompleted = total > 0 && done === total;
+		return { total, done, completed: isCompleted };
 	};
 
 	const getExerciseDetails = (dayKey: string) => {
@@ -626,26 +628,26 @@
 								</div>
 								{#if expandedDay === day.key}
 									{@const details = getExerciseDetails(day.key)}
-									<div class="border-t border-slate-800 bg-[#0d1019] px-4 py-3 space-y-2">
-										<p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Detalle</p>
-										<ul class="space-y-1.5">
+									<div class="border-t border-slate-800 bg-[#0d1019] px-4 py-3 space-y-1">
+										<p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Detalle</p>
+										<div class="divide-y divide-slate-800/60">
 											{#each details.exercises as ex}
-												<li class="flex items-center justify-between text-sm">
-													<span class={ex.exists ? 'text-slate-300' : 'text-slate-500 italic'}>{ex.name}</span>
-													<span class={ex.complete ? 'text-emerald-400' : 'text-slate-400'}>
+												<div class="grid grid-cols-[1fr_auto] gap-3 items-center py-2 hover:bg-slate-800/30 -mx-2 px-2 rounded transition-colors">
+													<span class="text-sm {ex.exists ? 'text-slate-200' : 'text-slate-500 italic'} line-clamp-2">{ex.name}</span>
+													<span class="inline-flex items-center gap-1 text-sm font-medium px-2 py-0.5 rounded {ex.complete ? 'bg-emerald-900/40 text-emerald-300' : 'bg-slate-800/60 text-slate-400'}">
 														{ex.done}/{ex.target}
 														{#if ex.complete}
-															<svg class="inline w-3.5 h-3.5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+															<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 																<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
 															</svg>
 														{/if}
 													</span>
-												</li>
+												</div>
 											{/each}
-										</ul>
-										<div class="flex items-center justify-between pt-2 border-t border-slate-800 text-sm font-medium">
-											<span class="text-slate-400">Total</span>
-											<span class="text-slate-200">{details.doneSeries}/{details.totalSeries} series</span>
+										</div>
+										<div class="grid grid-cols-[1fr_auto] gap-3 items-center pt-3 mt-2 border-t border-slate-700">
+											<span class="text-sm font-medium text-slate-400">Total</span>
+											<span class="text-sm font-semibold text-slate-200">{details.doneSeries}/{details.totalSeries} series</span>
 										</div>
 										{#if details.hasInconsistency}
 											<p class="text-xs text-amber-400/80 mt-2">

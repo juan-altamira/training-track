@@ -416,8 +416,12 @@
 										class="mt-1 w-full rounded-lg border {showValidationErrors && (!exercise.name || exercise.name.trim() === '') ? 'border-red-500' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
 										value={exercise.name}
 										placeholder="Nuevo ejercicio"
-										oninput={(e) =>
-											updateExercise(selectedDay, exercise.id, 'name', (e.target as HTMLInputElement).value)}
+										oninput={(e) => {
+											const input = e.target as HTMLInputElement;
+											const value = input.value;
+											const capitalized = value.charAt(0).toUpperCase() + value.slice(1);
+											updateExercise(selectedDay, exercise.id, 'name', capitalized);
+										}}
 									/>
 								</label>
 								

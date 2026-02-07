@@ -57,7 +57,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
 
 	const baseUrl = (publicEnv.PUBLIC_SITE_URL ?? `${url.protocol}//${url.host}`).replace(/\/?$/, '');
 	const { error: resetError } = await supabaseAdmin.auth.resetPasswordForEmail(email, {
-		redirectTo: `${baseUrl}/reset`
+		redirectTo: `${baseUrl}/reset?email=${encodeURIComponent(email)}`
 	});
 
 	if (resetError) {

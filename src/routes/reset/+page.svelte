@@ -22,7 +22,10 @@ const parseHashParams = (hash: string) => {
 	return {
 		access_token: params.get('access_token'),
 		refresh_token: params.get('refresh_token'),
-		type: params.get('type')
+		type: params.get('type'),
+		error: params.get('error'),
+		error_code: params.get('error_code'),
+		error_description: params.get('error_description')
 	};
 };
 
@@ -30,6 +33,47 @@ onMount(async () => {
 	const url = new URL(window.location.href);
 	const hashParams = parseHashParams(window.location.hash);
 	const code = url.searchParams.get('code');
+	const tokenHash = url.searchParams.get('token_hash');
+	const tokenType = url.searchParams.get('type');
+	const emailFromQuery = url.searchParams.get('email')?.trim().toLowerCase();
+	const errorCode = url.searchParams.get('error_code') ?? hashParams.error_code;
+	const errorDescription = url.searchParams.get('error_description') ?? hashParams.error_description;
+
+	if (emailFromQuery) {
+		email = emailFromQuery;
+	}
+
+	if (errorCode) {
+		mode = 'request';
+		if (errorCode === 'otp_expired') {
+			error = 'El enlace de recuperación venció o ya fue usado. Pedí uno nuevo para continuar.';
+		} else {
+			error = errorDescription
+				? `No pudimos validar el link: ${errorDescription}`
+				: 'No pudimos validar el link. Pedí uno nuevo.';
+		}
+		return;
+	}
+
+	// Support token_hash-based recovery links
+	if (tokenHash && tokenType === 'recovery') {
+		loading = true;
+		const { error: verifyError } = await supabaseClient.auth.verifyOtp({
+			type: 'recovery',
+			token_hash: tokenHash
+		});
+		if (verifyError) {
+			console.error(verifyError);
+			error = 'El enlace de recuperación venció o ya fue usado. Pedí uno nuevo para continuar.';
+			mode = 'request';
+		} else {
+			mode = 'update';
+			message = 'Link verificado. Ingresá tu nueva contraseña.';
+			error = '';
+		}
+		loading = false;
+		return;
+	}
 
 	// Prefer hash tokens (Supabase recovery flow sends them)
 	if (hashParams.access_token && hashParams.refresh_token) {

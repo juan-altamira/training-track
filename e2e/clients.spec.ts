@@ -9,12 +9,12 @@ test.describe('Gestión de Clientes', () => {
 
 	test.describe('Panel de clientes', () => {
 		test('muestra lista de clientes', async ({ page }) => {
-			await expect(page.locator('text=Crear cliente')).toBeVisible();
+			await expect(page.locator('text=Crear alumno')).toBeVisible();
 			await expect(page.locator('input[placeholder="Ej: Ana Pérez"]')).toBeVisible();
 		});
 
 		test('buscador de clientes funciona', async ({ page }) => {
-			const searchInput = page.locator('input[placeholder="Buscar cliente"]');
+			const searchInput = page.locator('input[placeholder="Buscar alumno"]');
 			await expect(searchInput).toBeVisible();
 			await searchInput.fill('NonExistentClient123');
 			await page.waitForTimeout(500);
@@ -53,12 +53,12 @@ test.describe('Gestión de Clientes', () => {
 			// Volver y crear otro con el mismo nombre
 			await page.goto('/clientes');
 			await page.fill('input[placeholder="Ej: Ana Pérez"]', clientName);
-			await page.click('button:has-text("Crear y generar link")');
-			
-			// Debe mostrar error de nombre duplicado
-			await expect(page.locator('text=Ya existe un cliente')).toBeVisible({ timeout: 5000 });
+				await page.click('button:has-text("Crear y generar link")');
+				
+				// Debe mostrar error de nombre duplicado
+				await expect(page.locator('text=Ya existe un alumno')).toBeVisible({ timeout: 5000 });
+			});
 		});
-	});
 
 	test.describe('Eliminar cliente', () => {
 		test('eliminar cliente exitosamente', async ({ page }) => {
@@ -73,7 +73,7 @@ test.describe('Gestión de Clientes', () => {
 			
 			// Encontrar y eliminar el cliente
 			const clientCard = page.locator(`article:has-text("${clientName}")`);
-			await clientCard.locator('button:has-text("Eliminar cliente")').click();
+				await clientCard.locator('button:has-text("Eliminar alumno")').click();
 			
 			// Confirmar eliminación
 			await page.fill('input[placeholder="eliminar"]', 'eliminar');
@@ -94,7 +94,7 @@ test.describe('Gestión de Clientes', () => {
 			await page.goto('/clientes');
 			
 			const clientCard = page.locator(`article:has-text("${clientName}")`);
-			await clientCard.locator('button:has-text("Eliminar cliente")').click();
+				await clientCard.locator('button:has-text("Eliminar alumno")').click();
 			
 			// Cancelar
 			await page.click('button:has-text("Cancelar")');
@@ -105,7 +105,7 @@ test.describe('Gestión de Clientes', () => {
 
 		test('botón eliminar existe en cada card', async ({ page }) => {
 			const clientCard = page.locator('article').first();
-			await expect(clientCard.locator('button:has-text("Eliminar cliente")')).toBeVisible();
+			await expect(clientCard.locator('button:has-text("Eliminar alumno")')).toBeVisible();
 		});
 	});
 
@@ -118,19 +118,19 @@ test.describe('Gestión de Clientes', () => {
 			await expect(page).toHaveURL(/\/clientes\/[a-f0-9-]+/, { timeout: 10000 });
 			
 			// Desactivar desde la página del cliente
-			await page.click('button:has-text("Desactivar cliente")');
-			await page.click('button:has-text("Confirmar")');
-			
-			// Esperar que se procese y verificar que el botón cambió a "Activar"
-			await expect(page.locator('button:has-text("Activar cliente")')).toBeVisible({ timeout: 10000 });
+				await page.click('button:has-text("Desactivar alumno")');
+				await page.click('button:has-text("Confirmar")');
+				
+				// Esperar que se procese y verificar que el botón cambió a "Activar"
+				await expect(page.locator('button:has-text("Reactivar alumno")')).toBeVisible({ timeout: 10000 });
+			});
 		});
-	});
 
 	test.describe('Copiar link público', () => {
 		test('botón copiar link existe', async ({ page }) => {
 			const clientCard = page.locator('article').first();
 			if (await clientCard.isVisible()) {
-				await expect(clientCard.locator('button:has-text("Copiar link")')).toBeVisible();
+				await expect(clientCard.locator('button:has-text("Copiar link público")')).toBeVisible();
 			}
 		});
 	});

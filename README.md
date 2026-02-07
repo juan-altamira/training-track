@@ -23,6 +23,8 @@ npm install
 PUBLIC_SUPABASE_URL=TU_URL
 PUBLIC_SUPABASE_ANON_KEY=TU_ANON_KEY
 SUPABASE_SERVICE_ROLE=TU_SERVICE_ROLE  # solo para endpoints de servidor
+CRON_SECRET=un_secret_largo_y_privado
+FAST_PANEL_LOADS=0                     # 1 para habilitar el load optimizado
 PUBLIC_SITE_URL=http://localhost:5173   # o tu dominio en Netlify
 ```
 
@@ -36,6 +38,7 @@ Abrí http://localhost:5173.
 
 - `npm run check` – tipado y chequeos de Svelte.
 - `npm run build` – compila para producción.
+- `npm run bench:panel` – benchmark no destructivo de navegación `/clientes` ↔ `/clientes/[id]`.
 
 ## Despliegue
 
@@ -47,6 +50,7 @@ Abrí http://localhost:5173.
    - Site URL: tu dominio (ej. `https://training-track.netlify.app`).
    - Redirect URLs: producción + `http://localhost:5173` para pruebas.
 3) Copiá tus claves al entorno de Netlify (`PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_ANON_KEY`) y al entorno privado (`SUPABASE_SERVICE_ROLE_KEY` o `SUPABASE_SERVICE_ROLE` si usas endpoints server-side).
+4) Si desplegás en Vercel con cron de mantenimiento, configurá también `CRON_SECRET`.
 
 ## Notas funcionales
 

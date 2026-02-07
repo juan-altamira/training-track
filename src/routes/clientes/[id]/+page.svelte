@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { goto, preloadData } from '$app/navigation';
 	import { WEEK_DAYS, getTargetSets } from '$lib/routines';
-	import type { ProgressState, RoutineExercise, RoutinePlan } from '$lib/types';
+	import type { OtherClientRow, ProgressState, RoutineExercise, RoutinePlan } from '$lib/types';
 
 	let { data } = $props();
 
@@ -24,7 +24,10 @@
 	let expandedDay = $state<string | null>(null);
 	let navigatingBack = $state(false);
 	const MAX_EXERCISES_PER_DAY = 50;
-	const otherClients = data.otherClients ?? [];
+	let otherClients = $state((data.otherClients ?? []) as OtherClientRow[]);
+	let lazyOtherClients = $state(data.lazyOtherClients === true);
+	let loadingOtherClients = $state(false);
+	let otherClientsError = $state<string | null>(null);
 	const hasSuspicious = WEEK_DAYS.some((d) => progress[d.key]?.suspicious && progress[d.key]?.completed);
 
 	const SITE_URL = (data.siteUrl ?? '').replace(/\/?$/, '');
@@ -133,6 +136,39 @@
 			const msg = await res.text();
 			statusMessage = msg || 'No pudimos copiar la rutina';
 		}
+	};
+
+	const loadOtherClients = async () => {
+		if (!lazyOtherClients || loadingOtherClients) return;
+
+		loadingOtherClients = true;
+		otherClientsError = null;
+		try {
+			const response = await fetch(`/clientes/${data.client.id}/other-clients`);
+			if (!response.ok) {
+				throw new Error('No se pudo cargar la lista de alumnos');
+			}
+			const payload = (await response.json()) as { otherClients?: OtherClientRow[] };
+			otherClients = payload.otherClients ?? [];
+			lazyOtherClients = false;
+		} catch (e) {
+			console.error(e);
+			otherClientsError = 'No pudimos cargar la lista de alumnos. Intentá nuevamente.';
+		} finally {
+			loadingOtherClients = false;
+		}
+	};
+
+	const openCopyModal = async () => {
+		selectedSource = '';
+		showCopyModal = true;
+		if (lazyOtherClients) {
+			await loadOtherClients();
+		}
+	};
+
+	const warmClientsRoute = () => {
+		void preloadData('/clientes');
 	};
 
 	const saveRoutine = async () => {
@@ -295,16 +331,13 @@
 				>
 					{copiedLink ? '✓ Copiado' : 'Copiar link de la rutina'}
 				</button>
-				<button
-					class="w-full md:w-1/2 rounded-2xl border border-cyan-700/40 bg-gradient-to-r from-cyan-700 to-sky-600 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-cyan-900/30 transition hover:-translate-y-0.5 hover:shadow-cyan-900/50 hover:brightness-110"
-					type="button"
-					onclick={() => {
-						selectedSource = '';
-						showCopyModal = true;
-					}}
-				>
-					Copiar rutina de otro alumno
-				</button>
+					<button
+						class="w-full md:w-1/2 rounded-2xl border border-cyan-700/40 bg-gradient-to-r from-cyan-700 to-sky-600 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-cyan-900/30 transition hover:-translate-y-0.5 hover:shadow-cyan-900/50 hover:brightness-110"
+						type="button"
+						onclick={openCopyModal}
+					>
+						Copiar rutina de otro alumno
+					</button>
 			</div>
 			<div class="flex flex-col md:flex-row items-stretch md:items-center gap-3 justify-between">
 				{#if clientStatus === 'active'}
@@ -339,11 +372,14 @@
 	</div>
 
 		<div class="flex items-center gap-3">
-		<button
-			type="button"
-			onclick={async () => { navigatingBack = true; await goto('/clientes'); }}
-			disabled={navigatingBack}
-			aria-busy={navigatingBack}
+			<button
+				type="button"
+				onpointerenter={warmClientsRoute}
+				onfocus={warmClientsRoute}
+				onpointerdown={warmClientsRoute}
+				onclick={async () => { navigatingBack = true; await goto('/clientes'); }}
+				disabled={navigatingBack}
+				aria-busy={navigatingBack}
 			class={`back-btn relative inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-gradient-to-r from-[#151827] to-[#0f162b] px-4 py-2.5 text-base text-slate-100 shadow-md shadow-black/30 transition hover:-translate-y-0.5 hover:border-emerald-600 hover:shadow-emerald-900/30 overflow-hidden disabled:cursor-wait ${
 				navigatingBack ? 'loading' : ''
 			}`}
@@ -811,10 +847,23 @@
 						⚠️ Esto reemplaza la rutina actual. El progreso se reiniciará para este alumno. ⚠️
 					</p>
 				</div>
-				{#if otherClients.length > 0}
-					<label class="block text-sm font-medium text-slate-200 mt-6">
-						Seleccioná desde qué alumno querés copiar
-						<select
+					{#if loadingOtherClients}
+						<p class="text-sm text-slate-300">Cargando alumnos...</p>
+					{:else if otherClientsError}
+						<div class="space-y-3">
+							<p class="text-sm text-red-200">{otherClientsError}</p>
+							<button
+								type="button"
+								class="rounded-lg border border-red-600 px-3 py-2 text-xs font-semibold text-red-200 hover:bg-red-900/40"
+								onclick={loadOtherClients}
+							>
+								Reintentar
+							</button>
+						</div>
+					{:else if otherClients.length > 0}
+						<label class="block text-sm font-medium text-slate-200 mt-6">
+							Seleccioná desde qué alumno querés copiar
+							<select
 							class="mt-3 w-full rounded-xl border border-slate-600 bg-[#0f1322] px-4 py-3 pr-12 text-base text-slate-100 shadow-inner focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-600 appearance-none"
 							bind:value={selectedSource}
 							style="background-image: linear-gradient(45deg, transparent 50%, #94a3b8 50%), linear-gradient(135deg, #94a3b8 50%, transparent 50%); background-position: calc(100% - 18px) 50%, calc(100% - 12px) 50%; background-size: 6px 6px, 6px 6px; background-repeat: no-repeat;"
@@ -825,9 +874,9 @@
 							{/each}
 						</select>
 					</label>
-				{:else}
-					<p class="text-sm text-slate-400">No tenés otros alumnos para copiar.</p>
-				{/if}
+					{:else}
+						<p class="text-sm text-slate-400">No tenés otros alumnos para copiar.</p>
+					{/if}
 				<div class="flex justify-end gap-3">
 					<button
 						type="button"
@@ -835,16 +884,17 @@
 						onclick={() => {
 							showCopyModal = false;
 							selectedSource = '';
+							otherClientsError = null;
 						}}
 					>
 						Cancelar
 					</button>
-					<button
-						type="button"
-						class="rounded-lg bg-emerald-600 px-4 py-2 text-white shadow-md shadow-emerald-900/40 transition hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
-						disabled={!selectedSource}
-						onclick={copyRoutine}
-					>
+						<button
+							type="button"
+							class="rounded-lg bg-emerald-600 px-4 py-2 text-white shadow-md shadow-emerald-900/40 transition hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
+							disabled={!selectedSource || loadingOtherClients || !!otherClientsError}
+							onclick={copyRoutine}
+						>
 						Confirmar
 					</button>
 				</div>

@@ -3,99 +3,138 @@ import type { RoutinePlan } from '$lib/types';
 import { error, fail, redirect } from '@sveltejs/kit';
 import { nowIsoUtc } from '$lib/time';
 import type { Actions, PageServerLoad } from './$types';
-import { env } from '$env/dynamic/public';
+import { env as publicEnv } from '$env/dynamic/public';
+import { env as privateEnv } from '$env/dynamic/private';
 import { supabaseAdmin } from '$lib/server/supabaseAdmin';
+import { ensureTrainerAccess } from '$lib/server/trainerAccess';
+import { logLoadDuration } from '$lib/server/loadPerf';
 
-const OWNER_EMAIL = 'juanpabloaltamira@protonmail.com';
 const MAX_EXERCISES_PER_DAY = 50;
 
-const ensureTrainerAccess = async (rawEmail: string | null | undefined) => {
-	const email = rawEmail?.toLowerCase();
-	if (!email) return false;
-	if (email === OWNER_EMAIL) return true;
-	const { data } = await supabaseAdmin
-		.from('trainer_access')
-		.select('active')
-		.eq('email', email)
-		.maybeSingle();
-	return data?.active === true;
+type RoutineRelation = {
+	plan: RoutinePlan | null;
+	reset_progress_on_change?: boolean | null;
+};
+
+type ProgressRelation = {
+	progress: unknown;
+	last_completed_at: string | null;
+};
+
+const firstRelation = <T>(relation: T | T[] | null | undefined): T | null => {
+	if (!relation) return null;
+	return Array.isArray(relation) ? (relation[0] ?? null) : relation;
 };
 
 export const load: PageServerLoad = async ({ params, locals, url }) => {
-	if (!locals.session) {
-		throw redirect(303, '/login');
+	const startedAt = Date.now();
+	const fastPanelLoads = privateEnv.FAST_PANEL_LOADS === '1';
+
+	try {
+		if (!locals.session) {
+			throw redirect(303, '/login');
+		}
+
+		const allowed = await ensureTrainerAccess(locals.session.user.email);
+		if (!allowed) {
+			await locals.supabase?.auth.signOut();
+			throw redirect(303, '/login');
+		}
+
+		const supabase = locals.supabase;
+		const clientId = params.id;
+		const trainerId = locals.session.user.id;
+		const envSite = publicEnv.PUBLIC_SITE_URL?.replace(/\/?$/, '') || '';
+		const origin = url.origin?.replace(/\/?$/, '') || '';
+		const siteUrl = envSite && !envSite.includes('localhost') ? envSite : origin;
+
+		if (fastPanelLoads) {
+			const { data: clientRow, error: clientError } = await supabase
+				.from('clients')
+				.select(
+					'id,name,objective,status,client_code,created_at,routines(plan,reset_progress_on_change),progress(progress,last_completed_at)'
+				)
+				.eq('id', clientId)
+				.eq('trainer_id', trainerId)
+				.single();
+
+			if (clientError || !clientRow) {
+				throw error(404, { message: 'Alumno no encontrado' });
+			}
+
+			const routineRow = firstRelation<RoutineRelation>(clientRow.routines as any);
+			const progressRow = firstRelation<ProgressRelation>(clientRow.progress as any);
+
+			return {
+				client: {
+					id: clientRow.id,
+					name: clientRow.name,
+					objective: clientRow.objective,
+					status: clientRow.status,
+					client_code: clientRow.client_code,
+					created_at: clientRow.created_at
+				},
+				plan: normalizePlan(routineRow?.plan as RoutinePlan | null),
+				progress: normalizeProgress(progressRow?.progress as any),
+				last_completed_at: progressRow?.last_completed_at ?? null,
+				siteUrl,
+				otherClients: [],
+				lazyOtherClients: true
+			};
+		}
+
+		const { data: client, error: clientError } = await supabase
+			.from('clients')
+			.select('id,name,objective,status,client_code,created_at')
+			.eq('id', clientId)
+			.eq('trainer_id', trainerId)
+			.single();
+
+		if (clientError || !client) {
+			throw error(404, { message: 'Alumno no encontrado' });
+		}
+
+		const { data: routineRow, error: routineError } = await supabase
+			.from('routines')
+			.select('plan,reset_progress_on_change')
+			.eq('client_id', clientId)
+			.maybeSingle();
+		if (routineError) {
+			console.error(routineError);
+		}
+
+		const { data: progressRow, error: progressError } = await supabase
+			.from('progress')
+			.select('progress,last_completed_at')
+			.eq('client_id', clientId)
+			.maybeSingle();
+		if (progressError) {
+			console.error(progressError);
+		}
+
+		const { data: otherClients } = await supabase
+			.from('clients')
+			.select('id,name')
+			.eq('trainer_id', trainerId)
+			.neq('id', clientId)
+			.order('name', { ascending: true });
+
+		return {
+			client,
+			plan: normalizePlan(routineRow?.plan as RoutinePlan | null),
+			progress: normalizeProgress(progressRow?.progress as any),
+			last_completed_at: progressRow?.last_completed_at ?? null,
+			siteUrl,
+			otherClients: otherClients ?? [],
+			lazyOtherClients: false
+		};
+	} finally {
+		logLoadDuration('/clientes/[id]', startedAt, {
+			fast: fastPanelLoads,
+			user_id: locals.session?.user.id ?? null,
+			client_id: params.id
+		});
 	}
-
-	const allowed = await ensureTrainerAccess(locals.session.user.email);
-	if (!allowed) {
-		await locals.supabase?.auth.signOut();
-		throw redirect(303, '/login');
-	}
-
-	const supabase = locals.supabase;
-	const clientId = params.id;
-
-	const { data: client, error: clientError } = await supabase
-		.from('clients')
-		.select('id,name,objective,status,client_code,created_at')
-		.eq('id', clientId)
-		.eq('trainer_id', locals.session.user.id)
-		.single();
-
-	if (clientError || !client) {
-		throw error(404, { message: 'Alumno no encontrado' });
-	}
-
-	const { data: routineRow, error: routineError } = await supabase
-		.from('routines')
-		.select('plan,reset_progress_on_change')
-		.eq('client_id', clientId)
-		.maybeSingle();
-
-	if (routineError) {
-		console.error(routineError);
-	}
-
-	let plan = normalizePlan(routineRow?.plan as RoutinePlan | null);
-	if (!routineRow) {
-		await supabase.from('routines').insert({ client_id: clientId, plan, last_saved_at: nowIsoUtc() });
-	}
-
-	const { data: progressRow, error: progressError } = await supabase
-		.from('progress')
-		.select('progress,last_completed_at')
-		.eq('client_id', clientId)
-		.maybeSingle();
-
-	if (progressError) {
-		console.error(progressError);
-	}
-
-	const progress = normalizeProgress(progressRow?.progress as any);
-
-	if (!progressRow) {
-		await supabase.from('progress').insert({ client_id: clientId, progress });
-	}
-
-	const envSite = env.PUBLIC_SITE_URL?.replace(/\/?$/, '') || '';
-	const origin = url.origin?.replace(/\/?$/, '') || '';
-	const siteUrl = envSite && !envSite.includes('localhost') ? envSite : origin;
-
-	const { data: otherClients } = await supabase
-		.from('clients')
-		.select('id,name')
-		.eq('trainer_id', locals.session.user.id)
-		.neq('id', clientId)
-		.order('name', { ascending: true });
-
-	return {
-		client,
-		plan,
-		progress,
-		last_completed_at: progressRow?.last_completed_at ?? null,
-		siteUrl,
-		otherClients: otherClients ?? []
-	};
 };
 
 export const actions: Actions = {
@@ -145,15 +184,14 @@ export const actions: Actions = {
 		}
 
 		const nowUtc = nowIsoUtc();
-
-		const { error: updateError } = await supabase
-			.from('routines')
-			.upsert({
+		const { error: updateError } = await supabase.from('routines').upsert(
+			{
 				client_id: params.id,
 				plan,
 				last_saved_at: nowUtc
-			})
-			.eq('client_id', params.id);
+			},
+			{ onConflict: 'client_id' }
+		);
 
 		if (updateError) {
 			console.error(updateError);
@@ -193,8 +231,14 @@ export const actions: Actions = {
 
 		const { error: updateError } = await supabaseAdmin
 			.from('progress')
-			.update({ progress: cleared, last_completed_at: null })
-			.eq('client_id', params.id);
+			.upsert(
+				{
+					client_id: params.id,
+					progress: cleared,
+					last_completed_at: null
+				},
+				{ onConflict: 'client_id' }
+			);
 
 		if (updateError) {
 			console.error(updateError);
@@ -311,23 +355,24 @@ export const actions: Actions = {
 		const plan = normalizePlan(sourceRoutine.plan as RoutinePlan | null, true);
 		const nowUtc = nowIsoUtc();
 
-		const { error: updateError } = await supabase
-			.from('routines')
-			.upsert({ client_id: targetClientId, plan, reset_progress_on_change: true })
-			.eq('client_id', targetClientId);
+		const { error: updateError } = await supabase.from('routines').upsert(
+			{ client_id: targetClientId, plan, reset_progress_on_change: true },
+			{ onConflict: 'client_id' }
+		);
 
 		if (updateError) {
 			console.error(updateError);
 			return fail(500, { message: 'No pudimos copiar la rutina' });
 		}
 
-		await supabase
-			.from('progress')
-			.update({
+		await supabase.from('progress').upsert(
+			{
+				client_id: targetClientId,
 				progress: normalizeProgress(null, { last_reset_utc: nowUtc, last_activity_utc: nowUtc }),
 				last_completed_at: null
-			})
-			.eq('client_id', targetClientId);
+			},
+			{ onConflict: 'client_id' }
+		);
 
 		return { success: true };
 	}

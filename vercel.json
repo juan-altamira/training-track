@@ -1,0 +1,8 @@
+{
+	"crons": [
+		{
+			"path": "/api/maintenance/archive-inactive",
+			"schedule": "0 4 * * *"
+		}
+	]
+}

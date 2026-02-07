@@ -15,7 +15,7 @@ test.describe('Rutinas - Crear y ver', () => {
 		await expect(page.locator('h1')).toBeVisible();
 		await expect(page.locator('h2:has-text("Rutina")')).toBeVisible();
 		await expect(page.locator('button:has-text("+ Agregar ejercicio")')).toBeVisible();
-		await expect(page.locator('button:has-text("Guardar cambios")')).toBeVisible();
+		await expect(page.locator('button:has-text("Guardar cambios")').first()).toBeVisible();
 		await expect(page.locator('button:has-text("Lunes")')).toBeVisible();
 	});
 

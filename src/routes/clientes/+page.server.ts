@@ -1,223 +1,161 @@
 import { createEmptyPlan, normalizeProgress, WEEK_DAYS } from '$lib/routines';
 import type { ClientSummary } from '$lib/types';
-import { daysBetweenUtc, getCurrentWeekStartUtc, monthsBetweenUtc, nowIsoUtc } from '$lib/time';
+import { daysBetweenUtc, getCurrentWeekStartUtc, nowIsoUtc } from '$lib/time';
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { env } from '$env/dynamic/public';
+import { env as publicEnv } from '$env/dynamic/public';
+import { env as privateEnv } from '$env/dynamic/private';
 import { supabaseAdmin } from '$lib/server/supabaseAdmin';
+import {
+	OWNER_EMAIL,
+	ensureTrainerAccess,
+	ensureTrainerExists,
+	fetchTrainerAdminData,
+	isOwnerEmail
+} from '$lib/server/trainerAccess';
+import { logLoadDuration } from '$lib/server/loadPerf';
 
-const OWNER_EMAIL = 'juanpabloaltamira@protonmail.com';
 const MAX_CLIENTS_PER_TRAINER = 100;
-const INACTIVITY_MONTHS = 6;
 
-const ensureTrainerAccess = async (rawEmail: string | null | undefined) => {
-	const email = rawEmail?.toLowerCase();
-	if (!email) return false;
-	if (email === OWNER_EMAIL) return true;
-	const { data } = await supabaseAdmin
-		.from('trainer_access')
-		.select('active')
-		.eq('email', email)
-		.maybeSingle();
-	return data?.active === true;
+type ProgressRelation = {
+	last_completed_at: string | null;
+	progress: unknown;
 };
 
-const ensureTrainerExists = async (supabase: App.Locals['supabase'], userId: string, email: string) => {
-	const { data, error } = await supabase.from('trainers').select('id').eq('id', userId).maybeSingle();
-	if (error) {
-		console.error('trainer lookup error', error);
-		return;
-	}
-	if (!data) {
-		const { error: insertError } = await supabase
-			.from('trainers')
-			.insert({ id: userId, email, status: 'active' });
-		if (insertError) {
-			console.error('trainer insert error', insertError);
-		}
-	}
+type ClientWithProgress = {
+	id: string;
+	name: string;
+	client_code: string;
+	status: string;
+	objective: string | null;
+	progress?: ProgressRelation | ProgressRelation[] | null;
 };
 
-const fetchTrainerAdminData = async () => {
-	const { data: accessRows } = await supabaseAdmin
-		.from('trainer_access')
-		.select('email,active,created_at,updated_at')
-		.order('created_at', { ascending: true });
+const toProgressRow = (value: ClientWithProgress['progress']): ProgressRelation | null => {
+	if (!value) return null;
+	return Array.isArray(value) ? (value[0] ?? null) : value;
+};
 
-	const { data: trainerRows } = await supabaseAdmin
-		.from('trainers')
-		.select('id,email,status,created_at')
-		.order('created_at', { ascending: true });
+const toClientSummaries = (clients: ClientWithProgress[]) => {
+	const nowUtc = nowIsoUtc();
+	const weekStart = getCurrentWeekStartUtc();
 
-	const byEmail = new Map<
-		string,
-		{
-			email: string;
-			active: boolean;
-			trainer_id?: string;
-			status?: string | null;
-			created_at?: string | null;
-		}
-	>();
+	return clients.map((client) => {
+		const progressRow = toProgressRow(client.progress);
+		const progressState = normalizeProgress(progressRow?.progress as any);
+		const lastCompleted = WEEK_DAYS.filter((day) => progressState[day.key]?.completed).at(-1)?.label ?? null;
+		const lastReset = progressState._meta?.last_reset_utc ?? null;
+		const lastActivity = progressState._meta?.last_activity_utc ?? progressRow?.last_completed_at ?? null;
 
-	accessRows?.forEach((row) => {
-		if (!row.email || row.email.toLowerCase() === OWNER_EMAIL) return;
-		byEmail.set(row.email.toLowerCase(), {
-			email: row.email,
-			active: row.active === true,
-			created_at: row.created_at
-		});
+		return {
+			id: client.id,
+			name: client.name,
+			client_code: client.client_code,
+			status: client.status as ClientSummary['status'],
+			objective: client.objective,
+			last_completed_at: progressRow?.last_completed_at ?? null,
+			last_day_completed: lastCompleted,
+			last_activity_utc: lastActivity,
+			last_reset_utc: lastReset,
+			week_started: lastReset ? lastReset >= weekStart : false,
+			days_since_activity: daysBetweenUtc(lastActivity, nowUtc)
+		} satisfies ClientSummary;
 	});
-
-	trainerRows?.forEach((row) => {
-		if (!row.email || row.email.toLowerCase() === OWNER_EMAIL) return;
-		const key = row.email.toLowerCase();
-		const current = byEmail.get(key) ?? { email: row.email, active: false, created_at: row.created_at ?? null };
-		byEmail.set(key, {
-			...current,
-			trainer_id: row.id,
-			status: row.status,
-			created_at: current.created_at ?? row.created_at
-		});
-	});
-
-	return Array.from(byEmail.values());
 };
 
 export const load: PageServerLoad = async ({ locals, url }) => {
-	if (!locals.session) {
-		throw redirect(303, '/login');
-	}
+	const startedAt = Date.now();
+	const fastPanelLoads = privateEnv.FAST_PANEL_LOADS === '1';
 
-	const allowed = await ensureTrainerAccess(locals.session.user.email);
-	if (!allowed) {
-		await locals.supabase?.auth.signOut();
-		throw redirect(303, '/login');
-	}
-
-	await ensureTrainerExists(locals.supabase, locals.session.user.id, locals.session.user.email ?? '');
-
-	const supabase = locals.supabase;
-	const { data: clients, error } = await supabase
-		.from('clients')
-		.select('id,name,client_code,status,objective')
-		.eq('trainer_id', locals.session.user.id)
-		.order('created_at', { ascending: true });
-
-	if (error) {
-		console.error(error);
-		throw fail(500, { message: 'No pudimos cargar los alumnos' });
-	}
-
-	const clientIds = clients?.map((c) => c.id) ?? [];
-	const progressMap = new Map<
-		string,
-		{ last_completed_at: string | null; progress: any }
-	>();
-	const routineMap = new Map<string, { last_saved_at: string | null }>();
-
-	if (clientIds.length > 0) {
-		const { data: progressRows, error: progressError } = await supabase
-			.from('progress')
-			.select('client_id,last_completed_at,progress')
-			.in('client_id', clientIds);
-
-		if (progressError) {
-			console.error(progressError);
-			throw fail(500, { message: 'No pudimos cargar el progreso' });
+	try {
+		if (!locals.session) {
+			throw redirect(303, '/login');
 		}
 
-		progressRows?.forEach((row) => {
-			progressMap.set(row.client_id, {
-				last_completed_at: row.last_completed_at,
-				progress: row.progress
-			});
-		});
-
-		// Obtener last_saved_at de las rutinas para verificar inactividad
-		const { data: routineRows } = await supabase
-			.from('routines')
-			.select('client_id,last_saved_at')
-			.in('client_id', clientIds);
-
-		routineRows?.forEach((row) => {
-			routineMap.set(row.client_id, { last_saved_at: row.last_saved_at });
-		});
-
-		// Verificar inactividad y archivar clientes que no han tenido guardado en 6+ meses
-		const nowUtc = nowIsoUtc();
-		const clientsToArchive: string[] = [];
-
-		for (const client of clients ?? []) {
-			if (client.status !== 'active') continue;
-			
-			const routineInfo = routineMap.get(client.id);
-			const lastSaved = routineInfo?.last_saved_at;
-			
-			// Si no tiene last_saved_at, no lo archivamos (es un cliente nuevo o anterior a esta feature)
-			if (!lastSaved) continue;
-			
-			const monthsInactive = monthsBetweenUtc(lastSaved, nowUtc);
-			if (monthsInactive !== null && monthsInactive >= INACTIVITY_MONTHS) {
-				clientsToArchive.push(client.id);
-			}
+		const allowed = await ensureTrainerAccess(locals.session.user.email);
+		if (!allowed) {
+			await locals.supabase?.auth.signOut();
+			throw redirect(303, '/login');
 		}
 
-		// Archivar clientes inactivos (si hay alguno)
-		if (clientsToArchive.length > 0) {
-			await supabase
+		const supabase = locals.supabase;
+		const trainerId = locals.session.user.id;
+		const isOwner = isOwnerEmail(locals.session.user.email);
+		let clients: ClientWithProgress[] = [];
+
+		if (fastPanelLoads) {
+			const { data, error } = await supabase
 				.from('clients')
-				.update({ status: 'archived' })
-				.in('id', clientsToArchive);
-			
-			// Actualizar el estado local para reflejarlo inmediatamente
-			clients?.forEach((c) => {
-				if (clientsToArchive.includes(c.id)) {
-					c.status = 'archived';
+				.select('id,name,client_code,status,objective,progress(last_completed_at,progress)')
+				.eq('trainer_id', trainerId)
+				.order('created_at', { ascending: true });
+
+			if (error) {
+				console.error(error);
+				throw fail(500, { message: 'No pudimos cargar los alumnos' });
+			}
+
+			clients = (data ?? []) as unknown as ClientWithProgress[];
+		} else {
+			const { data: baseClients, error } = await supabase
+				.from('clients')
+				.select('id,name,client_code,status,objective')
+				.eq('trainer_id', trainerId)
+				.order('created_at', { ascending: true });
+
+			if (error) {
+				console.error(error);
+				throw fail(500, { message: 'No pudimos cargar los alumnos' });
+			}
+
+			const clientIds = baseClients?.map((client) => client.id) ?? [];
+			const progressMap = new Map<string, ProgressRelation>();
+
+			if (clientIds.length > 0) {
+				const { data: progressRows, error: progressError } = await supabase
+					.from('progress')
+					.select('client_id,last_completed_at,progress')
+					.in('client_id', clientIds);
+
+				if (progressError) {
+					console.error(progressError);
+					throw fail(500, { message: 'No pudimos cargar el progreso' });
 				}
-			});
+
+				progressRows?.forEach((row) => {
+					progressMap.set(row.client_id, {
+						last_completed_at: row.last_completed_at,
+						progress: row.progress
+					});
+				});
+			}
+
+			clients =
+				baseClients?.map((client) => ({
+					...client,
+					progress: progressMap.get(client.id) ?? null
+				})) ?? [];
 		}
+
+		const envSite = publicEnv.PUBLIC_SITE_URL?.replace(/\/?$/, '') || '';
+		const origin = url.origin?.replace(/\/?$/, '') || '';
+		const siteUrl = envSite && !envSite.includes('localhost') ? envSite : origin;
+		const shouldLazyAdmin = fastPanelLoads && isOwner;
+		const trainerAdmin = isOwner && !shouldLazyAdmin ? await fetchTrainerAdminData() : null;
+
+		return {
+			clients: toClientSummaries(clients),
+			siteUrl,
+			trainerAdmin,
+			isOwner,
+			lazyAdmin: shouldLazyAdmin
+		};
+	} finally {
+		logLoadDuration('/clientes', startedAt, {
+			fast: fastPanelLoads,
+			user_id: locals.session?.user.id ?? null
+		});
 	}
-
-	const list: ClientSummary[] =
-		clients?.map((client) => {
-			const info = progressMap.get(client.id);
-			const progressState = normalizeProgress(info?.progress as any);
-			const lastCompleted =
-				WEEK_DAYS.filter((day) => progressState[day.key]?.completed).at(-1)?.label ?? null;
-			const nowUtc = nowIsoUtc();
-			const weekStart = getCurrentWeekStartUtc();
-			const lastReset = progressState._meta?.last_reset_utc ?? null;
-			const lastActivity = progressState._meta?.last_activity_utc ?? info?.last_completed_at ?? null;
-
-			return {
-				id: client.id,
-				name: client.name,
-				client_code: client.client_code,
-				status: client.status as ClientSummary['status'],
-				objective: client.objective,
-				last_completed_at: info?.last_completed_at ?? null,
-				last_day_completed: lastCompleted,
-				last_activity_utc: lastActivity,
-				last_reset_utc: lastReset,
-				week_started: lastReset ? lastReset >= weekStart : false,
-				days_since_activity: daysBetweenUtc(lastActivity, nowUtc)
-			};
-		}) ?? [];
-
-	const envSite = env.PUBLIC_SITE_URL?.replace(/\/?$/, '') || '';
-	const origin = url.origin?.replace(/\/?$/, '') || '';
-	const siteUrl = envSite && !envSite.includes('localhost') ? envSite : origin;
-
-	const isOwner = locals.session.user.email?.toLowerCase() === OWNER_EMAIL;
-	const trainerAdmin = isOwner ? await fetchTrainerAdminData() : null;
-
-	return {
-		clients: list,
-		siteUrl,
-		trainerAdmin,
-		isOwner
-	};
 };
 
 export const actions: Actions = {

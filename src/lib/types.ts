@@ -55,3 +55,16 @@ export type ClientSummary = {
 	week_started?: boolean;
 	days_since_activity?: number | null;
 };
+
+export type TrainerAdminRow = {
+	email: string;
+	active: boolean;
+	trainer_id?: string;
+	status?: string | null;
+	created_at?: string | null;
+};
+
+export type OtherClientRow = {
+	id: string;
+	name: string;
+};

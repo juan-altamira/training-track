@@ -24,8 +24,8 @@ export async function logout(page: Page) {
 // Helper para crear cliente de prueba
 export async function createTestClient(page: Page, name: string) {
 	await page.goto('/clientes');
-	await page.fill('input[placeholder="Nombre del cliente"]', name);
-	await page.click('button:has-text("Crear cliente")');
+	await page.fill('input[placeholder="Ej: Ana Pérez"]', name);
+	await page.click('button:has-text("Crear y generar link")');
 	await page.waitForURL(/\/clientes\/[a-f0-9-]+/);
 	return page.url().split('/').pop()!;
 }
@@ -34,8 +34,8 @@ export async function createTestClient(page: Page, name: string) {
 export async function deleteClient(page: Page, clientId: string) {
 	await page.goto(`/clientes`);
 	// Buscar el cliente y abrir el modal de eliminación
-	const clientCard = page.locator(`article:has(button:has-text("Eliminar cliente"))`).first();
-	await clientCard.locator('button:has-text("Eliminar cliente")').click();
+	const clientCard = page.locator(`article:has(button:has-text("Eliminar alumno"))`).first();
+	await clientCard.locator('button:has-text("Eliminar alumno")').click();
 	await page.fill('input[placeholder="eliminar"]', 'eliminar');
 	await page.click('button:has-text("Eliminar definitivamente")');
 	await page.waitForURL('/clientes');

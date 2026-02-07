@@ -266,11 +266,14 @@ export const actions: Actions = {
 
 		const { error: updateError } = await supabaseAdmin
 			.from('progress')
-			.update({
-				progress,
-				last_completed_at: anyCompleted ? nowUtc : null
-			})
-			.eq('client_id', client.id);
+			.upsert(
+				{
+					client_id: client.id,
+					progress,
+					last_completed_at: anyCompleted ? nowUtc : null
+				},
+				{ onConflict: 'client_id' }
+			);
 
 		if (updateError) {
 			console.error(updateError);
@@ -297,8 +300,14 @@ export const actions: Actions = {
 
 		const { error: updateError } = await supabaseAdmin
 			.from('progress')
-			.update({ progress: cleared, last_completed_at: null })
-			.eq('client_id', client.id);
+			.upsert(
+				{
+					client_id: client.id,
+					progress: cleared,
+					last_completed_at: null
+				},
+				{ onConflict: 'client_id' }
+			);
 
 		if (updateError) {
 			console.error(updateError);

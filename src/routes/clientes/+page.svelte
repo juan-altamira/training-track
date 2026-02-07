@@ -1,13 +1,14 @@
 <script lang="ts">
-	import type { ClientSummary } from '$lib/types';
-	import { goto } from '$app/navigation';
+	import type { ClientSummary, TrainerAdminRow } from '$lib/types';
+	import { goto, preloadData } from '$app/navigation';
 	import { enhance } from '$app/forms';
 
 	let { data, form } = $props();
 	const OWNER_EMAIL = 'juanpabloaltamira@protonmail.com';
 	let clients = (data?.clients ?? []) as ClientSummary[];
-	let trainerAdmin = data?.trainerAdmin ?? null;
+	let trainerAdmin = $state((data?.trainerAdmin ?? null) as TrainerAdminRow[] | null);
 	let isOwner = data?.isOwner ?? false;
+	const lazyAdmin = data?.lazyAdmin === true;
 	const SITE_URL = (data?.siteUrl ?? '').replace(/\/?$/, '');
 	let deleteTarget = $state<ClientSummary | null>(null);
 	let deleteConfirm = $state('');
@@ -16,6 +17,9 @@
 	let searchTerm = $state('');
 	let creating = $state(false);
 	let formMessage = $state<string | null>(null);
+	let showOwnerPanel = $state(isOwner && !lazyAdmin);
+	let loadingOwnerPanel = $state(false);
+	let ownerPanelError = $state<string | null>(null);
 
 	const copyLink = async (client: ClientSummary) => {
 		const link = `${SITE_URL}/r/${client.client_code}`;
@@ -24,12 +28,6 @@
 		setTimeout(() => {
 			if (copiedId === client.id) copiedId = null;
 		}, 2000);
-	};
-
-	const humanDate = (iso?: string | null) => {
-		if (!iso) return 'Sin registros';
-		const date = new Date(iso);
-		return date.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
 	};
 
 	const activityLabel = (days?: number | null) => {
@@ -47,10 +45,41 @@
 	};
 
 
+	const warmClientRoute = (clientId: string) => {
+		void preloadData(`/clientes/${clientId}`);
+	};
+
 	const openClient = async (client: ClientSummary) => {
 		openingId = client.id;
 		await goto(`/clientes/${client.id}`);
 		openingId = null;
+	};
+
+	const loadTrainerAdmin = async () => {
+		if (!isOwner || trainerAdmin || loadingOwnerPanel) return;
+
+		loadingOwnerPanel = true;
+		ownerPanelError = null;
+		try {
+			const response = await fetch('/clientes/admin-trainers');
+			if (!response.ok) {
+				throw new Error('No se pudo cargar el panel administrador');
+			}
+			const payload = (await response.json()) as { trainers?: TrainerAdminRow[] };
+			trainerAdmin = payload.trainers ?? [];
+		} catch (e) {
+			console.error(e);
+			ownerPanelError = 'No pudimos cargar el panel administrador. Intentá de nuevo.';
+		} finally {
+			loadingOwnerPanel = false;
+		}
+	};
+
+	const toggleOwnerPanel = async () => {
+		showOwnerPanel = !showOwnerPanel;
+		if (showOwnerPanel && lazyAdmin) {
+			await loadTrainerAdmin();
+		}
 	};
 
 	const normalizeText = (value: string | undefined | null) =>
@@ -113,101 +142,131 @@
 			<div class="flex flex-wrap items-center justify-between gap-3">
 				<div>
 					<p class="text-sm uppercase tracking-wider text-emerald-400">Panel de administrador</p>
-					<h3 class="text-xl font-bold text-slate-50">Habilitar entrenadores</h3>
+					<h3 class="text-xl font-bold text-slate-50">Gestión de entrenadores</h3>
 				</div>
-				<form method="post" action="?/addTrainer" class="flex flex-wrap items-center gap-3">
-					<input
-						name="email"
-						type="email"
-						placeholder="email@entrenador.com"
-						class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-2 text-base text-slate-100 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-						required
-					/>
-					<button
-						type="submit"
-						class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500"
-					>
-						Habilitar entrenador
-					</button>
-				</form>
+				<button
+					type="button"
+					class="rounded-lg border border-emerald-700/60 bg-emerald-700/20 px-4 py-2 text-sm font-semibold text-emerald-200 hover:bg-emerald-700/30"
+					on:click={toggleOwnerPanel}
+					aria-expanded={showOwnerPanel}
+					aria-controls="owner-admin-content"
+				>
+					{showOwnerPanel ? 'Ocultar panel' : 'Abrir panel'}
+				</button>
 			</div>
+			{#if showOwnerPanel}
+				<div id="owner-admin-content" class="space-y-4">
+					{#if loadingOwnerPanel}
+						<p class="text-sm text-slate-300">Cargando panel administrador...</p>
+					{:else if ownerPanelError}
+						<div class="flex flex-wrap items-center gap-3">
+							<p class="text-sm text-red-200">{ownerPanelError}</p>
+							<button
+								type="button"
+								class="rounded-lg border border-red-600 px-3 py-1.5 text-xs font-semibold text-red-200 hover:bg-red-900/40"
+								on:click={loadTrainerAdmin}
+							>
+								Reintentar
+							</button>
+						</div>
+					{:else}
+						<form method="post" action="?/addTrainer" class="flex flex-wrap items-center gap-3">
+							<input
+								name="email"
+								type="email"
+								placeholder="email@entrenador.com"
+								class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-2 text-base text-slate-100 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+								required
+							/>
+							<button
+								type="submit"
+								class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500"
+							>
+								Habilitar entrenador
+							</button>
+						</form>
 
-			<div class="overflow-x-auto">
-				<table class="min-w-full text-left text-sm text-slate-200">
-					<thead class="border-b border-slate-800 text-slate-400">
-						<tr>
-							<th class="px-3 py-2">Email</th>
-							<th class="px-3 py-2">Estado</th>
-							<th class="px-3 py-2">Acceso</th>
-							<th class="px-3 py-2 text-right">Acciones</th>
-						</tr>
-					</thead>
-					<tbody class="divide-y divide-slate-800">
-						{#if trainerAdmin && trainerAdmin.length > 0}
-							{#each trainerAdmin as trainer}
-								{#if trainer.email?.toLowerCase() !== OWNER_EMAIL}
+						<div class="overflow-x-auto">
+							<table class="min-w-full text-left text-sm text-slate-200">
+								<thead class="border-b border-slate-800 text-slate-400">
 									<tr>
-										<td class="px-3 py-2">{trainer.email}</td>
-										<td class="px-3 py-2">
-											<span
-												class={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-													trainer.status === 'active'
-														? 'bg-emerald-900/50 text-emerald-300 border border-emerald-600/40'
-														: 'bg-slate-800 text-slate-300 border border-slate-700'
-												}`}
-											>
-												{trainer.status ?? 'sin sesión'}
-											</span>
-										</td>
-										<td class="px-3 py-2">
-											<span
-												class={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-													trainer.active
-														? 'bg-emerald-900/50 text-emerald-300 border border-emerald-600/40'
-														: 'bg-red-900/40 text-red-200 border border-red-700/50'
-												}`}
-											>
-												{trainer.active ? 'Habilitado' : 'Deshabilitado'}
-											</span>
-										</td>
-										<td class="px-3 py-2">
-											<div class="flex justify-end gap-2">
-												<form method="post" action="?/toggleTrainer">
-													<input type="hidden" name="email" value={trainer.email} />
-													<input type="hidden" name="next_active" value={!trainer.active} />
-													<button
-														class={`rounded-lg px-3 py-2 text-xs font-semibold ${
-															trainer.active
-																? 'border border-red-600 text-red-200 hover:bg-red-900/50'
-																: 'border border-emerald-600 text-emerald-200 hover:bg-emerald-900/40'
-														}`}
-														type="submit"
-													>
-														{trainer.active ? 'Deshabilitar' : 'Habilitar'}
-													</button>
-												</form>
-												<form method="post" action="?/forceSignOut">
-													<input type="hidden" name="email" value={trainer.email} />
-													<button
-														type="submit"
-														class="rounded-lg border border-slate-600 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-[#151827]"
-													>
-														Cerrar sesiones
-													</button>
-												</form>
-											</div>
-										</td>
+										<th class="px-3 py-2">Email</th>
+										<th class="px-3 py-2">Estado</th>
+										<th class="px-3 py-2">Acceso</th>
+										<th class="px-3 py-2 text-right">Acciones</th>
 									</tr>
-								{/if}
-							{/each}
-						{:else}
-							<tr>
-								<td colspan="4" class="px-3 py-3 text-slate-400">No hay entrenadores registrados.</td>
-							</tr>
-						{/if}
-					</tbody>
-				</table>
-			</div>
+								</thead>
+								<tbody class="divide-y divide-slate-800">
+									{#if trainerAdmin && trainerAdmin.length > 0}
+										{#each trainerAdmin as trainer}
+											{#if trainer.email?.toLowerCase() !== OWNER_EMAIL}
+												<tr>
+													<td class="px-3 py-2">{trainer.email}</td>
+													<td class="px-3 py-2">
+														<span
+															class={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+																trainer.status === 'active'
+																	? 'bg-emerald-900/50 text-emerald-300 border border-emerald-600/40'
+																	: 'bg-slate-800 text-slate-300 border border-slate-700'
+															}`}
+														>
+															{trainer.status ?? 'sin sesión'}
+														</span>
+													</td>
+													<td class="px-3 py-2">
+														<span
+															class={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+																trainer.active
+																	? 'bg-emerald-900/50 text-emerald-300 border border-emerald-600/40'
+																	: 'bg-red-900/40 text-red-200 border border-red-700/50'
+															}`}
+														>
+															{trainer.active ? 'Habilitado' : 'Deshabilitado'}
+														</span>
+													</td>
+													<td class="px-3 py-2">
+														<div class="flex justify-end gap-2">
+															<form method="post" action="?/toggleTrainer">
+																<input type="hidden" name="email" value={trainer.email} />
+																<input type="hidden" name="next_active" value={!trainer.active} />
+																<button
+																	class={`rounded-lg px-3 py-2 text-xs font-semibold ${
+																		trainer.active
+																			? 'border border-red-600 text-red-200 hover:bg-red-900/50'
+																			: 'border border-emerald-600 text-emerald-200 hover:bg-emerald-900/40'
+																	}`}
+																	type="submit"
+																>
+																	{trainer.active ? 'Deshabilitar' : 'Habilitar'}
+																</button>
+															</form>
+															<form method="post" action="?/forceSignOut">
+																<input type="hidden" name="email" value={trainer.email} />
+																<button
+																	type="submit"
+																	class="rounded-lg border border-slate-600 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-[#151827]"
+																>
+																	Cerrar sesiones
+																</button>
+															</form>
+														</div>
+													</td>
+												</tr>
+											{/if}
+										{/each}
+									{:else}
+										<tr>
+											<td colspan="4" class="px-3 py-3 text-slate-400">
+												No hay entrenadores registrados.
+											</td>
+										</tr>
+									{/if}
+								</tbody>
+							</table>
+						</div>
+					{/if}
+				</div>
+			{/if}
 		</section>
 	{/if}
 
@@ -244,15 +303,18 @@
 									</span>
 								</p>
 							</div>
-							<div class="mt-auto space-y-4">
-								<button
-									class={`open-btn relative w-full overflow-hidden rounded-xl border border-emerald-700/50 bg-[#111827] px-3.5 py-3 text-base font-semibold text-white shadow-sm transition hover:border-emerald-500 hover:bg-[#0f1625] disabled:cursor-wait ${
-										openingId === client.id ? 'loading' : ''
-									}`}
-									on:click={() => openClient(client)}
-									disabled={openingId === client.id}
-									aria-busy={openingId === client.id}
-								>
+								<div class="mt-auto space-y-4">
+									<button
+										class={`open-btn relative w-full overflow-hidden rounded-xl border border-emerald-700/50 bg-[#111827] px-3.5 py-3 text-base font-semibold text-white shadow-sm transition hover:border-emerald-500 hover:bg-[#0f1625] disabled:cursor-wait ${
+											openingId === client.id ? 'loading' : ''
+										}`}
+										on:pointerenter={() => warmClientRoute(client.id)}
+										on:focus={() => warmClientRoute(client.id)}
+										on:pointerdown={() => warmClientRoute(client.id)}
+										on:click={() => openClient(client)}
+										disabled={openingId === client.id}
+										aria-busy={openingId === client.id}
+									>
 									<span class="btn-label">
 										{openingId === client.id ? 'Abriendo rutina...' : 'Abrir rutina del alumno'}
 									</span>

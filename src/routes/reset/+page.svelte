@@ -22,7 +22,7 @@ let success = $state(false);
 let sentToEmail = $state('');
 let resendCountdown = $state(0);
 let resendInterval: ReturnType<typeof setInterval> | null = null;
-const RESEND_COOLDOWN_SECONDS = 45;
+const RESEND_COOLDOWN_SECONDS = 60;
 
 const parseHashParams = (hash: string) => {
 	const params = new URLSearchParams(hash.replace(/^#/, ''));
@@ -145,11 +145,11 @@ onMount(() => {
 	};
 });
 
-const startResendCountdown = () => {
+const startResendCountdown = (seconds = RESEND_COOLDOWN_SECONDS) => {
 	if (resendInterval !== null) {
 		clearInterval(resendInterval);
 	}
-	resendCountdown = RESEND_COOLDOWN_SECONDS;
+	resendCountdown = Math.max(1, Math.floor(seconds));
 	resendInterval = setInterval(() => {
 		if (resendCountdown <= 1) {
 			resendCountdown = 0;
@@ -190,6 +190,7 @@ const requestReset = async (options: { resend?: boolean } = {}) => {
 		ok?: boolean;
 		message?: string;
 		email?: string;
+		retry_after_seconds?: number;
 	};
 
 	if (!response.ok || payload.ok !== true) {
@@ -198,6 +199,9 @@ const requestReset = async (options: { resend?: boolean } = {}) => {
 			(options.resend
 				? 'No pudimos reenviar el email. Intentá nuevamente.'
 				: 'No pudimos enviar el email. Revisá el email e intentá de nuevo.');
+		if (response.status === 429) {
+			startResendCountdown(payload.retry_after_seconds ?? RESEND_COOLDOWN_SECONDS);
+		}
 	} else {
 		email = targetEmail;
 		success = true;
@@ -355,7 +359,7 @@ const updatePassword = async () => {
 						disabled={loading || resendCountdown > 0}
 						class="mx-auto block w-full max-w-xs rounded-xl border border-cyan-700/60 bg-cyan-950/40 px-4 py-2.5 text-base font-medium text-cyan-200 transition hover:bg-cyan-900/50 disabled:cursor-not-allowed disabled:opacity-50"
 					>
-						{loading ? 'Enviando...' : resendCountdown > 0 ? `Reenviar email en ${resendCountdown}s` : 'Reenviar email'}
+							{loading ? 'Enviando...' : resendCountdown > 0 ? `Reenviar email en ${resendCountdown}s` : 'Reenviar email'}
 					</button>
 
 					<a

@@ -26,6 +26,14 @@ const existsInDatabase = async (email: string) => {
 	return Boolean(data?.id);
 };
 
+const parseRetrySeconds = (message: string | undefined) => {
+	if (!message) return null;
+	const match = message.match(/after\s+(\d+)\s+seconds?/i);
+	if (!match) return null;
+	const value = Number(match[1]);
+	return Number.isFinite(value) && value > 0 ? value : null;
+};
+
 export const POST: RequestHandler = async ({ request, url }) => {
 	let body: { email?: unknown } | null = null;
 	try {
@@ -62,7 +70,31 @@ export const POST: RequestHandler = async ({ request, url }) => {
 
 	if (resetError) {
 		console.error('reset-request send error', resetError);
-		return json({ ok: false, message: 'No pudimos enviar el email. Intentá nuevamente.' }, { status: 500 });
+		const retryAfterSeconds = parseRetrySeconds(resetError.message);
+		const isRateLimit =
+			resetError.status === 429 ||
+			resetError.code === 'over_email_send_rate_limit' ||
+			(resetError.message ?? '').toLowerCase().includes('only request this after');
+
+		if (isRateLimit) {
+			return json(
+				{
+					ok: false,
+					message: `Reenvío bloqueado temporalmente. Esperá ${retryAfterSeconds ?? 60}s para volver a intentar.`,
+					retry_after_seconds: retryAfterSeconds ?? 60
+				},
+				{ status: 429 }
+			);
+		}
+
+		return json(
+			{
+				ok: false,
+				message:
+					'No pudimos enviar el email ahora. Revisá Spam/Promociones o intentá nuevamente en unos minutos.'
+			},
+			{ status: 500 }
+		);
 	}
 
 	return json({

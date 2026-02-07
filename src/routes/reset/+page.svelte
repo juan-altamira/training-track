@@ -3,14 +3,21 @@ import { goto } from '$app/navigation';
 import { supabaseClient } from '$lib/supabaseClient';
 import { onMount } from 'svelte';
 
-let email = $state('');
+type ResetPageData = {
+	recoveryHint?: boolean;
+	prefillEmail?: string;
+};
+
+let { data } = $props<{ data: ResetPageData }>();
+
+let email = $state((data?.prefillEmail ?? '').trim().toLowerCase());
 let newPassword = $state('');
 let confirmPassword = $state('');
 let showPassword = $state(false);
 let message = $state('');
 let error = $state('');
 let loading = $state(false);
-let mode = $state<'request' | 'update'>('request');
+let mode = $state<'request' | 'update' | 'checking'>(data?.recoveryHint ? 'checking' : 'request');
 let success = $state(false);
 let sentToEmail = $state('');
 let resendCountdown = $state(0);
@@ -57,6 +64,7 @@ onMount(async () => {
 
 	// Support token_hash-based recovery links
 	if (tokenHash && tokenType === 'recovery') {
+		mode = 'checking';
 		loading = true;
 		const { error: verifyError } = await supabaseClient.auth.verifyOtp({
 			type: 'recovery',
@@ -77,6 +85,7 @@ onMount(async () => {
 
 	// Prefer hash tokens (Supabase recovery flow sends them)
 	if (hashParams.access_token && hashParams.refresh_token) {
+		mode = 'checking';
 		loading = true;
 		const { error: setError } = await supabaseClient.auth.setSession({
 			access_token: hashParams.access_token,
@@ -97,6 +106,7 @@ onMount(async () => {
 
 	// Fallback: code param (older flow)
 	if (code) {
+		mode = 'checking';
 		loading = true;
 		const { error: exchangeError } = await supabaseClient.auth.exchangeCodeForSession(code);
 		if (exchangeError) {
@@ -119,6 +129,11 @@ onMount(async () => {
 		if (!message) {
 			message = 'Ingresá tu nueva contraseña.';
 		}
+		return;
+	}
+
+	if (mode === 'checking') {
+		mode = 'request';
 	}
 });
 
@@ -241,13 +256,19 @@ const updatePassword = async () => {
 			<div class="mb-6 text-center space-y-2">
 				<h1 class="text-3xl font-extrabold tracking-tight">
 					<span class="bg-gradient-to-r from-emerald-300 via-cyan-300 to-slate-100 bg-clip-text text-transparent">
-						{mode === 'request' ? 'Recuperar contraseña' : 'Nueva contraseña'}
+						{mode === 'request'
+							? 'Recuperar contraseña'
+							: mode === 'checking'
+								? 'Validando enlace'
+								: 'Nueva contraseña'}
 					</span>
 				</h1>
 				<p class="text-sm text-slate-400">
-					{mode === 'request' 
+					{mode === 'request'
 						? 'Ingresá tu email y te enviaremos un enlace para restablecer tu clave.'
-						: 'Elegí una contraseña segura y fácil de recordar.'}
+						: mode === 'checking'
+							? 'Estamos verificando tu enlace de recuperación.'
+							: 'Elegí una contraseña segura y fácil de recordar.'}
 				</p>
 				<p class="text-xs text-slate-500">
 					<a class="text-emerald-300 hover:underline" href="/login">Volver a entrar</a>
@@ -376,6 +397,11 @@ const updatePassword = async () => {
 					{loading ? 'Enviando...' : 'Enviar enlace de recuperación'}
 				</button>
 			</form>
+		{:else if mode === 'checking'}
+			<div class="space-y-4 rounded-xl border border-cyan-900/55 bg-[#0f1626]/90 px-5 py-6 text-center">
+				<div class="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-cyan-300/30 border-t-cyan-300"></div>
+				<p class="text-sm text-slate-300">Validando enlace de recuperación...</p>
+			</div>
 		{:else}
 			<form onsubmit={(e) => { e.preventDefault(); updatePassword(); }} class="space-y-6">
 				{#if message}

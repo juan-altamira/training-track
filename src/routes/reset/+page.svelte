@@ -53,7 +53,8 @@ onMount(async () => {
 	if (errorCode) {
 		mode = 'request';
 		if (errorCode === 'otp_expired') {
-			error = 'El enlace de recuperación venció o ya fue usado. Pedí uno nuevo para continuar.';
+			error =
+				'El enlace venció o ya fue usado. Suele pasar cuando el correo o un filtro de seguridad abre el link automáticamente antes que vos. Pedí uno nuevo y abrilo apenas llegue.';
 		} else {
 			error = errorDescription
 				? `No pudimos validar el link: ${errorDescription}`
@@ -72,7 +73,8 @@ onMount(async () => {
 		});
 		if (verifyError) {
 			console.error(verifyError);
-			error = 'El enlace de recuperación venció o ya fue usado. Pedí uno nuevo para continuar.';
+			error =
+				'El enlace venció o ya fue usado. Suele pasar cuando el correo o un filtro de seguridad abre el link automáticamente antes que vos. Pedí uno nuevo y abrilo apenas llegue.';
 			mode = 'request';
 		} else {
 			mode = 'update';

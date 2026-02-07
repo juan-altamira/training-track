@@ -1,6 +1,5 @@
 <script lang="ts">
 import { goto } from '$app/navigation';
-import { env } from '$env/dynamic/public';
 import { supabaseClient } from '$lib/supabaseClient';
 import { onMount } from 'svelte';
 
@@ -13,7 +12,10 @@ let error = $state('');
 let loading = $state(false);
 let mode = $state<'request' | 'update'>('request');
 let success = $state(false);
-const SITE_URL = (env.PUBLIC_SITE_URL ?? 'http://localhost:5173').replace(/\/?$/, '');
+let sentToEmail = $state('');
+let resendCountdown = $state(0);
+let resendInterval: ReturnType<typeof setInterval> | null = null;
+const RESEND_COOLDOWN_SECONDS = 45;
 
 const parseHashParams = (hash: string) => {
 	const params = new URLSearchParams(hash.replace(/^#/, ''));
@@ -76,20 +78,74 @@ onMount(async () => {
 	}
 });
 
-const requestReset = async () => {
+onMount(() => {
+	return () => {
+		if (resendInterval !== null) {
+			clearInterval(resendInterval);
+		}
+	};
+});
+
+const startResendCountdown = () => {
+	if (resendInterval !== null) {
+		clearInterval(resendInterval);
+	}
+	resendCountdown = RESEND_COOLDOWN_SECONDS;
+	resendInterval = setInterval(() => {
+		if (resendCountdown <= 1) {
+			resendCountdown = 0;
+			if (resendInterval !== null) {
+				clearInterval(resendInterval);
+				resendInterval = null;
+			}
+			return;
+		}
+		resendCountdown -= 1;
+	}, 1000);
+};
+
+const requestReset = async (options: { resend?: boolean } = {}) => {
+	const targetEmail = email.trim().toLowerCase();
+	if (!targetEmail) {
+		error = 'Ingresá un email válido.';
+		return;
+	}
+	if (options.resend && resendCountdown > 0) {
+		return;
+	}
+
 	loading = true;
 	error = '';
-	message = '';
-	success = false;
-	const { error: resetError } = await supabaseClient.auth.resetPasswordForEmail(email.trim(), {
-		redirectTo: `${SITE_URL}/reset`
+	if (!options.resend) {
+		message = '';
+		success = false;
+	}
+	const response = await fetch('/api/auth/reset-request', {
+		method: 'POST',
+		headers: {
+			'content-type': 'application/json'
+		},
+		body: JSON.stringify({ email: targetEmail })
 	});
-	if (resetError) {
-		error = 'No pudimos enviar el link. Revisá el email e intentá de nuevo.';
-		console.error(resetError);
+	const payload = (await response.json().catch(() => ({}))) as {
+		ok?: boolean;
+		message?: string;
+		email?: string;
+	};
+
+	if (!response.ok || payload.ok !== true) {
+		error =
+			payload.message ??
+			(options.resend
+				? 'No pudimos reenviar el email. Intentá nuevamente.'
+				: 'No pudimos enviar el email. Revisá el email e intentá de nuevo.');
 	} else {
+		email = targetEmail;
 		success = true;
-		message = 'Te enviamos un link para restablecer tu contraseña. Revisá tu correo.';
+		sentToEmail = payload.email ?? targetEmail;
+		message =
+			'Te enviamos un email para restablecer tu contraseña. Lo envía nuestro sistema Supabase Auth (así te aparecerá en tu correo).';
+		startResendCountdown();
 	}
 	loading = false;
 };
@@ -106,9 +162,26 @@ const updatePassword = async () => {
 	loading = true;
 	error = '';
 	message = '';
+
+	const isSamePasswordError = (rawMessage: string | undefined) => {
+		const text = (rawMessage ?? '').toLowerCase();
+		return (
+			text.includes('same as the old password') ||
+			text.includes('different from the old password') ||
+			text.includes('must be different') ||
+			text.includes('misma contraseña') ||
+			text.includes('misma clave')
+		);
+	};
+
 	const { error: updateError } = await supabaseClient.auth.updateUser({ password: newPassword });
 	if (updateError) {
-		error = 'No pudimos actualizar la contraseña. Probá de nuevo.';
+		if (isSamePasswordError(updateError.message)) {
+			message = 'La contraseña ya era la misma. Se mantiene sin cambios y te redirigimos al login.';
+			setTimeout(() => goto('/login'), 1500);
+		} else {
+			error = 'No pudimos actualizar la contraseña. Probá de nuevo.';
+		}
 		console.error(updateError);
 	} else {
 		message = 'Contraseña actualizada. Te redirigimos al login.';
@@ -120,40 +193,113 @@ const updatePassword = async () => {
 
 <section class="min-h-screen flex items-center justify-center px-4 py-10">
 	<div class="w-full max-w-lg rounded-2xl border border-slate-800 bg-[#0f111b] p-8 shadow-lg shadow-black/30">
-		<div class="mb-6 text-center space-y-2">
-			<h1 class="text-3xl font-extrabold tracking-tight">
-				<span class="bg-gradient-to-r from-emerald-300 via-cyan-300 to-slate-100 bg-clip-text text-transparent">
-					{mode === 'request' ? 'Recuperar contraseña' : 'Nueva contraseña'}
-				</span>
-			</h1>
-			<p class="text-sm text-slate-400">
-				{mode === 'request' 
-					? 'Ingresá tu email y te enviaremos un enlace para restablecer tu clave.'
-					: 'Elegí una contraseña segura y fácil de recordar.'}
-			</p>
-			<p class="text-xs text-slate-500">
-				<a class="text-emerald-300 hover:underline" href="/login">Volver a entrar</a>
-			</p>
-		</div>
+		{#if !success}
+			<div class="mb-6 text-center space-y-2">
+				<h1 class="text-3xl font-extrabold tracking-tight">
+					<span class="bg-gradient-to-r from-emerald-300 via-cyan-300 to-slate-100 bg-clip-text text-transparent">
+						{mode === 'request' ? 'Recuperar contraseña' : 'Nueva contraseña'}
+					</span>
+				</h1>
+				<p class="text-sm text-slate-400">
+					{mode === 'request' 
+						? 'Ingresá tu email y te enviaremos un enlace para restablecer tu clave.'
+						: 'Elegí una contraseña segura y fácil de recordar.'}
+				</p>
+				<p class="text-xs text-slate-500">
+					<a class="text-emerald-300 hover:underline" href="/login">Volver a entrar</a>
+				</p>
+			</div>
+		{/if}
 
 		{#if success}
-			<div class="space-y-4">
-				<div class="flex justify-center">
-					<div class="grid h-16 w-16 place-items-center rounded-full border border-emerald-400/40 bg-emerald-500/15 text-emerald-200">
-						<svg class="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="m5 13 4 4L19 7" />
-						</svg>
+			<div class="relative overflow-hidden rounded-2xl bg-[#0c111d] px-5 py-6 shadow-[0_0_45px_rgba(34,211,238,0.08)] sm:px-6">
+				<div class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_8%,rgba(45,212,191,0.18),transparent_58%)]"></div>
+				<div class="relative space-y-5">
+					<div class="flex justify-center">
+						<div class="grid h-14 w-14 place-items-center rounded-xl border border-cyan-500/35 bg-cyan-500/10 text-cyan-200 shadow-lg shadow-cyan-950/25">
+							<svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16v12H4z" />
+								<path stroke-linecap="round" stroke-linejoin="round" d="m4 7 8 6 8-6" />
+							</svg>
+						</div>
 					</div>
+
+					<div class="space-y-3 text-center">
+						<p class="text-3xl font-semibold leading-tight text-slate-100">
+							Te enviamos un email para restablecer tu contraseña.
+						</p>
+						<p class="mx-auto max-w-[30rem] pt-1 text-base leading-relaxed text-slate-400">
+							Lo envía nuestro sistema Supabase Auth (así te aparecerá en tu correo).
+						</p>
+					</div>
+
+					{#if sentToEmail}
+						<div class="rounded-xl bg-[#0f1626]/90 p-3">
+							<div class="flex items-center gap-2 text-sm text-slate-200">
+								<span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400/25 text-emerald-200">
+									<svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+										<path stroke-linecap="round" stroke-linejoin="round" d="m5 13 4 4L19 7" />
+									</svg>
+								</span>
+								<p>
+									Lo enviamos a:
+									<span class="font-semibold">{sentToEmail}</span>
+								</p>
+							</div>
+						</div>
+					{/if}
+					<div class="grid grid-cols-3 items-center gap-2">
+						<a
+							href="mailto:"
+							class="inline-flex min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-slate-700 bg-[#1a2234] px-2.5 py-2 text-[13px] font-medium text-slate-200 transition hover:bg-[#212c45]"
+						>
+							<img src="/icons/mail-generic.svg" alt="" class="h-4 w-4 shrink-0" />
+							Abrir correo
+						</a>
+						<a
+							href="https://mail.google.com/mail/u/0/#inbox"
+							target="_blank"
+							rel="noreferrer noopener"
+							class="inline-flex min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-slate-700 bg-[#1a2234] px-2.5 py-2 text-[13px] font-medium text-slate-200 transition hover:bg-[#212c45]"
+						>
+								<img src="/icons/google-logo.svg" alt="" class="h-4 w-4 shrink-0" />
+							Abrir Gmail
+						</a>
+						<a
+							href="https://outlook.live.com/mail/0/inbox"
+							target="_blank"
+							rel="noreferrer noopener"
+							class="inline-flex min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-slate-700 bg-[#1a2234] px-2.5 py-2 text-[13px] font-medium text-slate-200 transition hover:bg-[#212c45]"
+						>
+							<img src="/icons/outlook-original.svg" alt="" class="h-4 w-4 shrink-0" />
+							Abrir Outlook
+						</a>
+					</div>
+
+					<p class="text-center text-sm text-slate-500">Si no llega en 2 minutos, revisá Spam o Promociones.</p>
+
+					{#if error}
+						<p class="rounded-lg border border-red-700/60 bg-red-900/40 px-4 py-3 text-sm text-red-200">
+							{error}
+						</p>
+					{/if}
+
+					<button
+						type="button"
+						onclick={() => requestReset({ resend: true })}
+						disabled={loading || resendCountdown > 0}
+						class="mx-auto block w-full max-w-xs rounded-xl border border-cyan-700/60 bg-cyan-950/40 px-4 py-2.5 text-base font-medium text-cyan-200 transition hover:bg-cyan-900/50 disabled:cursor-not-allowed disabled:opacity-50"
+					>
+						{loading ? 'Enviando...' : resendCountdown > 0 ? `Reenviar email en ${resendCountdown}s` : 'Reenviar email'}
+					</button>
+
+					<a
+						href="/login"
+						class="inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-emerald-500/80 to-teal-300/80 px-4 py-3 text-xl font-medium text-slate-100 transition hover:brightness-110"
+					>
+						Volver a ingresar
+					</a>
 				</div>
-				<div class="rounded-lg bg-emerald-900/40 px-4 py-3 text-sm text-emerald-200 border border-emerald-700/50">
-					<p>{message}</p>
-				</div>
-				<a
-					href="/login"
-					class="inline-flex w-full items-center justify-center rounded-xl bg-emerald-600 px-4 py-3 text-lg font-semibold text-white transition hover:bg-emerald-500"
-				>
-					Volver a ingresar
-				</a>
 			</div>
 		{:else if mode === 'request'}
 			<form onsubmit={(e) => { e.preventDefault(); requestReset(); }} class="space-y-6">

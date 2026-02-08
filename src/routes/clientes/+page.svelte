@@ -2,6 +2,7 @@
 	import type { ClientSummary, TrainerAdminRow } from '$lib/types';
 	import { goto, preloadData } from '$app/navigation';
 	import { enhance } from '$app/forms';
+	import { rememberLastClientRoute } from '$lib/client/sessionResumeWarmup';
 
 	let { data, form } = $props();
 	const OWNER_EMAIL = 'juanpabloaltamira@protonmail.com';
@@ -51,6 +52,7 @@
 
 	const openClient = async (client: ClientSummary) => {
 		openingId = client.id;
+		rememberLastClientRoute(client.id);
 		await goto(`/clientes/${client.id}`);
 		openingId = null;
 	};

@@ -2,6 +2,8 @@
 	import '../app.postcss';
 	import type { Session } from '@supabase/supabase-js';
 	import { page } from '$app/stores';
+	import { onMount } from 'svelte';
+	import { installSessionResumeWarmup } from '$lib/client/sessionResumeWarmup';
 
 	let { children, data } = $props();
 	let session = (data?.session ?? null) as Session | null;
@@ -14,6 +16,8 @@
 	const hideHeader = $derived(
 		['/login', '/registro', '/reset'].some((p) => $page.url.pathname.startsWith(p))
 	);
+
+	onMount(() => installSessionResumeWarmup());
 </script>
 
 <svelte:head>

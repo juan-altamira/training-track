@@ -2,6 +2,8 @@
 	import { goto, preloadData } from '$app/navigation';
 	import { WEEK_DAYS, getTargetSets } from '$lib/routines';
 	import type { OtherClientRow, ProgressState, RoutineExercise, RoutinePlan } from '$lib/types';
+	import { onMount } from 'svelte';
+	import { rememberLastClientRoute } from '$lib/client/sessionResumeWarmup';
 
 	let { data } = $props();
 
@@ -32,6 +34,10 @@
 
 	const SITE_URL = (data.siteUrl ?? '').replace(/\/?$/, '');
 	const link = `${SITE_URL}/r/${data.client.client_code}`;
+
+	onMount(() => {
+		rememberLastClientRoute(data.client.id);
+	});
 
 	const freshProgress = (): ProgressState =>
 		WEEK_DAYS.reduce((acc, day) => {

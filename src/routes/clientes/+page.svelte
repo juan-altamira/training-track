@@ -98,22 +98,11 @@
 </script>
 
 <section class="flex flex-col gap-8 text-slate-100">
-	<div class="flex flex-wrap items-center justify-between gap-4 mb-2">
-		<div>
-			<h1 class="text-2xl sm:text-3xl font-semibold tracking-tight">
-				<span class="bg-gradient-to-r from-emerald-200 via-slate-100 to-slate-50 bg-clip-text text-transparent">
-					Gestioná rutinas, links y actividad.
-				</span>
-			</h1>
-		</div>
-		<form method="POST" action="/logout">
-				<button
-					type="submit"
-					class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-2.5 text-base text-slate-100 hover:bg-[#1b1f30]"
-				>
-					Cerrar sesión
-				</button>
-		</form>
+	<div class="py-5 sm:py-6 mb-4 text-center">
+		<h1 class="text-2xl sm:text-3xl md:text-4xl font-semibold tracking-tight text-slate-100">
+			Todos tus alumnos en un solo lugar.
+		</h1>
+		<p class="mt-3 text-base sm:text-lg text-slate-400">Ves actividad y abrís su rutina en un click.</p>
 	</div>
 
 	<div class="flex flex-wrap items-center gap-3 rounded-xl border border-slate-800 bg-[#0f111b] px-4 py-3 shadow-md shadow-black/30">

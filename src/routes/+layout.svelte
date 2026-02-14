@@ -6,10 +6,10 @@
 	import { installSessionResumeWarmup } from '$lib/client/sessionResumeWarmup';
 
 	let { children, data } = $props();
-	let session = (data?.session ?? null) as Session | null;
+	const session = $derived((data?.session ?? null) as Session | null);
 
 	const hideAuthActions = $derived(
-		['/r/', '/login', '/registro', '/reset', '/clientes'].some((p) =>
+		['/r/', '/login', '/registro', '/reset'].some((p) =>
 			$page.url.pathname.startsWith(p)
 		)
 	);
@@ -28,7 +28,7 @@
 <div class="min-h-screen bg-[#0d0f14] text-slate-100">
 	{#if !hideHeader}
 		<header class="border-b border-slate-800 bg-[#0f111b]/90 backdrop-blur">
-			<div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
+			<div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
 				<div class="flex items-center gap-3">
 					<img src="/favicon.png" alt="Training Track logo" class="h-10 w-10 rounded-2xl shadow-sm shadow-emerald-900/40" />
 					<div>
@@ -37,12 +37,11 @@
 				</div>
 				{#if !hideAuthActions}
 					{#if session}
-						<div class="flex items-center gap-3 text-sm">
-							<span class="text-slate-300 hidden sm:inline">{session.user.email}</span>
+						<div class="flex items-center">
 							<form method="POST" action="/logout" class="inline">
 								<button
 									type="submit"
-									class="rounded-lg border border-slate-700 bg-[#151827] px-3 py-1.5 text-slate-100 transition hover:bg-[#1b1f30]"
+									class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-3 text-base font-semibold text-slate-100 transition hover:bg-[#1b1f30]"
 								>
 									Cerrar sesión
 								</button>

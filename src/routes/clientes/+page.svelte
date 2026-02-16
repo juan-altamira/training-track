@@ -2,6 +2,7 @@
 	import type { ClientSummary, OwnerActionHistoryRow, TrainerAdminRow } from '$lib/types';
 	import { goto, preloadData } from '$app/navigation';
 	import { enhance } from '$app/forms';
+	import { onMount } from 'svelte';
 	import { rememberLastClientRoute } from '$lib/client/sessionResumeWarmup';
 
 	type AccountSubscriptionInfo = {
@@ -46,6 +47,8 @@
 	type OwnerTrainerView = {
 		rowKey: string;
 		trainer: TrainerAdminRow;
+		remainingMs: number;
+		remainingLabel: string;
 		daysRemaining: number;
 		activeNow: boolean;
 		createdAtTs: number;
@@ -83,7 +86,17 @@
 	const DURATION_OPTIONS = [TRIAL_HOUR_OPTION, ...MONTH_OPTIONS];
 	const OWNER_HISTORY_WINDOW_HOURS = 24;
 	const ONE_DAY_MS = 1000 * 60 * 60 * 24;
+	const ONE_HOUR_MS = 1000 * 60 * 60;
+	const ONE_MINUTE_MS = 1000 * 60;
+	const COUNTDOWN_TICK_MS = 30 * 1000;
+	const serverNowReferenceTs = Date.parse(
+		accountSubscription?.now_utc ?? subscriptionWarning?.now_utc ?? ''
+	);
+	const serverClockOffsetMs = Number.isFinite(serverNowReferenceTs)
+		? serverNowReferenceTs - Date.now()
+		: 0;
 	let ownerSubscriptionDrafts = $state<Record<string, OwnerSubscriptionDraft>>({});
+	let nowTick = $state(Date.now() + serverClockOffsetMs);
 	const formatDateTime = (value?: string | null) => (value ? new Date(value).toLocaleString() : 'n/a');
 	const toSafeId = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 	const toDraftOperation = (value: string): OwnerSubscriptionDraft['operation'] =>
@@ -171,28 +184,93 @@
 		return Number.isFinite(parsed) ? parsed : 0;
 	};
 
-	const getDaysRemaining = (activeUntil?: string | null) => {
-		if (!activeUntil) return 0;
+	const getRemainingMs = (activeUntil?: string | null) => {
+		if (!activeUntil) return null;
 		const untilTs = parseTimestamp(activeUntil);
-		if (untilTs <= 0) return 0;
-		const diffMs = untilTs - Date.now();
+		if (untilTs <= 0) return null;
+		return untilTs - nowTick;
+	};
+
+	const getDaysRemaining = (activeUntil?: string | null) => {
+		const diffMs = getRemainingMs(activeUntil);
+		if (diffMs == null) return 0;
 		if (diffMs <= 0) return 0;
 		return Math.ceil(diffMs / ONE_DAY_MS);
 	};
 
+	const formatRemainingLabel = (activeUntil?: string | null, fallbackDays?: number | null) => {
+		const diffMs = getRemainingMs(activeUntil);
+		if (diffMs == null) {
+			if (fallbackDays != null) {
+				return `${fallbackDays} día${fallbackDays === 1 ? '' : 's'}`;
+			}
+			return '?';
+		}
+		if (diffMs <= 0) return '0 minutos';
+		if (diffMs < ONE_HOUR_MS) {
+			const minutes = Math.max(1, Math.ceil(diffMs / ONE_MINUTE_MS));
+			return `${minutes} minuto${minutes === 1 ? '' : 's'}`;
+		}
+		if (diffMs < ONE_DAY_MS) {
+			const hours = Math.max(1, Math.ceil(diffMs / ONE_HOUR_MS));
+			return `${hours} hora${hours === 1 ? '' : 's'}`;
+		}
+		const days = Math.ceil(diffMs / ONE_DAY_MS);
+		return `${days} día${days === 1 ? '' : 's'}`;
+	};
+
+	const formatRemainingCompactLabel = (activeUntil?: string | null) => {
+		const diffMs = getRemainingMs(activeUntil);
+		if (diffMs == null) return 'n/a';
+		if (diffMs <= 0) return 'vencida';
+		if (diffMs < ONE_HOUR_MS) {
+			const minutes = Math.max(1, Math.ceil(diffMs / ONE_MINUTE_MS));
+			return `${minutes} min`;
+		}
+		if (diffMs < ONE_DAY_MS) {
+			const hours = Math.max(1, Math.ceil(diffMs / ONE_HOUR_MS));
+			return `${hours} h`;
+		}
+		const days = Math.ceil(diffMs / ONE_DAY_MS);
+		return `${days} día${days === 1 ? '' : 's'}`;
+	};
+
+	const getSubscriptionVisualState = (summary: AccountSubscriptionInfo) => {
+		const diffMs = getRemainingMs(summary.active_until);
+		if (diffMs == null) return summary.state;
+		if (diffMs <= 0) return 'expired';
+		if (diffMs <= 5 * ONE_DAY_MS) return 'expiring';
+		return 'active';
+	};
+
+	const getSubscriptionWarningMessage = (warning: SubscriptionWarningInfo) => {
+		const diffMs = getRemainingMs(warning.active_until);
+		if (diffMs != null && diffMs <= 0) {
+			return 'Tu suscripción está vencida.';
+		}
+		return `Tu suscripción vence en ${formatRemainingLabel(
+			warning.active_until,
+			warning.days_remaining
+		)}.`;
+	};
+
 	const isSubscriptionActiveNow = (activeUntil?: string | null) => {
-		const untilTs = parseTimestamp(activeUntil);
-		return untilTs > Date.now();
+		const diffMs = getRemainingMs(activeUntil);
+		return diffMs != null && diffMs > 0;
 	};
 
 	const getOwnerTrainerViews = (trainers: TrainerAdminRow[]) =>
 		trainers.map((trainer) => {
 			const rowKey = trainer.trainer_id ?? toSafeId(trainer.email);
-			const daysRemaining = getDaysRemaining(trainer.active_until);
+			const remainingMsRaw = getRemainingMs(trainer.active_until);
+			const remainingMs = remainingMsRaw == null ? 0 : Math.max(remainingMsRaw, 0);
+			const daysRemaining = remainingMs > 0 ? Math.ceil(remainingMs / ONE_DAY_MS) : 0;
 			const activeNow = trainer.active === true && isSubscriptionActiveNow(trainer.active_until);
 			return {
 				rowKey,
 				trainer,
+				remainingMs,
+				remainingLabel: formatRemainingCompactLabel(trainer.active_until),
 				daysRemaining,
 				activeNow,
 				createdAtTs: parseTimestamp(trainer.created_at)
@@ -203,7 +281,16 @@
 		b.createdAtTs - a.createdAtTs || a.trainer.email.localeCompare(b.trainer.email);
 
 	const sortByExpirationAsc = (a: OwnerTrainerView, b: OwnerTrainerView) =>
-		a.daysRemaining - b.daysRemaining || sortByCreatedDesc(a, b);
+		a.remainingMs - b.remainingMs || sortByCreatedDesc(a, b);
+
+	onMount(() => {
+		const intervalId = window.setInterval(() => {
+			nowTick = Date.now() + serverClockOffsetMs;
+		}, COUNTDOWN_TICK_MS);
+		return () => {
+			window.clearInterval(intervalId);
+		};
+	});
 
 	const getTrainersByTab = (trainers: TrainerAdminRow[]) => {
 		const views = getOwnerTrainerViews(trainers);
@@ -495,16 +582,17 @@
 	</div>
 
 	{#if accountSubscription && accountSubscription.state !== 'owner'}
+		{@const accountSubscriptionVisualState = getSubscriptionVisualState(accountSubscription)}
 		<div
 			class={`rounded-xl border px-4 py-3 text-sm shadow-md shadow-black/20 ${
-				accountSubscription.state === 'expired'
+				accountSubscriptionVisualState === 'expired'
 					? 'border-red-700/60 bg-red-900/20 text-red-200'
-					: accountSubscription.state === 'expiring'
+					: accountSubscriptionVisualState === 'expiring'
 						? 'border-amber-700/60 bg-amber-900/20 text-amber-200'
 						: 'border-emerald-700/50 bg-emerald-900/10 text-emerald-200'
 			}`}
 		>
-			<p class="font-semibold text-base">{subscriptionStateLabel(accountSubscription.state)}</p>
+			<p class="font-semibold text-base">{subscriptionStateLabel(accountSubscriptionVisualState)}</p>
 			{#if accountSubscription.active_until}
 				<p>
 					Vence: <span class="font-semibold">{formatDateTime(accountSubscription.active_until)}</span>
@@ -514,7 +602,7 @@
 				<p>
 					Quedan:
 					<span class="font-semibold">
-						{accountSubscription.days_remaining} día{accountSubscription.days_remaining === 1 ? '' : 's'}
+						{formatRemainingLabel(accountSubscription.active_until, accountSubscription.days_remaining)}
 					</span>
 				</p>
 			{/if}
@@ -524,7 +612,7 @@
 	{#if subscriptionWarning}
 		<div class="rounded-xl border border-amber-700/60 bg-amber-900/25 px-4 py-3 text-sm text-amber-100 shadow-md shadow-black/20">
 			<p class="font-semibold text-base">
-				Tu suscripción vence en {subscriptionWarning.days_remaining ?? '?'} día{subscriptionWarning.days_remaining === 1 ? '' : 's'}.
+				{getSubscriptionWarningMessage(subscriptionWarning)}
 			</p>
 			<p>Renovala antes del vencimiento para evitar cortes de acceso.</p>
 		</div>
@@ -713,12 +801,12 @@
 														<span class="min-w-0 truncate text-sm font-semibold text-slate-100" title={trainer.email}>
 															{trainer.email}
 														</span>
-													<div class="flex items-center gap-3">
-														<span class={`rounded-full border px-2.5 py-1 text-xs font-semibold ${daysRemainingBadgeTone(ownerRow.daysRemaining)}`}>
-															{ownerRow.daysRemaining} día{ownerRow.daysRemaining === 1 ? '' : 's'}
-														</span>
-													</div>
-												</button>
+														<div class="flex items-center gap-3">
+															<span class={`rounded-full border px-2.5 py-1 text-xs font-semibold ${daysRemainingBadgeTone(ownerRow.daysRemaining)}`}>
+																{ownerRow.remainingLabel}
+															</span>
+														</div>
+													</button>
 
 														{#if rowOpen}
 															<div class="border-t border-slate-800/80 px-4 py-6 space-y-6">

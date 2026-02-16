@@ -23,6 +23,9 @@ import { logLoadDuration } from '$lib/server/loadPerf';
 const MAX_CLIENTS_PER_TRAINER = 100;
 const MIN_SUBSCRIPTION_MONTHS = 1;
 const MAX_SUBSCRIPTION_MONTHS = 12;
+const TRIAL_DURATION_MONTH_SENTINEL = 0;
+const TRIAL_DURATION_SECONDS = 60 * 60;
+const SECONDS_PER_MONTH = 30 * 24 * 60 * 60;
 const IDEMPOTENCY_KEY_MAX_LENGTH = 128;
 const OWNER_HISTORY_WINDOW_HOURS = 24;
 const EMAIL_FORMAT_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -402,19 +405,26 @@ export const actions: Actions = {
 			return fail(400, { message: 'Operación inválida. Usá sumar o quitar.' });
 		}
 
+		const isTrialHour = Number.isFinite(months) && months === TRIAL_DURATION_MONTH_SENTINEL;
 		if (
-			!Number.isFinite(months) ||
-			months < MIN_SUBSCRIPTION_MONTHS ||
-			months > MAX_SUBSCRIPTION_MONTHS
+			!isTrialHour &&
+			(!Number.isFinite(months) ||
+				months < MIN_SUBSCRIPTION_MONTHS ||
+				months > MAX_SUBSCRIPTION_MONTHS)
 		) {
-			return fail(400, { message: 'Meses inválidos. Elegí entre 1 y 12.' });
+			return fail(400, { message: 'Duración inválida. Elegí entre 1 hora o 1 a 12 meses.' });
 		}
 
 		if (!idempotencyKey || idempotencyKey.length > IDEMPOTENCY_KEY_MAX_LENGTH) {
 			return fail(400, { message: 'Idempotency key inválida' });
 		}
 
-		const signedMonths = operation === 'remove' ? -months : months;
+		const signedMonths = isTrialHour ? 0 : operation === 'remove' ? -months : months;
+		const signedDurationSeconds = operation === 'remove'
+			? -(isTrialHour ? TRIAL_DURATION_SECONDS : months * SECONDS_PER_MONTH)
+			: isTrialHour
+				? TRIAL_DURATION_SECONDS
+				: months * SECONDS_PER_MONTH;
 		const rawDays = signedMonths * 30;
 
 		let trainerQuery = supabaseAdmin.from('trainers').select('id,email').limit(1);
@@ -445,7 +455,7 @@ export const actions: Actions = {
 
 		const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('grant_trainer_subscription', {
 			p_trainer_id: trainer.id,
-			p_days: rawDays,
+			p_days: signedDurationSeconds,
 			p_admin_id: locals.session.user.id,
 			p_reason: reason,
 			p_idempotency_key: idempotencyKey
@@ -463,7 +473,9 @@ export const actions: Actions = {
 				message.includes('idempotency_key is required') ||
 				message.includes('days must be non-zero') ||
 				message.includes('days must be a multiple of 30') ||
-				message.includes('days per operation must be <= 360')
+				message.includes('days per operation must be <= 360') ||
+				message.includes('duration must be non-zero') ||
+				message.includes('duration must be 1 hour or 1-12 months')
 			) {
 				return fail(400, { message: 'Solicitud inválida para acreditar suscripción' });
 			}
@@ -483,7 +495,7 @@ export const actions: Actions = {
 			return fail(500, { message: 'No pudimos confirmar la acreditación' });
 		}
 
-		if (signedMonths > 0) {
+		if (signedDurationSeconds > 0) {
 			const { error: accessUpsertError } = await supabaseAdmin
 				.from('trainer_access')
 				.upsert({ email: trainerEmail, active: true });
@@ -503,16 +515,25 @@ export const actions: Actions = {
 				operation: operation === 'remove' ? 'remove' : 'add',
 				months: Math.abs(signedMonths),
 				days: rawDays,
+				duration_unit: isTrialHour ? 'hour' : 'month',
+				duration_seconds: signedDurationSeconds,
 				applied: result.applied,
 				active_until_before: result.active_until_before,
 				active_until_after: result.active_until_after
 			}
 		});
 
+		const durationLabel = isTrialHour
+			? `${signedDurationSeconds > 0 ? '+' : '-'}1 hora`
+			: `${signedMonths > 0 ? '+' : ''}${signedMonths} mes${Math.abs(signedMonths) === 1 ? '' : 'es'}`;
+		const equivalenceSuffix = isTrialHour
+			? ''
+			: ` = ${rawDays > 0 ? '+' : ''}${rawDays} días`;
+
 		return {
 			success: true,
 			message: result.applied
-				? `${signedMonths > 0 ? 'Suscripción acreditada' : 'Suscripción ajustada'} (${signedMonths > 0 ? '+' : ''}${signedMonths} mes${Math.abs(signedMonths) === 1 ? '' : 'es'} = ${rawDays > 0 ? '+' : ''}${rawDays} días). Vence: ${result.active_until_after}`
+				? `${signedDurationSeconds > 0 ? 'Suscripción acreditada' : 'Suscripción ajustada'} (${durationLabel}${equivalenceSuffix}). Vence: ${result.active_until_after}`
 				: `Operación ya procesada. Vence: ${result.active_until_after}`
 		};
 	},

@@ -77,7 +77,10 @@
 	let ownerTrainerTab = $state<OwnerTrainerTab>('expiring');
 	let expandedOwnerTrainerRowKey = $state<string | null>(null);
 	let showOwnerHistory = $state(false);
+	const TRIAL_HOUR_OPTION = 0;
+	const TRIAL_DURATION_SECONDS = 60 * 60;
 	const MONTH_OPTIONS = Array.from({ length: 12 }, (_, idx) => idx + 1);
+	const DURATION_OPTIONS = [TRIAL_HOUR_OPTION, ...MONTH_OPTIONS];
 	const OWNER_HISTORY_WINDOW_HOURS = 24;
 	const ONE_DAY_MS = 1000 * 60 * 60 * 24;
 	let ownerSubscriptionDrafts = $state<Record<string, OwnerSubscriptionDraft>>({});
@@ -88,8 +91,14 @@
 	const parseDraftMonths = (value: string) => {
 		const parsed = Number.parseInt(value, 10);
 		if (!Number.isFinite(parsed)) return 1;
+		if (parsed === TRIAL_HOUR_OPTION) return TRIAL_HOUR_OPTION;
 		return Math.min(12, Math.max(1, parsed));
 	};
+	const isTrialHourDuration = (months: number) => months === TRIAL_HOUR_OPTION;
+	const formatDurationLabel = (months: number) =>
+		isTrialHourDuration(months) ? '1 hora' : `${months} mes${months === 1 ? '' : 'es'}`;
+	const durationSecondsFromMonths = (months: number) =>
+		isTrialHourDuration(months) ? TRIAL_DURATION_SECONDS : months * 30 * 24 * 60 * 60;
 	const normalizeEmail = (value: string | null | undefined) => (value ?? '').trim().toLowerCase();
 	const isValidEmailFormat = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 	const getOwnerSubscriptionDraft = (rowKey: string): OwnerSubscriptionDraft =>
@@ -118,7 +127,15 @@
 		}
 		if (entry.action_type === 'grant_subscription') {
 			const operation = details?.operation === 'remove' ? 'remove' : 'add';
-			const monthsRaw = Number(details?.months ?? 0);
+			const monthsRaw = Number(details?.months ?? NaN);
+			const durationSecondsRaw = Number(details?.duration_seconds ?? NaN);
+			const isTrialHour =
+				details?.duration_unit === 'hour' ||
+				(Number.isFinite(monthsRaw) && monthsRaw === TRIAL_HOUR_OPTION) ||
+				(Number.isFinite(durationSecondsRaw) && Math.abs(durationSecondsRaw) === TRIAL_DURATION_SECONDS);
+			if (isTrialHour) {
+				return `${operation === 'remove' ? 'Quitaste' : 'Sumaste'} 1 hora`;
+			}
 			const safeMonths = Number.isFinite(monthsRaw) && monthsRaw > 0 ? monthsRaw : 1;
 			return `${operation === 'remove' ? 'Quitaste' : 'Sumaste'} ${safeMonths} mes${safeMonths === 1 ? '' : 'es'}`;
 		}
@@ -275,8 +292,7 @@
 
 		const formData = new FormData(formEl);
 		const operation = String(formData.get('operation') || 'add').trim().toLowerCase();
-		const parsedMonths = Number.parseInt(String(formData.get('months') || '1'), 10);
-		const months = Number.isFinite(parsedMonths) && parsedMonths >= 1 ? parsedMonths : 1;
+		const months = parseDraftMonths(String(formData.get('months') || '1'));
 		const reason = String(formData.get('reason') || '').trim();
 
 		ownerActionConfirm = {
@@ -765,9 +781,9 @@
 																					})}
 																				class="custom-select w-full rounded-lg border border-slate-700 bg-[#151827] px-3 py-2.5 pr-10 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
 																			>
-																				{#each MONTH_OPTIONS as monthCount}
-																					<option value={monthCount}>
-																						{monthCount} mes{monthCount === 1 ? '' : 'es'}
+																				{#each DURATION_OPTIONS as durationOption}
+																					<option value={durationOption}>
+																						{formatDurationLabel(durationOption)}
 																					</option>
 																				{/each}
 																			</select>
@@ -780,15 +796,17 @@
 																				<path d="M6 8l4 4 4-4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"></path>
 																			</svg>
 																		</div>
-																	{#if removalAdjustment}
-																		<p class={`col-span-2 text-xs ${
-																			highRiskRemoval ? 'text-red-200' : 'text-amber-200'
-																		}`}>
-																			{highRiskRemoval
-																				? `Alerta de riesgo alto: vas a quitar ${subscriptionDraft.months} meses.`
-																				: 'Acción sensible: quitando meses de suscripción.'}
-																		</p>
-																	{/if}
+																		{#if removalAdjustment}
+																			<p class={`col-span-2 text-xs ${
+																				highRiskRemoval ? 'text-red-200' : 'text-amber-200'
+																			}`}>
+																				{highRiskRemoval
+																					? `Alerta de riesgo alto: vas a quitar ${subscriptionDraft.months} meses.`
+																					: isTrialHourDuration(subscriptionDraft.months)
+																						? 'Acción sensible: quitando 1 hora de suscripción.'
+																						: 'Acción sensible: quitando meses de suscripción.'}
+																			</p>
+																		{/if}
 																</div>
 																<button
 																	type="submit"
@@ -1032,6 +1050,10 @@
 					</div>
 					{:else}
 						{@const signedMonths = ownerActionConfirm.operation === 'remove' ? -ownerActionConfirm.months : ownerActionConfirm.months}
+						{@const signedDurationSeconds =
+							ownerActionConfirm.operation === 'remove'
+								? -durationSecondsFromMonths(ownerActionConfirm.months)
+								: durationSecondsFromMonths(ownerActionConfirm.months)}
 						{@const signedDays = signedMonths * 30}
 						{@const confirmIsRemoval = ownerActionConfirm.operation === 'remove'}
 						{@const confirmHighRiskRemoval = confirmIsRemoval && ownerActionConfirm.months >= 3}
@@ -1049,13 +1071,18 @@
 								Vas a
 									<span class="font-semibold text-slate-100">
 									{ownerActionConfirm.operation === 'add' ? 'sumar' : 'quitar'}&nbsp;
-									{Math.abs(signedMonths)} mes{Math.abs(signedMonths) === 1 ? '' : 'es'}
+									{formatDurationLabel(Math.abs(ownerActionConfirm.months))}
 								</span>
 							a <span class="font-semibold text-slate-100">{ownerActionConfirm.trainerEmail}</span>.
 						</p>
 							<p class="text-sm text-slate-400">
-								Equivale a <span class="font-semibold text-slate-100">{signedDays > 0 ? '+' : ''}{signedDays} días</span>
-								exactos de 24 horas.
+								{#if isTrialHourDuration(ownerActionConfirm.months)}
+									Equivale a <span class="font-semibold text-slate-100">{signedDurationSeconds > 0 ? '+' : ''}1 hora</span>
+									exacta.
+								{:else}
+									Equivale a <span class="font-semibold text-slate-100">{signedDays > 0 ? '+' : ''}{signedDays} días</span>
+									exactos de 24 horas.
+								{/if}
 							</p>
 							{#if confirmIsRemoval}
 								<p class={`rounded-lg border px-3 py-2 text-sm ${

@@ -8,14 +8,59 @@ import { env as privateEnv } from '$env/dynamic/private';
 import { supabaseAdmin } from '$lib/server/supabaseAdmin';
 import {
 	OWNER_EMAIL,
+	ensureTrainerRecordByEmail,
+	getAccountSubscriptionSummary,
+	getAndMarkSubscriptionWarning,
+	getTrainerAccessStatusByEmail,
 	ensureTrainerAccess,
 	ensureTrainerExists,
 	fetchTrainerAdminData,
+	fetchOwnerActionHistory,
 	isOwnerEmail
 } from '$lib/server/trainerAccess';
 import { logLoadDuration } from '$lib/server/loadPerf';
 
 const MAX_CLIENTS_PER_TRAINER = 100;
+const MIN_SUBSCRIPTION_MONTHS = 1;
+const MAX_SUBSCRIPTION_MONTHS = 12;
+const IDEMPOTENCY_KEY_MAX_LENGTH = 128;
+const OWNER_HISTORY_WINDOW_HOURS = 24;
+const EMAIL_FORMAT_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+type OwnerActionType = 'add_trainer' | 'grant_subscription' | 'toggle_trainer' | 'force_sign_out';
+
+const logOwnerAction = async ({
+	adminId,
+	adminEmail,
+	actionType,
+	targetEmail,
+	targetTrainerId,
+	details
+}: {
+	adminId?: string | null;
+	adminEmail?: string | null;
+	actionType: OwnerActionType;
+	targetEmail?: string | null;
+	targetTrainerId?: string | null;
+	details?: Record<string, unknown> | null;
+}) => {
+	const normalizedAdminEmail = adminEmail?.trim().toLowerCase();
+	if (!normalizedAdminEmail) return;
+
+	const { error } = await supabaseAdmin.from('owner_action_history').insert({
+		admin_id: adminId ?? null,
+		admin_email: normalizedAdminEmail,
+		action_type: actionType,
+		target_email: targetEmail ?? null,
+		target_trainer_id: targetTrainerId ?? null,
+		details: details ?? {}
+	});
+
+	if (error) {
+		// No romper acciones críticas por problemas de auditoría.
+		console.error('owner action history insert error', error);
+	}
+};
 
 type ProgressRelation = {
 	last_completed_at: string | null;
@@ -72,15 +117,15 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			throw redirect(303, '/login');
 		}
 
-		const allowed = await ensureTrainerAccess(locals.session.user.email);
-		if (!allowed) {
+		const accessStatus = await getTrainerAccessStatusByEmail(locals.session.user.email);
+		if (!accessStatus.allowed) {
 			await locals.supabase?.auth.signOut();
 			throw redirect(303, '/login');
 		}
 
 		const supabase = locals.supabase;
 		const trainerId = locals.session.user.id;
-		const isOwner = isOwnerEmail(locals.session.user.email);
+		const isOwner = accessStatus.reason === 'owner' || isOwnerEmail(locals.session.user.email);
 		let clients: ClientWithProgress[] = [];
 
 		if (fastPanelLoads) {
@@ -142,13 +187,23 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		const siteUrl = envSite && !envSite.includes('localhost') ? envSite : origin;
 		const shouldLazyAdmin = fastPanelLoads && isOwner;
 		const trainerAdmin = isOwner && !shouldLazyAdmin ? await fetchTrainerAdminData() : null;
+		const ownerActionHistory =
+			isOwner && !shouldLazyAdmin
+				? await fetchOwnerActionHistory(locals.session.user.email, OWNER_HISTORY_WINDOW_HOURS)
+				: null;
+		const accountSubscription = await getAccountSubscriptionSummary(locals.session.user.email);
+		const subscriptionWarningRaw = await getAndMarkSubscriptionWarning(locals.session.user.email, 5);
+		const subscriptionWarning = subscriptionWarningRaw?.should_show ? subscriptionWarningRaw : null;
 
 		return {
 			clients: toClientSummaries(clients),
 			siteUrl,
 			trainerAdmin,
+			ownerActionHistory,
 			isOwner,
-			lazyAdmin: shouldLazyAdmin
+			lazyAdmin: shouldLazyAdmin,
+			accountSubscription,
+			subscriptionWarning
 		};
 	} finally {
 		logLoadDuration('/clientes', startedAt, {
@@ -256,14 +311,210 @@ export const actions: Actions = {
 			return fail(400, { message: 'Email requerido' });
 		}
 
+		if (!EMAIL_FORMAT_REGEX.test(email)) {
+			return fail(400, { message: 'Ingresá un email válido.' });
+		}
+
 		if (email === OWNER_EMAIL) {
 			return { success: true };
 		}
 
-		await supabaseAdmin.from('trainer_access').upsert({ email, active: true });
-		await supabaseAdmin.from('trainers').update({ status: 'active' }).eq('email', email);
+		const [{ data: existingTrainer, error: existingTrainerError }, { data: existingAccess, error: existingAccessError }] = await Promise.all([
+			supabaseAdmin.from('trainers').select('id').eq('email', email).maybeSingle(),
+			supabaseAdmin.from('trainer_access').select('email').eq('email', email).maybeSingle()
+		]);
+
+		if (existingTrainerError || existingAccessError) {
+			console.error('addTrainer existence check error', { existingTrainerError, existingAccessError });
+			return fail(500, { message: 'No pudimos validar el email del entrenador.' });
+		}
+
+		if (existingTrainer || existingAccess) {
+			return fail(409, {
+				message: 'Ese email ya existe. Usá su fila para habilitar/deshabilitar o ajustar días.'
+			});
+		}
+
+		const { error: accessUpsertError } = await supabaseAdmin
+			.from('trainer_access')
+			.upsert({ email, active: true });
+		if (accessUpsertError) {
+			console.error('addTrainer trainer_access upsert error', accessUpsertError);
+			return fail(500, { message: 'No pudimos habilitar el acceso del entrenador' });
+		}
+
+		const provisionedTrainer = await ensureTrainerRecordByEmail(email);
+		if (provisionedTrainer?.id) {
+			const { error: trainerUpdateError } = await supabaseAdmin
+				.from('trainers')
+				.update({ status: 'active' })
+				.eq('id', provisionedTrainer.id);
+			if (trainerUpdateError) {
+				console.error('addTrainer trainers status update by id error', trainerUpdateError);
+				return fail(500, { message: 'No pudimos actualizar el estado del entrenador' });
+			}
+		} else {
+			const { error: trainerUpdateError } = await supabaseAdmin
+				.from('trainers')
+				.update({ status: 'active' })
+				.eq('email', email);
+			if (trainerUpdateError) {
+				console.error('addTrainer trainers status update by email error', trainerUpdateError);
+				return fail(500, { message: 'No pudimos actualizar el estado del entrenador' });
+			}
+		}
+
+		await logOwnerAction({
+			adminId: locals.session.user.id,
+			adminEmail: locals.session.user.email,
+			actionType: 'add_trainer',
+			targetEmail: email,
+			targetTrainerId: provisionedTrainer?.id ?? null,
+			details: {
+				manual_active: true
+			}
+		});
 
 		return { success: true };
+	},
+	grantSubscription: async ({ request, locals }) => {
+		if (locals.session?.user.email?.toLowerCase() !== OWNER_EMAIL) {
+			throw redirect(303, '/login');
+		}
+
+		const formData = await request.formData();
+		const trainerId = String(formData.get('trainer_id') || '').trim();
+		const trainerEmailInput = String(formData.get('trainer_email') || '')
+			.trim()
+			.toLowerCase();
+		const months = Number.parseInt(String(formData.get('months') || ''), 10);
+		const operation = String(formData.get('operation') || 'add').trim().toLowerCase();
+		const idempotencyKey = String(formData.get('idempotency_key') || '').trim();
+		const reasonRaw = String(formData.get('reason') || '').trim();
+		const reason = reasonRaw.length > 0 ? reasonRaw.slice(0, 500) : null;
+
+		if (!trainerId && !trainerEmailInput) {
+			return fail(400, { message: 'Entrenador inválido.' });
+		}
+
+		const validOperation = operation === 'add' || operation === 'remove';
+		if (!validOperation) {
+			return fail(400, { message: 'Operación inválida. Usá sumar o quitar.' });
+		}
+
+		if (
+			!Number.isFinite(months) ||
+			months < MIN_SUBSCRIPTION_MONTHS ||
+			months > MAX_SUBSCRIPTION_MONTHS
+		) {
+			return fail(400, { message: 'Meses inválidos. Elegí entre 1 y 12.' });
+		}
+
+		if (!idempotencyKey || idempotencyKey.length > IDEMPOTENCY_KEY_MAX_LENGTH) {
+			return fail(400, { message: 'Idempotency key inválida' });
+		}
+
+		const signedMonths = operation === 'remove' ? -months : months;
+		const rawDays = signedMonths * 30;
+
+		let trainerQuery = supabaseAdmin.from('trainers').select('id,email').limit(1);
+		if (trainerId) {
+			trainerQuery = trainerQuery.eq('id', trainerId);
+		} else {
+			trainerQuery = trainerQuery.eq('email', trainerEmailInput);
+		}
+		let { data: trainer, error: trainerError } = await trainerQuery.maybeSingle();
+
+		if (trainerError || !trainer?.email) {
+			const fallbackEmail = trainerEmailInput || (trainer?.email ?? null);
+			const provisionedTrainer = await ensureTrainerRecordByEmail(fallbackEmail);
+			if (provisionedTrainer) {
+				trainer = { id: provisionedTrainer.id, email: provisionedTrainer.email };
+			} else {
+				return fail(404, {
+					message:
+						'No encontramos al entrenador en la tabla interna ni en Auth. Verificá que el email sea correcto y que la cuenta exista.'
+				});
+			}
+		}
+
+		const trainerEmail = trainer.email.trim().toLowerCase();
+		if (trainerEmail === OWNER_EMAIL) {
+			return fail(400, { message: 'No se puede acreditar suscripción al owner' });
+		}
+
+		const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('grant_trainer_subscription', {
+			p_trainer_id: trainer.id,
+			p_days: rawDays,
+			p_admin_id: locals.session.user.id,
+			p_reason: reason,
+			p_idempotency_key: idempotencyKey
+		});
+
+		if (rpcError) {
+			const message = (rpcError.message ?? '').toLowerCase();
+			if (message.includes('idempotency key reused with different payload')) {
+				return fail(409, {
+					message:
+						'La operación ya existe con la misma idempotency key pero con datos distintos. Generá una nueva y reintentá.'
+				});
+			}
+			if (
+				message.includes('idempotency_key is required') ||
+				message.includes('days must be non-zero') ||
+				message.includes('days must be a multiple of 30') ||
+				message.includes('days per operation must be <= 360')
+			) {
+				return fail(400, { message: 'Solicitud inválida para acreditar suscripción' });
+			}
+			console.error('grant subscription rpc error', rpcError);
+			return fail(500, { message: 'No pudimos acreditar la suscripción' });
+		}
+
+		const result = (Array.isArray(rpcData) ? rpcData[0] : null) as
+			| {
+					applied: boolean;
+					active_until_before: string;
+					active_until_after: string;
+			  }
+			| null;
+
+		if (!result) {
+			return fail(500, { message: 'No pudimos confirmar la acreditación' });
+		}
+
+		if (signedMonths > 0) {
+			const { error: accessUpsertError } = await supabaseAdmin
+				.from('trainer_access')
+				.upsert({ email: trainerEmail, active: true });
+			if (accessUpsertError) {
+				console.error('grantSubscription trainer_access upsert error', accessUpsertError);
+				return fail(500, { message: 'No pudimos sincronizar el acceso manual del entrenador' });
+			}
+		}
+
+		await logOwnerAction({
+			adminId: locals.session.user.id,
+			adminEmail: locals.session.user.email,
+			actionType: 'grant_subscription',
+			targetEmail: trainerEmail,
+			targetTrainerId: trainer.id,
+			details: {
+				operation: operation === 'remove' ? 'remove' : 'add',
+				months: Math.abs(signedMonths),
+				days: rawDays,
+				applied: result.applied,
+				active_until_before: result.active_until_before,
+				active_until_after: result.active_until_after
+			}
+		});
+
+		return {
+			success: true,
+			message: result.applied
+				? `${signedMonths > 0 ? 'Suscripción acreditada' : 'Suscripción ajustada'} (${signedMonths > 0 ? '+' : ''}${signedMonths} mes${Math.abs(signedMonths) === 1 ? '' : 'es'} = ${rawDays > 0 ? '+' : ''}${rawDays} días). Vence: ${result.active_until_after}`
+				: `Operación ya procesada. Vence: ${result.active_until_after}`
+		};
 	},
 	toggleTrainer: async ({ request, locals }) => {
 		if (locals.session?.user.email?.toLowerCase() !== OWNER_EMAIL) {
@@ -282,15 +533,64 @@ export const actions: Actions = {
 			return { success: true };
 		}
 
-		await supabaseAdmin.from('trainer_access').upsert({ email, active: nextActive });
-		await supabaseAdmin.from('trainers').update({ status: nextActive ? 'active' : 'inactive' }).eq('email', email);
+		const { error: accessUpsertError } = await supabaseAdmin
+			.from('trainer_access')
+			.upsert({ email, active: nextActive });
+		if (accessUpsertError) {
+			console.error('toggleTrainer trainer_access upsert error', accessUpsertError);
+			return fail(500, { message: 'No pudimos actualizar el acceso del entrenador' });
+		}
 
-		if (!nextActive) {
-			const { data: trainer } = await supabaseAdmin.from('trainers').select('id').eq('email', email).maybeSingle();
-			if (trainer?.id) {
-				await supabaseAdmin.auth.admin.signOut(trainer.id);
+		const provisionedTrainer = await ensureTrainerRecordByEmail(email);
+		if (provisionedTrainer?.id) {
+			const { error: trainerUpdateError } = await supabaseAdmin
+				.from('trainers')
+				.update({ status: nextActive ? 'active' : 'inactive' })
+				.eq('id', provisionedTrainer.id);
+			if (trainerUpdateError) {
+				console.error('toggleTrainer trainers status update by id error', trainerUpdateError);
+				return fail(500, { message: 'No pudimos actualizar el estado del entrenador' });
+			}
+		} else {
+			const { error: trainerUpdateError } = await supabaseAdmin
+				.from('trainers')
+				.update({ status: nextActive ? 'active' : 'inactive' })
+				.eq('email', email);
+			if (trainerUpdateError) {
+				console.error('toggleTrainer trainers status update by email error', trainerUpdateError);
+				return fail(500, { message: 'No pudimos actualizar el estado del entrenador' });
 			}
 		}
+
+		if (!nextActive) {
+			const { data: trainer, error: trainerLookupError } = await supabaseAdmin
+				.from('trainers')
+				.select('id')
+				.eq('email', email)
+				.maybeSingle();
+			if (trainerLookupError) {
+				console.error('toggleTrainer trainer lookup error', trainerLookupError);
+				return fail(500, { message: 'No pudimos cerrar las sesiones del entrenador' });
+			}
+			if (trainer?.id) {
+				const { error: signOutError } = await supabaseAdmin.auth.admin.signOut(trainer.id);
+				if (signOutError) {
+					console.error('toggleTrainer signOut error', signOutError);
+					return fail(500, { message: 'No pudimos cerrar las sesiones del entrenador' });
+				}
+			}
+		}
+
+		await logOwnerAction({
+			adminId: locals.session.user.id,
+			adminEmail: locals.session.user.email,
+			actionType: 'toggle_trainer',
+			targetEmail: email,
+			targetTrainerId: provisionedTrainer?.id ?? null,
+			details: {
+				next_active: nextActive
+			}
+		});
 
 		return { success: true };
 	},
@@ -306,10 +606,31 @@ export const actions: Actions = {
 		if (email === OWNER_EMAIL) {
 			return { success: true };
 		}
-		const { data: trainer } = await supabaseAdmin.from('trainers').select('id').eq('email', email).maybeSingle();
-		if (trainer?.id) {
-			await supabaseAdmin.auth.admin.signOut(trainer.id);
+		const { data: trainer, error: trainerLookupError } = await supabaseAdmin
+			.from('trainers')
+			.select('id')
+			.eq('email', email)
+			.maybeSingle();
+		if (trainerLookupError) {
+			console.error('forceSignOut trainer lookup error', trainerLookupError);
+			return fail(500, { message: 'No pudimos ubicar al entrenador para cerrar sesión' });
 		}
+		if (trainer?.id) {
+			const { error: signOutError } = await supabaseAdmin.auth.admin.signOut(trainer.id);
+			if (signOutError) {
+				console.error('forceSignOut signOut error', signOutError);
+				return fail(500, { message: 'No pudimos cerrar las sesiones del entrenador' });
+			}
+		}
+
+		await logOwnerAction({
+			adminId: locals.session.user.id,
+			adminEmail: locals.session.user.email,
+			actionType: 'force_sign_out',
+			targetEmail: email,
+			targetTrainerId: trainer?.id ?? null
+		});
+
 		return { success: true };
 	},
 	delete: async ({ request, locals }) => {

@@ -8,10 +8,12 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	event.locals.supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 		cookies: {
-			get: (key) => event.cookies.get(key),
-			set: (key, value, options) =>
-				event.cookies.set(key, value, { path: '/', ...options }),
-			remove: (key, options) => event.cookies.delete(key, { path: '/', ...options })
+			getAll: () => event.cookies.getAll().map(({ name, value }) => ({ name, value })),
+			setAll: (cookiesToSet) => {
+				cookiesToSet.forEach(({ name, value, options }) => {
+					event.cookies.set(name, value, { path: '/', ...options });
+				});
+			}
 		}
 	});
 

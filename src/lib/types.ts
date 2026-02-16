@@ -62,6 +62,18 @@ export type TrainerAdminRow = {
 	trainer_id?: string;
 	status?: string | null;
 	created_at?: string | null;
+	active_until?: string | null;
+};
+
+export type OwnerActionHistoryRow = {
+	id: string;
+	admin_id?: string | null;
+	admin_email: string;
+	action_type: 'add_trainer' | 'grant_subscription' | 'toggle_trainer' | 'force_sign_out';
+	target_email?: string | null;
+	target_trainer_id?: string | null;
+	details?: Record<string, unknown> | null;
+	created_at: string;
 };
 
 export type OtherClientRow = {

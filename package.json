@@ -11,13 +11,21 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"test": "playwright test",
+		"test:smoke": "PW_JSON_REPORT=test-results/reports/smoke.json playwright test e2e/smoke --project=chromium",
+		"test:smoke:mobile": "PW_JSON_REPORT=test-results/reports/smoke-mobile.json playwright test e2e/smoke --project=mobile-chromium",
+		"test:full": "PW_JSON_REPORT=test-results/reports/full.json playwright test e2e/full --project=chromium --retries=1",
 		"test:ui": "playwright test --ui",
 		"test:headed": "playwright test --headed",
 		"test:debug": "playwright test --debug",
 		"test:report": "playwright show-report",
-		"bench:panel": "tsx tests/benchmarks/panel-navigation.bench.ts"
+		"bench:panel": "tsx tests/benchmarks/panel-navigation.bench.ts",
+		"bench:panel:mobile": "tsx tests/benchmarks/panel-navigation.mobile.bench.ts",
+		"test:cleanup:verify": "tsx tests/helpers/sweep.ts verify-all",
+		"audit:report": "tsx tests/reporting/build-audit-report.ts",
+		"test:audit:nightly": "npm run test:full && npm run test:smoke:mobile && npm run bench:panel && npm run bench:panel:mobile && npm run test:cleanup:verify && npm run audit:report"
 	},
 	"devDependencies": {
+		"@axe-core/playwright": "^4.10.2",
 		"@browserbasehq/stagehand": "^3.0.7",
 		"@playwright/test": "^1.57.0",
 		"@sveltejs/adapter-vercel": "^6.3.0",

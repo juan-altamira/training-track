@@ -1,4 +1,4 @@
-import { chromium } from '@playwright/test';
+import { chromium, devices } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
@@ -34,52 +34,51 @@ const main = async () => {
 	const baseUrl = process.env.TEST_BASE_URL ?? 'https://training-track.vercel.app';
 	const email = process.env.TEST_TRAINER_EMAIL ?? process.env.TEST_EMAIL;
 	const password = process.env.TEST_TRAINER_PASSWORD ?? process.env.TEST_PASSWORD;
-	const rounds = Number(process.env.PERF_ROUNDS ?? 30);
-	const outputFile = process.env.PERF_OUTPUT ?? 'test-results/panel-navigation-benchmark.json';
+	const rounds = Number(process.env.PERF_ROUNDS ?? 20);
+	const outputFile =
+		process.env.PERF_OUTPUT_MOBILE ?? 'test-results/panel-navigation-mobile-benchmark.json';
 
 	if (!email || !password) {
-		throw new Error(
-			'TEST_TRAINER_EMAIL/TEST_TRAINER_PASSWORD (o TEST_EMAIL/TEST_PASSWORD) son obligatorios para el benchmark.'
-		);
+		throw new Error('TEST_TRAINER_EMAIL/TEST_TRAINER_PASSWORD (o TEST_EMAIL/TEST_PASSWORD) son obligatorios.');
 	}
 	if (!Number.isFinite(rounds) || rounds <= 0) {
 		throw new Error('PERF_ROUNDS debe ser un número positivo.');
 	}
 
 	const browser = await chromium.launch({ headless: true });
-	const context = await browser.newContext();
+	const context = await browser.newContext({ ...devices['iPhone 13'] });
 	const page = await context.newPage();
 
 	const openSamples: number[] = [];
 	const backSamples: number[] = [];
 
 	try {
-		await page.goto(`${baseUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+		await page.goto(`${baseUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
 		await page.fill('input[type="email"]', email);
 		await page.fill('input[type="password"]', password);
 
 		await Promise.all([
-			page.waitForURL(/\/clientes(\?.*)?$/, { timeout: 45_000 }),
+			page.waitForURL(/\/clientes(\?.*)?$/, { timeout: 60_000 }),
 			page.click('button[type="submit"]')
 		]);
 
-		await page.waitForSelector('button:has-text("Abrir rutina del alumno")', { timeout: 45_000 });
+		await page.waitForSelector('button:has-text("Abrir rutina del alumno")', { timeout: 60_000 });
 
 		for (let i = 0; i < rounds; i++) {
 			const openStart = Date.now();
 			await Promise.all([
-				page.waitForURL(/\/clientes\/[a-f0-9-]+$/, { timeout: 45_000 }),
+				page.waitForURL(/\/clientes\/[a-f0-9-]+$/, { timeout: 60_000 }),
 				page.locator('button:has-text("Abrir rutina del alumno")').first().click()
 			]);
-			await page.waitForSelector('text=Volver al panel', { timeout: 45_000 });
+			await page.waitForSelector('text=Volver al panel', { timeout: 60_000 });
 			openSamples.push(Date.now() - openStart);
 
 			const backStart = Date.now();
 			await Promise.all([
-				page.waitForURL(/\/clientes(\?.*)?$/, { timeout: 45_000 }),
+				page.waitForURL(/\/clientes(\?.*)?$/, { timeout: 60_000 }),
 				page.click('text=Volver al panel')
 			]);
-			await page.waitForSelector('button:has-text("Abrir rutina del alumno")', { timeout: 45_000 });
+			await page.waitForSelector('button:has-text("Abrir rutina del alumno")', { timeout: 60_000 });
 			backSamples.push(Date.now() - backStart);
 		}
 	} finally {
@@ -89,6 +88,7 @@ const main = async () => {
 	const report = {
 		timestamp_utc: new Date().toISOString(),
 		base_url: baseUrl,
+		device: 'iPhone 13 (emulated)',
 		rounds,
 		open: toStats(openSamples),
 		back: toStats(backSamples)
@@ -98,7 +98,7 @@ const main = async () => {
 	writeFileSync(outputFile, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
 
 	console.log(JSON.stringify(report, null, 2));
-	console.log(`\nBenchmark guardado en ${outputFile}`);
+	console.log(`\nBenchmark mobile guardado en ${outputFile}`);
 };
 
 main().catch((error) => {

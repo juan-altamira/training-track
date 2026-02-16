@@ -38,7 +38,11 @@ Abrí http://localhost:5173.
 
 - `npm run check` – tipado y chequeos de Svelte.
 - `npm run build` – compila para producción.
+- `npm run test:smoke` – suite bloqueante (fase 1).
+- `npm run test:full` – suite exhaustiva (fase 2 nightly).
 - `npm run bench:panel` – benchmark no destructivo de navegación `/clientes` ↔ `/clientes/[id]`.
+- `npm run bench:panel:mobile` – benchmark mobile emulado.
+- `npm run test:audit:nightly` – pipeline completo de auditoría (tests + bench + reportes).
 
 ## Despliegue
 
@@ -68,3 +72,11 @@ Abrí http://localhost:5173.
 ## Autenticación
 
 Se usa email+contraseña (Supabase Auth). Magic links se usan sólo para alta o recuperación según configuración de Supabase. Ajustá las plantillas de correo desde el panel de Supabase si querés personalizar los textos o el destino (`/login`).
+
+## Suscripciones y acceso
+
+- El acceso de entrenadores ahora se valida server-side con dos condiciones:
+  - `trainer_access.active = true` (kill-switch manual)
+  - `trainers.active_until > now()` (hora UTC de Postgres)
+- Las acreditaciones se registran en `subscription_grants` (append-only) y actualizan `active_until` de forma atómica.
+- El endpoint de acreditación usa idempotencia (`idempotency_key` única) para evitar duplicados por retries/doble click.

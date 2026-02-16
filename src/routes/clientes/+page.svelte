@@ -1,16 +1,66 @@
 <script lang="ts">
-	import type { ClientSummary, TrainerAdminRow } from '$lib/types';
+	import type { ClientSummary, OwnerActionHistoryRow, TrainerAdminRow } from '$lib/types';
 	import { goto, preloadData } from '$app/navigation';
 	import { enhance } from '$app/forms';
 	import { rememberLastClientRoute } from '$lib/client/sessionResumeWarmup';
+
+	type AccountSubscriptionInfo = {
+		is_owner: boolean;
+		state: 'owner' | 'active' | 'expiring' | 'expired' | 'missing';
+		active_until: string | null;
+		now_utc: string;
+		days_remaining: number | null;
+	};
+
+	type SubscriptionWarningInfo = {
+		should_show: boolean;
+		reason: string;
+		active_until: string | null;
+		days_remaining: number | null;
+		warned_at: string | null;
+		now_utc: string;
+	};
+
+	type OwnerActionConfirm =
+		| {
+				kind: 'subscription';
+				formId: string;
+				trainerEmail: string;
+				operation: 'add' | 'remove';
+				months: number;
+				reason: string;
+		  }
+		| {
+				kind: 'disable';
+				formId: string;
+				trainerEmail: string;
+		  };
+
+	type OwnerSubscriptionDraft = {
+		operation: 'add' | 'remove';
+		months: number;
+	};
+
+	type OwnerTrainerTab = 'expiring' | 'active' | 'inactive';
+
+	type OwnerTrainerView = {
+		rowKey: string;
+		trainer: TrainerAdminRow;
+		daysRemaining: number;
+		activeNow: boolean;
+		createdAtTs: number;
+	};
 
 	let { data, form } = $props();
 	const OWNER_EMAIL = 'juanpabloaltamira@protonmail.com';
 	let clients = (data?.clients ?? []) as ClientSummary[];
 	let trainerAdmin = $state((data?.trainerAdmin ?? null) as TrainerAdminRow[] | null);
+	let ownerActionHistory = $state((data?.ownerActionHistory ?? null) as OwnerActionHistoryRow[] | null);
 	let isOwner = data?.isOwner ?? false;
 	const lazyAdmin = data?.lazyAdmin === true;
 	const SITE_URL = (data?.siteUrl ?? '').replace(/\/?$/, '');
+	const accountSubscription = (data?.accountSubscription ?? null) as AccountSubscriptionInfo | null;
+	const subscriptionWarning = (data?.subscriptionWarning ?? null) as SubscriptionWarningInfo | null;
 	let deleteTarget = $state<ClientSummary | null>(null);
 	let deleteConfirm = $state('');
 	let openingId = $state<string | null>(null);
@@ -21,6 +71,261 @@
 	let showOwnerPanel = $state(isOwner && !lazyAdmin);
 	let loadingOwnerPanel = $state(false);
 	let ownerPanelError = $state<string | null>(null);
+	let ownerActionConfirm = $state<OwnerActionConfirm | null>(null);
+	let ownerTrainerSearchTerm = $state('');
+	let ownerTrainerCreateUiError = $state<string | null>(null);
+	let ownerTrainerTab = $state<OwnerTrainerTab>('expiring');
+	let expandedOwnerTrainerRowKey = $state<string | null>(null);
+	let showOwnerHistory = $state(false);
+	const MONTH_OPTIONS = Array.from({ length: 12 }, (_, idx) => idx + 1);
+	const OWNER_HISTORY_WINDOW_HOURS = 24;
+	const ONE_DAY_MS = 1000 * 60 * 60 * 24;
+	let ownerSubscriptionDrafts = $state<Record<string, OwnerSubscriptionDraft>>({});
+	const formatDateTime = (value?: string | null) => (value ? new Date(value).toLocaleString() : 'n/a');
+	const toSafeId = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+	const toDraftOperation = (value: string): OwnerSubscriptionDraft['operation'] =>
+		value === 'remove' ? 'remove' : 'add';
+	const parseDraftMonths = (value: string) => {
+		const parsed = Number.parseInt(value, 10);
+		if (!Number.isFinite(parsed)) return 1;
+		return Math.min(12, Math.max(1, parsed));
+	};
+	const normalizeEmail = (value: string | null | undefined) => (value ?? '').trim().toLowerCase();
+	const isValidEmailFormat = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+	const getOwnerSubscriptionDraft = (rowKey: string): OwnerSubscriptionDraft =>
+		ownerSubscriptionDrafts[rowKey] ?? { operation: 'add', months: 1 };
+	const setOwnerSubscriptionDraft = (rowKey: string, patch: Partial<OwnerSubscriptionDraft>) => {
+		const current = getOwnerSubscriptionDraft(rowKey);
+		ownerSubscriptionDrafts = {
+			...ownerSubscriptionDrafts,
+			[rowKey]: {
+				...current,
+				...patch
+			}
+		};
+	};
+	const isRemovalAdjustment = (draft: OwnerSubscriptionDraft) => draft.operation === 'remove';
+	const isHighRiskRemovalAdjustment = (draft: OwnerSubscriptionDraft) =>
+		draft.operation === 'remove' && draft.months >= 3;
+	const getHistoryDetails = (entry: OwnerActionHistoryRow) =>
+		entry.details && typeof entry.details === 'object' ? entry.details : {};
+	const getHistoryActionLabel = (entry: OwnerActionHistoryRow) => {
+		const details = getHistoryDetails(entry);
+		if (entry.action_type === 'add_trainer') return 'Habilitaste entrenador';
+		if (entry.action_type === 'force_sign_out') return 'Cerraste sesiones activas';
+		if (entry.action_type === 'toggle_trainer') {
+			return details?.next_active === true ? 'Habilitaste acceso' : 'Deshabilitaste acceso';
+		}
+		if (entry.action_type === 'grant_subscription') {
+			const operation = details?.operation === 'remove' ? 'remove' : 'add';
+			const monthsRaw = Number(details?.months ?? 0);
+			const safeMonths = Number.isFinite(monthsRaw) && monthsRaw > 0 ? monthsRaw : 1;
+			return `${operation === 'remove' ? 'Quitaste' : 'Sumaste'} ${safeMonths} mes${safeMonths === 1 ? '' : 'es'}`;
+		}
+		return 'Acción administrativa';
+	};
+	const getHistoryActionTone = (entry: OwnerActionHistoryRow) => {
+		const details = getHistoryDetails(entry);
+		if (entry.action_type === 'toggle_trainer' && details?.next_active === false) {
+			return 'border-red-800/70 bg-red-950/25 text-red-100';
+		}
+		if (entry.action_type === 'grant_subscription' && details?.operation === 'remove') {
+			const monthsRaw = Number(details?.months ?? 0);
+			return Number.isFinite(monthsRaw) && monthsRaw >= 3
+				? 'border-red-800/70 bg-red-950/25 text-red-100'
+				: 'border-amber-800/70 bg-amber-950/20 text-amber-100';
+		}
+		return 'border-slate-800/80 bg-[#0f1322] text-slate-100';
+	};
+	const getHistoryActionContext = (entry: OwnerActionHistoryRow) => {
+		const details = getHistoryDetails(entry);
+		const target = entry.target_email ? `en ${entry.target_email}` : 'sin email objetivo';
+		if (entry.action_type === 'grant_subscription') {
+			const afterValue = typeof details?.active_until_after === 'string' ? details.active_until_after : null;
+			const afterText = afterValue ? ` | vence: ${formatDateTime(afterValue)}` : '';
+			return `${target}${afterText}`;
+		}
+		return target;
+	};
+
+	const parseTimestamp = (value?: string | null) => {
+		if (!value) return 0;
+		const parsed = Date.parse(value);
+		return Number.isFinite(parsed) ? parsed : 0;
+	};
+
+	const getDaysRemaining = (activeUntil?: string | null) => {
+		if (!activeUntil) return 0;
+		const untilTs = parseTimestamp(activeUntil);
+		if (untilTs <= 0) return 0;
+		const diffMs = untilTs - Date.now();
+		if (diffMs <= 0) return 0;
+		return Math.ceil(diffMs / ONE_DAY_MS);
+	};
+
+	const isSubscriptionActiveNow = (activeUntil?: string | null) => {
+		const untilTs = parseTimestamp(activeUntil);
+		return untilTs > Date.now();
+	};
+
+	const getOwnerTrainerViews = (trainers: TrainerAdminRow[]) =>
+		trainers.map((trainer) => {
+			const rowKey = trainer.trainer_id ?? toSafeId(trainer.email);
+			const daysRemaining = getDaysRemaining(trainer.active_until);
+			const activeNow = trainer.active === true && isSubscriptionActiveNow(trainer.active_until);
+			return {
+				rowKey,
+				trainer,
+				daysRemaining,
+				activeNow,
+				createdAtTs: parseTimestamp(trainer.created_at)
+			} satisfies OwnerTrainerView;
+		});
+
+	const sortByCreatedDesc = (a: OwnerTrainerView, b: OwnerTrainerView) =>
+		b.createdAtTs - a.createdAtTs || a.trainer.email.localeCompare(b.trainer.email);
+
+	const sortByExpirationAsc = (a: OwnerTrainerView, b: OwnerTrainerView) =>
+		a.daysRemaining - b.daysRemaining || sortByCreatedDesc(a, b);
+
+	const getTrainersByTab = (trainers: TrainerAdminRow[]) => {
+		const views = getOwnerTrainerViews(trainers);
+		const activeViews = views.filter((view) => view.activeNow);
+		const inactiveViews = views.filter((view) => !view.activeNow);
+		return {
+			expiring: [...activeViews].sort(sortByExpirationAsc),
+			active: [...activeViews].sort(sortByCreatedDesc),
+			inactive: [...inactiveViews].sort(sortByCreatedDesc)
+		} as const;
+	};
+
+	const setOwnerTrainerTab = (tab: OwnerTrainerTab) => {
+		ownerTrainerTab = tab;
+		expandedOwnerTrainerRowKey = null;
+	};
+
+	const toggleOwnerTrainerRow = (rowKey: string) => {
+		expandedOwnerTrainerRowKey = expandedOwnerTrainerRowKey === rowKey ? null : rowKey;
+	};
+
+	const toggleOwnerHistory = async () => {
+		if (!showOwnerPanel) {
+			showOwnerPanel = true;
+			if (lazyAdmin) {
+				await loadTrainerAdmin();
+			}
+			showOwnerHistory = true;
+			return;
+		}
+		showOwnerHistory = !showOwnerHistory;
+	};
+
+	const daysRemainingTone = (days: number) => {
+		if (days <= 5) return 'text-red-300';
+		if (days <= 10) return 'text-amber-300';
+		return 'text-emerald-300';
+	};
+
+	const daysRemainingBadgeTone = (days: number) => {
+		if (days <= 5) return 'border-red-700/60 bg-red-900/30 text-red-200';
+		if (days <= 10) return 'border-amber-700/60 bg-amber-900/25 text-amber-200';
+		return 'border-emerald-700/50 bg-emerald-900/20 text-emerald-200';
+	};
+
+	const subscriptionStateLabel = (state?: AccountSubscriptionInfo['state']) => {
+		if (state === 'owner') return 'Cuenta owner';
+		if (state === 'expired') return 'Suscripción vencida';
+		if (state === 'expiring') return 'Suscripción por vencer';
+		if (state === 'active') return 'Suscripción activa';
+		return 'Sin información de suscripción';
+	};
+
+	const ensureGrantIdempotencyKey = (event: SubmitEvent) => {
+		const formEl = event.currentTarget as HTMLFormElement | null;
+		if (!formEl) return;
+		const input = formEl.querySelector<HTMLInputElement>('input[name="idempotency_key"]');
+		if (!input) return;
+		input.value = crypto.randomUUID();
+	};
+
+	const isConfirmedSubmit = (formEl: HTMLFormElement) => formEl.dataset.confirmedSubmit === '1';
+
+	const resetConfirmedSubmit = (formEl: HTMLFormElement) => {
+		delete formEl.dataset.confirmedSubmit;
+	};
+
+	const requestConfirmedSubmit = (formId: string) => {
+		const formEl = document.getElementById(formId) as HTMLFormElement | null;
+		if (!formEl) return;
+		formEl.dataset.confirmedSubmit = '1';
+		formEl.requestSubmit();
+	};
+
+	const openSubscriptionConfirm = (event: SubmitEvent, formId: string, trainerEmail: string) => {
+		const formEl = event.currentTarget as HTMLFormElement | null;
+		if (!formEl) return;
+
+		if (isConfirmedSubmit(formEl)) {
+			resetConfirmedSubmit(formEl);
+			return;
+		}
+
+		event.preventDefault();
+		ensureGrantIdempotencyKey(event);
+
+		const formData = new FormData(formEl);
+		const operation = String(formData.get('operation') || 'add').trim().toLowerCase();
+		const parsedMonths = Number.parseInt(String(formData.get('months') || '1'), 10);
+		const months = Number.isFinite(parsedMonths) && parsedMonths >= 1 ? parsedMonths : 1;
+		const reason = String(formData.get('reason') || '').trim();
+
+		ownerActionConfirm = {
+			kind: 'subscription',
+			formId,
+			trainerEmail,
+			operation: operation === 'remove' ? 'remove' : 'add',
+			months,
+			reason
+		};
+	};
+
+	const openDisableConfirm = (
+		event: SubmitEvent,
+		formId: string,
+		trainerEmail: string,
+		nextActive: boolean
+	) => {
+		const formEl = event.currentTarget as HTMLFormElement | null;
+		if (!formEl) return;
+
+		if (isConfirmedSubmit(formEl)) {
+			resetConfirmedSubmit(formEl);
+			return;
+		}
+
+		// Solo pedimos confirmación para deshabilitar.
+		if (nextActive) {
+			return;
+		}
+
+		event.preventDefault();
+		ownerActionConfirm = {
+			kind: 'disable',
+			formId,
+			trainerEmail
+		};
+	};
+
+	const closeOwnerActionConfirm = () => {
+		ownerActionConfirm = null;
+	};
+
+	const confirmOwnerAction = () => {
+		const pending = ownerActionConfirm;
+		if (!pending) return;
+		ownerActionConfirm = null;
+		requestConfirmedSubmit(pending.formId);
+	};
 
 	const copyLink = async (client: ClientSummary) => {
 		const link = `${SITE_URL}/r/${client.client_code}`;
@@ -67,11 +372,15 @@
 			if (!response.ok) {
 				throw new Error('No se pudo cargar el panel administrador');
 			}
-			const payload = (await response.json()) as { trainers?: TrainerAdminRow[] };
-			trainerAdmin = payload.trainers ?? [];
-		} catch (e) {
-			console.error(e);
-			ownerPanelError = 'No pudimos cargar el panel administrador. Intentá de nuevo.';
+				const payload = (await response.json()) as {
+					trainers?: TrainerAdminRow[];
+					ownerActionHistory?: OwnerActionHistoryRow[];
+				};
+				trainerAdmin = payload.trainers ?? [];
+				ownerActionHistory = payload.ownerActionHistory ?? [];
+			} catch (e) {
+				console.error(e);
+				ownerPanelError = 'No pudimos cargar el panel administrador. Intentá de nuevo.';
 		} finally {
 			loadingOwnerPanel = false;
 		}
@@ -79,6 +388,10 @@
 
 	const toggleOwnerPanel = async () => {
 		showOwnerPanel = !showOwnerPanel;
+		if (!showOwnerPanel) {
+			showOwnerHistory = false;
+			expandedOwnerTrainerRowKey = null;
+		}
 		if (showOwnerPanel && lazyAdmin) {
 			await loadTrainerAdmin();
 		}
@@ -95,6 +408,66 @@
 		if (!term) return clients;
 		return clients.filter((client) => normalizeText(client.name).includes(term));
 	};
+
+	const filteredOwnerTrainers = () => {
+		if (!trainerAdmin) return [];
+		const term = normalizeText(ownerTrainerSearchTerm).trim();
+		const visibleTrainers = trainerAdmin.filter(
+			(trainer) => trainer.email?.toLowerCase() !== OWNER_EMAIL && Boolean(trainer.trainer_id)
+		);
+		if (!term) return visibleTrainers;
+		return visibleTrainers.filter((trainer) => normalizeText(trainer.email).includes(term));
+	};
+
+	const ownerEmailAlreadyExists = (rawValue: string) => {
+		const email = normalizeEmail(rawValue);
+		if (!email || !trainerAdmin) return false;
+		return trainerAdmin.some((trainer) => normalizeEmail(trainer.email) === email);
+	};
+
+	const handleOwnerCreateInput = () => {
+		ownerTrainerCreateUiError = null;
+	};
+
+	const handleOwnerCreateSubmit = (event: SubmitEvent) => {
+		const formEl = event.currentTarget as HTMLFormElement | null;
+		if (!formEl) return;
+
+		const normalizedEmail = normalizeEmail(ownerTrainerSearchTerm);
+		ownerTrainerSearchTerm = normalizedEmail;
+		ownerTrainerCreateUiError = null;
+
+		if (!normalizedEmail) {
+			event.preventDefault();
+			ownerTrainerCreateUiError = 'Escribí un email para buscar o crear.';
+			return;
+		}
+
+		if (!isValidEmailFormat(normalizedEmail)) {
+			event.preventDefault();
+			ownerTrainerCreateUiError = 'Ingresá un email válido para crear el entrenador.';
+			return;
+		}
+
+		if (ownerEmailAlreadyExists(normalizedEmail)) {
+			event.preventDefault();
+			ownerTrainerCreateUiError = 'Ese email ya existe. Usá la fila del entrenador para gestionarlo.';
+			return;
+		}
+
+		const input = formEl.querySelector<HTMLInputElement>('input[name="email"]');
+		if (input) {
+			input.value = normalizedEmail;
+		}
+	};
+
+	const hasOwnerTrainerSearchTerm = () => normalizeText(ownerTrainerSearchTerm).trim().length > 0;
+
+	const getOwnerTrainerSearchRows = (trainers: TrainerAdminRow[]) =>
+		getOwnerTrainerViews(trainers).sort((a, b) => {
+			if (a.activeNow !== b.activeNow) return a.activeNow ? -1 : 1;
+			return sortByCreatedDesc(a, b);
+		});
 </script>
 
 <section class="flex flex-col gap-8 text-slate-100">
@@ -104,6 +477,381 @@
 		</h1>
 		<p class="mt-3 text-base sm:text-lg text-slate-400">Ves actividad y abrís su rutina en un click.</p>
 	</div>
+
+	{#if accountSubscription && accountSubscription.state !== 'owner'}
+		<div
+			class={`rounded-xl border px-4 py-3 text-sm shadow-md shadow-black/20 ${
+				accountSubscription.state === 'expired'
+					? 'border-red-700/60 bg-red-900/20 text-red-200'
+					: accountSubscription.state === 'expiring'
+						? 'border-amber-700/60 bg-amber-900/20 text-amber-200'
+						: 'border-emerald-700/50 bg-emerald-900/10 text-emerald-200'
+			}`}
+		>
+			<p class="font-semibold text-base">{subscriptionStateLabel(accountSubscription.state)}</p>
+			{#if accountSubscription.active_until}
+				<p>
+					Vence: <span class="font-semibold">{formatDateTime(accountSubscription.active_until)}</span>
+				</p>
+			{/if}
+			{#if accountSubscription.days_remaining != null}
+				<p>
+					Quedan:
+					<span class="font-semibold">
+						{accountSubscription.days_remaining} día{accountSubscription.days_remaining === 1 ? '' : 's'}
+					</span>
+				</p>
+			{/if}
+		</div>
+	{/if}
+
+	{#if subscriptionWarning}
+		<div class="rounded-xl border border-amber-700/60 bg-amber-900/25 px-4 py-3 text-sm text-amber-100 shadow-md shadow-black/20">
+			<p class="font-semibold text-base">
+				Tu suscripción vence en {subscriptionWarning.days_remaining ?? '?'} día{subscriptionWarning.days_remaining === 1 ? '' : 's'}.
+			</p>
+			<p>Renovala antes del vencimiento para evitar cortes de acceso.</p>
+		</div>
+	{/if}
+
+	{#if isOwner}
+		<section class="rounded-xl border border-emerald-900/40 bg-[#0f111b] p-7 sm:p-8 shadow-lg shadow-black/30 text-slate-100 space-y-8">
+			<div class="flex flex-col gap-6">
+				<div>
+					<p class="text-2xl font-bold tracking-tight text-emerald-400">Panel de administrador</p>
+				</div>
+					<div class="flex w-full gap-4 sm:justify-end">
+						<button
+							type="button"
+							class="h-12 flex-1 rounded-lg border border-emerald-700/60 bg-emerald-700/20 px-4 text-sm font-semibold text-emerald-200 hover:bg-emerald-700/30 sm:h-11 sm:w-auto sm:min-w-[11rem] sm:flex-none"
+							on:click={toggleOwnerPanel}
+							aria-expanded={showOwnerPanel}
+							aria-controls="owner-admin-content"
+						>
+							{showOwnerPanel ? 'Ocultar panel' : 'Abrir panel'}
+						</button>
+						<button
+							type="button"
+							class="h-12 flex-1 rounded-lg border border-slate-700 bg-[#151827] px-4 text-sm font-semibold text-slate-200 hover:bg-[#1b2031] sm:h-11 sm:w-auto sm:min-w-[11rem] sm:flex-none"
+							on:click={toggleOwnerHistory}
+							aria-controls="owner-history-panel"
+							aria-expanded={showOwnerHistory}
+						>
+						{showOwnerHistory ? 'Ocultar historial' : 'Ver historial'}
+					</button>
+				</div>
+			</div>
+				{#if showOwnerPanel}
+					<div id="owner-admin-content" class="space-y-9">
+						{#if form?.message}
+							<p
+								class={`rounded-lg border px-3 py-2 text-sm ${
+									form?.success === true
+										? 'border-emerald-700/50 bg-emerald-900/20 text-emerald-200'
+										: 'border-red-700/50 bg-red-900/20 text-red-200'
+								}`}
+							>
+								{form.message}
+							</p>
+						{/if}
+						{#if loadingOwnerPanel}
+							<p class="text-sm text-slate-300">Cargando panel administrador...</p>
+						{:else if ownerPanelError}
+						<div class="flex flex-wrap items-center gap-3">
+							<p class="text-sm text-red-200">{ownerPanelError}</p>
+							<button
+								type="button"
+								class="rounded-lg border border-red-600 px-3 py-1.5 text-xs font-semibold text-red-200 hover:bg-red-900/40"
+								on:click={loadTrainerAdmin}
+							>
+								Reintentar
+							</button>
+						</div>
+							{:else}
+								{@const ownerQueryExists = ownerEmailAlreadyExists(ownerTrainerSearchTerm)}
+								{@const ownerQueryNormalized = normalizeEmail(ownerTrainerSearchTerm)}
+								{#if showOwnerHistory}
+										<div id="owner-history-panel" class="rounded-lg border border-slate-800/80 bg-[#0f1322] p-4">
+										<h4 class="text-sm font-semibold text-slate-100">Historial ({OWNER_HISTORY_WINDOW_HOURS}h)</h4>
+										{#if ownerActionHistory && ownerActionHistory.length > 0}
+												<div class="mt-4 max-h-72 space-y-3 overflow-auto pr-1">
+												{#each ownerActionHistory as historyEntry (historyEntry.id)}
+														<article class={`rounded-lg border px-3 py-3 ${getHistoryActionTone(historyEntry)}`}>
+														<div class="flex flex-wrap items-center justify-between gap-2">
+															<p class="text-sm font-semibold">{getHistoryActionLabel(historyEntry)}</p>
+															<time class="text-xs text-slate-300">{formatDateTime(historyEntry.created_at)}</time>
+														</div>
+														<p class="mt-1 text-xs text-slate-300">{getHistoryActionContext(historyEntry)}</p>
+													</article>
+												{/each}
+											</div>
+										{:else}
+											<p class="mt-3 text-sm text-slate-400">Sin movimientos en esta ventana.</p>
+										{/if}
+									</div>
+								{/if}
+								<form
+									method="post"
+									action="?/addTrainer"
+									on:submit={handleOwnerCreateSubmit}
+										class="grid gap-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+							>
+								<input
+									name="email"
+									type="text"
+									placeholder="Buscá o creá por email..."
+										class={`w-full rounded-lg border bg-[#151827] px-4 py-3.5 text-base text-slate-100 shadow-sm focus:outline-none focus:ring-2 ${
+										ownerQueryExists
+											? 'border-amber-600/80 focus:border-amber-500 focus:ring-amber-500/30'
+											: 'border-slate-700 focus:border-emerald-500 focus:ring-emerald-500/40'
+									}`}
+									bind:value={ownerTrainerSearchTerm}
+									on:input={handleOwnerCreateInput}
+									required
+								/>
+								<button
+									type="submit"
+										class="rounded-lg bg-emerald-600 px-4 py-3.5 text-base font-semibold text-white hover:bg-emerald-500"
+								>
+									Habilitar entrenador
+								</button>
+							</form>
+							{#if ownerQueryExists && ownerQueryNormalized}
+								<p class="rounded-lg border border-amber-700/50 bg-amber-900/20 px-3 py-2 text-sm text-amber-200">
+									<span class="font-semibold">{ownerQueryNormalized}</span> ya existe. No se puede crear de nuevo.
+								</p>
+							{/if}
+								{#if ownerTrainerCreateUiError}
+									<p class="rounded-lg border border-red-700/50 bg-red-900/20 px-3 py-2 text-sm text-red-200">
+										{ownerTrainerCreateUiError}
+									</p>
+								{/if}
+
+								{#if trainerAdmin && trainerAdmin.length > 0}
+										{@const visibleOwnerTrainers = filteredOwnerTrainers()}
+									{@const groupedOwnerTrainers = getTrainersByTab(visibleOwnerTrainers)}
+									{@const globalSearchMode = hasOwnerTrainerSearchTerm()}
+										<div class="rounded-lg border border-slate-800/80 bg-[#0f1322] p-4">
+											<div class="grid grid-cols-3 gap-4">
+											<button
+												type="button"
+													class={`rounded-lg px-3 py-3.5 text-sm font-semibold transition ${
+													ownerTrainerTab === 'expiring'
+														? 'bg-emerald-700/25 text-emerald-200 border border-emerald-600/60'
+														: 'bg-[#111827] text-slate-300 border border-slate-700 hover:bg-[#161c2c]'
+												}`}
+												on:click={() => setOwnerTrainerTab('expiring')}
+											>
+												Vence pronto
+											</button>
+											<button
+												type="button"
+													class={`rounded-lg px-3 py-3.5 text-sm font-semibold transition ${
+													ownerTrainerTab === 'active'
+														? 'bg-emerald-700/25 text-emerald-200 border border-emerald-600/60'
+														: 'bg-[#111827] text-slate-300 border border-slate-700 hover:bg-[#161c2c]'
+												}`}
+												on:click={() => setOwnerTrainerTab('active')}
+											>
+												Activo
+											</button>
+											<button
+												type="button"
+													class={`rounded-lg px-3 py-3.5 text-sm font-semibold transition ${
+													ownerTrainerTab === 'inactive'
+														? 'bg-emerald-700/25 text-emerald-200 border border-emerald-600/60'
+														: 'bg-[#111827] text-slate-300 border border-slate-700 hover:bg-[#161c2c]'
+												}`}
+												on:click={() => setOwnerTrainerTab('inactive')}
+											>
+												Inactivo
+											</button>
+										</div>
+									</div>
+
+									{#if globalSearchMode}
+										<p class="text-xs text-slate-400">
+											Mostrando resultados globales (activos e inactivos).
+										</p>
+									{/if}
+									{@const visibleOwnerRows = globalSearchMode ? getOwnerTrainerSearchRows(visibleOwnerTrainers) : groupedOwnerTrainers[ownerTrainerTab]}
+									{#if visibleOwnerRows.length === 0}
+										<div class="rounded-lg border border-dashed border-slate-700 px-4 py-5 text-sm text-slate-400">
+											No encontramos entrenadores para ese criterio.
+										</div>
+									{:else}
+											<div class="space-y-4">
+											{#each visibleOwnerRows as ownerRow (ownerRow.rowKey)}
+												{@const trainer = ownerRow.trainer}
+												{@const rowKey = ownerRow.rowKey}
+												{@const rowOpen = expandedOwnerTrainerRowKey === rowKey}
+												{@const subscriptionDraft = getOwnerSubscriptionDraft(rowKey)}
+												{@const removalAdjustment = isRemovalAdjustment(subscriptionDraft)}
+												{@const highRiskRemoval = isHighRiskRemovalAdjustment(subscriptionDraft)}
+													<article class="rounded-lg border border-slate-800/90 bg-[#111526]">
+														<button
+															type="button"
+															class="flex w-full items-center justify-between gap-3 px-4 py-5 text-left"
+															on:click={() => toggleOwnerTrainerRow(rowKey)}
+														>
+														<span class="min-w-0 truncate text-sm font-semibold text-slate-100" title={trainer.email}>
+															{trainer.email}
+														</span>
+													<div class="flex items-center gap-3">
+														<span class={`rounded-full border px-2.5 py-1 text-xs font-semibold ${daysRemainingBadgeTone(ownerRow.daysRemaining)}`}>
+															{ownerRow.daysRemaining} día{ownerRow.daysRemaining === 1 ? '' : 's'}
+														</span>
+													</div>
+												</button>
+
+														{#if rowOpen}
+															<div class="border-t border-slate-800/80 px-4 py-6 space-y-6">
+																<p class="text-xs text-slate-400">
+																	Vence: {trainer.active_until ? formatDateTime(trainer.active_until) : 'n/a'}
+																</p>
+
+															<form
+																id={`grant-subscription-${rowKey}`}
+																method="post"
+																action="?/grantSubscription"
+																class={`grid gap-6 rounded-lg border px-4 py-5 sm:grid-cols-[1fr_auto] ${
+																	highRiskRemoval
+																		? 'border-red-700/60 bg-red-950/20'
+																		: removalAdjustment
+																			? 'border-amber-700/60 bg-amber-950/20'
+																			: 'border-slate-800/80 bg-[#0f1322]'
+																}`}
+																on:submit={(event) =>
+																	openSubscriptionConfirm(event, `grant-subscription-${rowKey}`, trainer.email)}
+															>
+																<input type="hidden" name="trainer_id" value={trainer.trainer_id ?? ''} />
+																<input type="hidden" name="trainer_email" value={trainer.email} />
+																<input type="hidden" name="idempotency_key" value="" />
+																<input type="hidden" name="reason" value="" />
+																	<div class="grid grid-cols-2 gap-6">
+																		<div class="relative">
+																			<select
+																				name="operation"
+																				value={subscriptionDraft.operation}
+																				on:change={(event) =>
+																					setOwnerSubscriptionDraft(rowKey, {
+																						operation: toDraftOperation(
+																							(event.currentTarget as HTMLSelectElement).value
+																						)
+																					})}
+																				class="custom-select w-full rounded-lg border border-slate-700 bg-[#151827] px-3 py-2.5 pr-10 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+																			>
+																				<option value="add">Sumar</option>
+																				<option value="remove">Quitar</option>
+																			</select>
+																			<svg
+																				class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+																				viewBox="0 0 20 20"
+																				fill="none"
+																				aria-hidden="true"
+																			>
+																				<path d="M6 8l4 4 4-4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"></path>
+																			</svg>
+																		</div>
+																		<div class="relative">
+																			<select
+																				name="months"
+																				value={subscriptionDraft.months}
+																				on:change={(event) =>
+																					setOwnerSubscriptionDraft(rowKey, {
+																						months: parseDraftMonths(
+																							(event.currentTarget as HTMLSelectElement).value
+																						)
+																					})}
+																				class="custom-select w-full rounded-lg border border-slate-700 bg-[#151827] px-3 py-2.5 pr-10 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+																			>
+																				{#each MONTH_OPTIONS as monthCount}
+																					<option value={monthCount}>
+																						{monthCount} mes{monthCount === 1 ? '' : 'es'}
+																					</option>
+																				{/each}
+																			</select>
+																			<svg
+																				class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+																				viewBox="0 0 20 20"
+																				fill="none"
+																				aria-hidden="true"
+																			>
+																				<path d="M6 8l4 4 4-4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"></path>
+																			</svg>
+																		</div>
+																	{#if removalAdjustment}
+																		<p class={`col-span-2 text-xs ${
+																			highRiskRemoval ? 'text-red-200' : 'text-amber-200'
+																		}`}>
+																			{highRiskRemoval
+																				? `Alerta de riesgo alto: vas a quitar ${subscriptionDraft.months} meses.`
+																				: 'Acción sensible: quitando meses de suscripción.'}
+																		</p>
+																	{/if}
+																</div>
+																<button
+																	type="submit"
+																		class={`w-full rounded-lg border px-4 py-3 text-sm font-semibold sm:w-auto ${
+																		highRiskRemoval
+																			? 'border-red-600 text-red-200 hover:bg-red-900/40'
+																			: removalAdjustment
+																				? 'border-amber-600 text-amber-200 hover:bg-amber-900/40'
+																				: 'border-emerald-600 text-emerald-200 hover:bg-emerald-900/40'
+																	}`}
+																>
+																	Aplicar ajuste
+																</button>
+															</form>
+
+															<div class="grid gap-5 sm:grid-cols-2">
+																<form
+																	id={`toggle-trainer-${rowKey}`}
+																	method="post"
+																	action="?/toggleTrainer"
+																	on:submit={(event) =>
+																		openDisableConfirm(event, `toggle-trainer-${rowKey}`, trainer.email, !trainer.active)}
+																>
+																	<input type="hidden" name="email" value={trainer.email} />
+																	<input type="hidden" name="next_active" value={!trainer.active} />
+																	<button
+																			class={`w-full rounded-lg px-3 py-3.5 text-sm font-semibold ${
+																			trainer.active
+																				? 'border border-red-600 text-red-200 hover:bg-red-900/50'
+																				: 'border border-emerald-600 text-emerald-200 hover:bg-emerald-900/40'
+																		}`}
+																		type="submit"
+																	>
+																		{trainer.active ? 'Deshabilitar cuenta' : 'Habilitar cuenta'}
+																	</button>
+																</form>
+																<form method="post" action="?/forceSignOut">
+																	<input type="hidden" name="email" value={trainer.email} />
+																	<button
+																		type="submit"
+																		class="w-full rounded-lg border border-slate-600 px-3 py-3.5 text-sm font-semibold text-slate-200 hover:bg-[#151827]"
+																	>
+																		Cerrar sesiones
+																	</button>
+																</form>
+															</div>
+														</div>
+													{/if}
+												</article>
+											{/each}
+										</div>
+									{/if}
+								{:else}
+										<div class="rounded-lg border border-dashed border-slate-700 px-4 py-5 text-sm text-slate-400">
+											No hay entrenadores registrados.
+										</div>
+								{/if}
+
+							{/if}
+					</div>
+			{/if}
+		</section>
+	{/if}
 
 	<div class="flex flex-wrap items-center gap-3 rounded-xl border border-slate-800 bg-[#0f111b] px-4 py-3 shadow-md shadow-black/30">
 		<form
@@ -127,139 +875,6 @@
 			</button>
 		</form>
 	</div>
-
-	{#if isOwner}
-		<section class="rounded-xl border border-emerald-900/40 bg-[#0f111b] p-6 shadow-lg shadow-black/30 text-slate-100 space-y-4">
-			<div class="flex flex-wrap items-center justify-between gap-3">
-				<div>
-					<p class="text-sm uppercase tracking-wider text-emerald-400">Panel de administrador</p>
-					<h3 class="text-xl font-bold text-slate-50">Gestión de entrenadores</h3>
-				</div>
-				<button
-					type="button"
-					class="rounded-lg border border-emerald-700/60 bg-emerald-700/20 px-4 py-2 text-sm font-semibold text-emerald-200 hover:bg-emerald-700/30"
-					on:click={toggleOwnerPanel}
-					aria-expanded={showOwnerPanel}
-					aria-controls="owner-admin-content"
-				>
-					{showOwnerPanel ? 'Ocultar panel' : 'Abrir panel'}
-				</button>
-			</div>
-			{#if showOwnerPanel}
-				<div id="owner-admin-content" class="space-y-4">
-					{#if loadingOwnerPanel}
-						<p class="text-sm text-slate-300">Cargando panel administrador...</p>
-					{:else if ownerPanelError}
-						<div class="flex flex-wrap items-center gap-3">
-							<p class="text-sm text-red-200">{ownerPanelError}</p>
-							<button
-								type="button"
-								class="rounded-lg border border-red-600 px-3 py-1.5 text-xs font-semibold text-red-200 hover:bg-red-900/40"
-								on:click={loadTrainerAdmin}
-							>
-								Reintentar
-							</button>
-						</div>
-					{:else}
-						<form method="post" action="?/addTrainer" class="flex flex-wrap items-center gap-3">
-							<input
-								name="email"
-								type="email"
-								placeholder="email@entrenador.com"
-								class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-2 text-base text-slate-100 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-								required
-							/>
-							<button
-								type="submit"
-								class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500"
-							>
-								Habilitar entrenador
-							</button>
-						</form>
-
-						<div class="overflow-x-auto">
-							<table class="min-w-full text-left text-sm text-slate-200">
-								<thead class="border-b border-slate-800 text-slate-400">
-									<tr>
-										<th class="px-3 py-2">Email</th>
-										<th class="px-3 py-2">Estado</th>
-										<th class="px-3 py-2">Acceso</th>
-										<th class="px-3 py-2 text-right">Acciones</th>
-									</tr>
-								</thead>
-								<tbody class="divide-y divide-slate-800">
-									{#if trainerAdmin && trainerAdmin.length > 0}
-										{#each trainerAdmin as trainer}
-											{#if trainer.email?.toLowerCase() !== OWNER_EMAIL}
-												<tr>
-													<td class="px-3 py-2">{trainer.email}</td>
-													<td class="px-3 py-2">
-														<span
-															class={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-																trainer.status === 'active'
-																	? 'bg-emerald-900/50 text-emerald-300 border border-emerald-600/40'
-																	: 'bg-slate-800 text-slate-300 border border-slate-700'
-															}`}
-														>
-															{trainer.status ?? 'sin sesión'}
-														</span>
-													</td>
-													<td class="px-3 py-2">
-														<span
-															class={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-																trainer.active
-																	? 'bg-emerald-900/50 text-emerald-300 border border-emerald-600/40'
-																	: 'bg-red-900/40 text-red-200 border border-red-700/50'
-															}`}
-														>
-															{trainer.active ? 'Habilitado' : 'Deshabilitado'}
-														</span>
-													</td>
-													<td class="px-3 py-2">
-														<div class="flex justify-end gap-2">
-															<form method="post" action="?/toggleTrainer">
-																<input type="hidden" name="email" value={trainer.email} />
-																<input type="hidden" name="next_active" value={!trainer.active} />
-																<button
-																	class={`rounded-lg px-3 py-2 text-xs font-semibold ${
-																		trainer.active
-																			? 'border border-red-600 text-red-200 hover:bg-red-900/50'
-																			: 'border border-emerald-600 text-emerald-200 hover:bg-emerald-900/40'
-																	}`}
-																	type="submit"
-																>
-																	{trainer.active ? 'Deshabilitar' : 'Habilitar'}
-																</button>
-															</form>
-															<form method="post" action="?/forceSignOut">
-																<input type="hidden" name="email" value={trainer.email} />
-																<button
-																	type="submit"
-																	class="rounded-lg border border-slate-600 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-[#151827]"
-																>
-																	Cerrar sesiones
-																</button>
-															</form>
-														</div>
-													</td>
-												</tr>
-											{/if}
-										{/each}
-									{:else}
-										<tr>
-											<td colspan="4" class="px-3 py-3 text-slate-400">
-												No hay entrenadores registrados.
-											</td>
-										</tr>
-									{/if}
-								</tbody>
-							</table>
-						</div>
-					{/if}
-				</div>
-			{/if}
-		</section>
-	{/if}
 
 	<section class="grid gap-6 lg:grid-cols-[2fr,1fr]">
 		<div class="space-y-3">
@@ -404,6 +1019,95 @@
 		</form>
 	</section>
 
+	{#if ownerActionConfirm}
+		<div class="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm px-4">
+				<div class="w-full max-w-lg rounded-2xl border border-slate-800 bg-[#0f111b] p-6 shadow-2xl shadow-black/40 text-slate-100">
+					{#if ownerActionConfirm.kind === 'disable'}
+						<div class="space-y-2">
+							<h2 class="text-xl font-semibold text-red-200">Confirmar deshabilitación</h2>
+						<p class="text-sm text-slate-300">
+							Vas a deshabilitar al entrenador <span class="font-semibold text-slate-100">{ownerActionConfirm.trainerEmail}</span>.
+							No podrá iniciar sesión hasta que lo vuelvas a habilitar.
+						</p>
+					</div>
+					{:else}
+						{@const signedMonths = ownerActionConfirm.operation === 'remove' ? -ownerActionConfirm.months : ownerActionConfirm.months}
+						{@const signedDays = signedMonths * 30}
+						{@const confirmIsRemoval = ownerActionConfirm.operation === 'remove'}
+						{@const confirmHighRiskRemoval = confirmIsRemoval && ownerActionConfirm.months >= 3}
+						<div class="space-y-2">
+							<h2 class={`text-xl font-semibold ${
+								confirmHighRiskRemoval
+									? 'text-red-200'
+									: confirmIsRemoval
+										? 'text-amber-200'
+										: 'text-emerald-200'
+							}`}>
+								Confirmar ajuste de suscripción
+							</h2>
+							<p class="text-sm text-slate-300">
+								Vas a
+									<span class="font-semibold text-slate-100">
+									{ownerActionConfirm.operation === 'add' ? 'sumar' : 'quitar'}&nbsp;
+									{Math.abs(signedMonths)} mes{Math.abs(signedMonths) === 1 ? '' : 'es'}
+								</span>
+							a <span class="font-semibold text-slate-100">{ownerActionConfirm.trainerEmail}</span>.
+						</p>
+							<p class="text-sm text-slate-400">
+								Equivale a <span class="font-semibold text-slate-100">{signedDays > 0 ? '+' : ''}{signedDays} días</span>
+								exactos de 24 horas.
+							</p>
+							{#if confirmIsRemoval}
+								<p class={`rounded-lg border px-3 py-2 text-sm ${
+									confirmHighRiskRemoval
+										? 'border-red-700/60 bg-red-900/30 text-red-200'
+										: 'border-amber-700/60 bg-amber-900/25 text-amber-200'
+								}`}>
+									{confirmHighRiskRemoval
+										? 'Riesgo alto: esta quita masiva puede dejar al entrenador sin acceso.'
+										: 'Revisá el ajuste antes de confirmar para evitar descuentos accidentales.'}
+								</p>
+							{/if}
+							{#if ownerActionConfirm.reason}
+								<p class="text-sm text-slate-400">
+									Motivo: <span class="font-medium text-slate-200">{ownerActionConfirm.reason}</span>
+							</p>
+						{/if}
+					</div>
+				{/if}
+
+				<div class="mt-5 flex items-center justify-end gap-3">
+					<button
+						type="button"
+						class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-2 text-slate-200 hover:bg-[#1b1f30]"
+						on:click={closeOwnerActionConfirm}
+					>
+						Cancelar
+					</button>
+						<button
+							type="button"
+							class={`rounded-lg px-4 py-2 text-white transition ${
+								ownerActionConfirm.kind === 'disable'
+									? 'bg-red-600 hover:bg-red-500'
+									: ownerActionConfirm.operation === 'remove'
+										? ownerActionConfirm.months >= 3
+											? 'bg-red-600 hover:bg-red-500'
+											: 'bg-amber-600 hover:bg-amber-500'
+										: 'bg-emerald-600 hover:bg-emerald-500'
+							}`}
+							on:click={confirmOwnerAction}
+						>
+						{ownerActionConfirm.kind === 'disable'
+							? 'Deshabilitar ahora'
+							: ownerActionConfirm.operation === 'add'
+								? 'Confirmar suma'
+								: 'Confirmar quita'}
+					</button>
+				</div>
+			</div>
+		</div>
+	{/if}
+
 	{#if deleteTarget}
 		<div class="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm px-4">
 			<div class="w-full max-w-md rounded-2xl border border-slate-800 bg-[#0f111b] p-6 shadow-2xl shadow-black/40 text-slate-100">
@@ -471,6 +1175,20 @@
 		to {
 			transform: scaleX(1);
 		}
+	}
+	.custom-select {
+		appearance: none;
+		-webkit-appearance: none;
+		-moz-appearance: none;
+		background-image: none;
+		color-scheme: dark;
+	}
+	.custom-select::-ms-expand {
+		display: none;
+	}
+	.custom-select option {
+		background: #111827;
+		color: #e2e8f0;
 	}
 	.sr-only {
 		position: absolute;

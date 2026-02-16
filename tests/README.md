@@ -1,175 +1,48 @@
-# Training Track - E2E Testing con Stagehand
+# Training Track Test & Audit Suite
 
-Este directorio contiene tests end-to-end (E2E) exhaustivos para la aplicación Training Track utilizando [Stagehand](https://docs.stagehand.dev/).
+Esta carpeta contiene herramientas de auditoría funcional y de rendimiento para staging aislado.
 
-## ¿Qué es Stagehand?
+## Variables requeridas
 
-Stagehand es un framework de automatización web impulsado por IA que permite escribir tests usando lenguaje natural. En lugar de usar selectores CSS/XPath frágiles, Stagehand utiliza modelos de IA para entender y interactuar con las páginas web.
+Definir en `.env` (ver `e2e/.env.example`):
 
-## Requisitos Previos
+- `TEST_BASE_URL`
+- `TEST_TRAINER_EMAIL`, `TEST_TRAINER_PASSWORD`
+- `TEST_OWNER_EMAIL`, `TEST_OWNER_PASSWORD` (para owner suite)
+- `TEST_DISABLED_EMAIL`, `TEST_DISABLED_PASSWORD` (para authz suite)
+- `TEST_SUPABASE_URL`, `TEST_SUPABASE_SERVICE_ROLE_KEY`
+- `TEST_CRON_SECRET`
+- `TEST_RUN_ID` (opcional, se autogenera)
 
-### 1. Variables de Entorno
+Opcional (cron mutante):
 
-Crea un archivo `.env` en la raíz del proyecto (o usa el existente) con las siguientes variables:
+- `TEST_ALLOW_CRON_MUTATION=1`
 
-```env
-# Para usar Stagehand en modo LOCAL (navegador local)
-# No se necesitan API keys adicionales si usas modo LOCAL sin AI
+## Fase 1 (gate PR)
 
-# Para usar funciones de AI (act, extract, observe):
-OPENAI_API_KEY=tu_api_key_de_openai
+- `npm run check`
+- `npm run test:smoke`
 
-# Para usar Browserbase (cloud browser):
-BROWSERBASE_API_KEY=tu_api_key_de_browserbase
-BROWSERBASE_PROJECT_ID=tu_project_id
+Smoke mobile (nightly):
 
-# URL base de la aplicación (por defecto: http://localhost:5173)
-TEST_BASE_URL=http://localhost:5173
-```
+- `npm run test:smoke:mobile`
 
-### 2. Modos de Ejecución
+## Fase 2 (nightly hiper exhaustiva)
 
-- **LOCAL**: Usa un navegador Chrome local. Requiere Chrome instalado.
-- **BROWSERBASE**: Usa navegadores en la nube de Browserbase (ideal para CI/CD).
+- `npm run test:full`
+- `npm run bench:panel`
+- `npm run bench:panel:mobile`
+- `npm run test:cleanup:verify`
+- `npm run audit:report`
 
-## Instalación
+Pipeline completo nocturno:
 
-Las dependencias ya están instaladas. Si necesitas reinstalar:
+- `npm run test:audit:nightly`
 
-```bash
-npm install
-```
+## Artefactos
 
-## Ejecutar los Tests
-
-### 1. Iniciar la aplicación (en una terminal separada)
-
-```bash
-npm run dev
-```
-
-### 2. Ejecutar la suite de tests completa
-
-```bash
-npm run test:e2e
-```
-
-### 3. Ejecutar en modo visible (no headless)
-
-```bash
-HEADLESS=false npm run test:e2e
-```
-
-### 4. Ejecutar con logs detallados
-
-```bash
-VERBOSE=true npm run test:e2e
-```
-
-## Suite de Tests
-
-Los tests cubren las siguientes funcionalidades:
-
-### Autenticación (Tests 1-5)
-- ✅ Carga correcta de página de login
-- ✅ Error al usar credenciales inválidas
-- ✅ Login exitoso y redirección a /clientes
-- ✅ Carga correcta de página de registro
-- ✅ Carga correcta de página de reset de contraseña
-
-### Panel de Clientes (Tests 6-10)
-- ✅ Visualización correcta del panel
-- ✅ Validación del formulario de crear cliente
-- ✅ Creación de nuevo cliente
-- ✅ Funcionalidad de búsqueda
-- ✅ Apertura de detalles de cliente
-
-### Detalle de Cliente y Rutinas (Tests 11-16)
-- ✅ Carga correcta de página de detalle
-- ✅ Agregar ejercicio a rutina
-- ✅ Completar datos de ejercicio
-- ✅ Guardar cambios en rutina
-- ✅ Navegación entre días de la semana
-- ✅ Botón de copiar link
-
-### Navegación y UI (Tests 17-20)
-- ✅ Navegación de vuelta al panel
-- ✅ Funcionalidad de logout
-- ✅ Toggle de visibilidad de contraseña
-- ✅ Links de navegación entre páginas
-
-### Limpieza (Test 21)
-- ✅ Eliminación de cliente de prueba
-
-## Estructura de Archivos
-
-```
-tests/
-├── README.md                 # Esta documentación
-├── stagehand.config.ts       # Configuración de Stagehand
-└── e2e/
-    └── full-test-suite.ts    # Suite completa de tests
-```
-
-## Personalización
-
-### Cambiar usuario de prueba
-
-Edita `tests/stagehand.config.ts`:
-
-```typescript
-export const config = {
-  testUser: {
-    email: "tu_email@ejemplo.com",
-    password: "tu_contraseña"
-  }
-};
-```
-
-### Agregar nuevos tests
-
-Puedes agregar tests en `full-test-suite.ts` siguiendo el patrón:
-
-```typescript
-await runner.runTest("Nombre del test", async () => {
-  // Navegar a una página
-  await page.goto(`${CONFIG.baseUrl}/ruta`);
-  
-  // Ejecutar acciones con lenguaje natural
-  await stagehand.act("Click en el botón de login");
-  
-  // Extraer información de la página
-  const data = await stagehand.extract(
-    "Extraer el título de la página",
-    z.object({
-      titulo: z.string()
-    })
-  );
-  
-  // Validar resultados
-  if (!data.titulo) {
-    throw new Error("No se encontró el título");
-  }
-});
-```
-
-## Solución de Problemas
-
-### Error: Chrome not found
-Asegúrate de tener Chrome instalado. Stagehand lo detectará automáticamente.
-
-### Error: OPENAI_API_KEY not set
-Los métodos `act()`, `extract()` y `observe()` requieren una API key de OpenAI.
-
-### Tests muy lentos
-- Usa `HEADLESS=true` para mejor rendimiento
-- Considera usar Browserbase para ejecución en paralelo
-
-### Error de timeout
-Incrementa los timeouts en la configuración o en tests específicos.
-
-## Más Información
-
-- [Documentación de Stagehand](https://docs.stagehand.dev/)
-- [API Reference](https://docs.stagehand.dev/v3/references/act)
-- [Discord de Stagehand](https://stagehand.dev/discord)
+- `test-results/playwright/results.json`
+- `test-results/audit/<timestamp>/summary.json`
+- `test-results/audit/<timestamp>/failures.md`
+- `test-results/audit/<timestamp>/perf.json`
+- `test-results/audit/<timestamp>/authz-matrix.csv`

@@ -7,7 +7,7 @@ import { supabaseAdmin } from '$lib/server/supabaseAdmin';
 const INACTIVITY_MONTHS = 6;
 
 const isAuthorized = (authorizationHeader: string | null) => {
-	const cronSecret = privateEnv.CRON_SECRET;
+	const cronSecret = privateEnv.CRON_SECRET?.trim();
 	if (!cronSecret) return false;
 	return authorizationHeader === `Bearer ${cronSecret}`;
 };
@@ -54,11 +54,10 @@ const archiveInactiveClients = async () => {
 };
 
 const handleRequest: RequestHandler = async ({ request }) => {
-	if (!privateEnv.CRON_SECRET) {
-		return json({ message: 'CRON_SECRET no configurado' }, { status: 500 });
-	}
-
 	if (!isAuthorized(request.headers.get('authorization'))) {
+		if (!privateEnv.CRON_SECRET?.trim()) {
+			console.error('archive-inactive misconfigured: CRON_SECRET missing');
+		}
 		return json({ message: 'No autorizado' }, { status: 401 });
 	}
 

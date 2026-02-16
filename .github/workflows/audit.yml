@@ -1,0 +1,75 @@
+name: audit
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: '15 5 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  pr-gate:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      CI: '1'
+      PW_RETRIES: '0'
+      TEST_BASE_URL: ${{ secrets.TEST_BASE_URL }}
+      TEST_TRAINER_EMAIL: ${{ secrets.TEST_TRAINER_EMAIL }}
+      TEST_TRAINER_PASSWORD: ${{ secrets.TEST_TRAINER_PASSWORD }}
+      TEST_SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
+      TEST_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.TEST_SUPABASE_SERVICE_ROLE_KEY }}
+      TEST_RUN_ID: pr-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run test:smoke
+
+  nightly-full:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      CI: '1'
+      PW_RETRIES: '1'
+      TEST_BASE_URL: ${{ secrets.TEST_BASE_URL }}
+      TEST_TRAINER_EMAIL: ${{ secrets.TEST_TRAINER_EMAIL }}
+      TEST_TRAINER_PASSWORD: ${{ secrets.TEST_TRAINER_PASSWORD }}
+      TEST_OWNER_EMAIL: ${{ secrets.TEST_OWNER_EMAIL }}
+      TEST_OWNER_PASSWORD: ${{ secrets.TEST_OWNER_PASSWORD }}
+      TEST_DISABLED_EMAIL: ${{ secrets.TEST_DISABLED_EMAIL }}
+      TEST_DISABLED_PASSWORD: ${{ secrets.TEST_DISABLED_PASSWORD }}
+      TEST_SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
+      TEST_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.TEST_SUPABASE_SERVICE_ROLE_KEY }}
+      TEST_CRON_SECRET: ${{ secrets.TEST_CRON_SECRET }}
+      TEST_ALLOW_CRON_MUTATION: ${{ secrets.TEST_ALLOW_CRON_MUTATION }}
+      TEST_RUN_ID: nightly-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run test:full
+      - run: npm run test:smoke:mobile
+      - run: npm run bench:panel
+      - run: npm run bench:panel:mobile
+      - run: npm run test:cleanup:verify
+      - run: npm run audit:report
+      - name: Upload audit artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-artifacts-${{ github.run_id }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: warn

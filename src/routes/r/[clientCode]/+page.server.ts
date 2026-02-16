@@ -1,11 +1,10 @@
 import { getTargetSets, normalizePlan, normalizeProgress, WEEK_DAYS } from '$lib/routines';
 import { supabaseAdmin } from '$lib/server/supabaseAdmin';
+import { ensureTrainerAccessByTrainerId } from '$lib/server/trainerAccess';
 import type { ProgressState, RoutinePlan } from '$lib/types';
 import { error, fail } from '@sveltejs/kit';
 import { nowIsoUtc } from '$lib/time';
 import type { Actions, PageServerLoad } from './$types';
-
-const OWNER_EMAIL = 'juanpabloaltamira@protonmail.com';
 
 const fetchClient = async (clientCode: string) => {
 	const { data, error: clientError } = await supabaseAdmin
@@ -16,30 +15,7 @@ const fetchClient = async (clientCode: string) => {
 	return { data, clientError };
 };
 
-const isTrainerAllowed = async (trainerId: string) => {
-	const { data: trainer } = await supabaseAdmin
-		.from('trainers')
-		.select('email')
-		.eq('id', trainerId)
-		.maybeSingle();
-
-	if (!trainer) return false;
-
-	const emailLower = trainer.email?.toLowerCase();
-	if (!emailLower) return false;
-	
-	// Owner always has access
-	if (emailLower === OWNER_EMAIL) return true;
-
-	// Check trainer_access (consistent with panel logic)
-	const { data: accessRow } = await supabaseAdmin
-		.from('trainer_access')
-		.select('active')
-		.eq('email', emailLower)
-		.maybeSingle();
-
-	return accessRow?.active === true;
-};
+const isTrainerAllowed = async (trainerId: string) => ensureTrainerAccessByTrainerId(trainerId);
 
 export const load: PageServerLoad = async ({ params }) => {
 	const clientCode = params.clientCode;

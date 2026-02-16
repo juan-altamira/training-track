@@ -1,5 +1,5 @@
 <script lang="ts">
-import { goto } from '$app/navigation';
+import { goto, invalidateAll } from '$app/navigation';
 import { supabaseClient } from '$lib/supabaseClient';
 
 let mode = $state<'login' | 'register'>('login');
@@ -10,7 +10,28 @@ let message = $state('');
 let error = $state('');
 let loading = $state(false);
 let showPassword = $state(false);
-const OWNER_EMAIL = 'juanpabloaltamira@protonmail.com';
+
+const resolveAccessError = (reason: string | undefined) => {
+	if (reason === 'expired') {
+		return 'Acceso inhabilitado por suscripción vencida. Contactar al administrador para renovar la cuenta.';
+	}
+	if (reason === 'manual_disabled') {
+		return 'Acceso inhabilitado por el administrador. Pedile al owner que vuelva a habilitar tu cuenta.';
+	}
+	if (reason === 'not_found') {
+		return 'Cuenta sin perfil interno todavía. Reintentá en unos segundos o pedí al owner que habilite tu email en el panel.';
+	}
+	return 'Acceso inhabilitado. Contactar al administrador para habilitar la cuenta.';
+};
+
+const navigateToClients = async () => {
+	await invalidateAll();
+	if (typeof window !== 'undefined') {
+		window.location.assign('/clientes');
+		return;
+	}
+	await goto('/clientes', { invalidateAll: true });
+};
 
 const login = async () => {
 	loading = true;
@@ -27,24 +48,27 @@ const login = async () => {
 		loading = false;
 		return;
 	}
-	
-	// Chequeo rápido de habilitación: owner siempre habilitado, resto depende de trainer_access
-	if (emailLower !== OWNER_EMAIL) {
-		const { data: accessRow } = await supabaseClient
-			.from('trainer_access')
-			.select('active')
-			.eq('email', emailLower)
-			.maybeSingle();
 
-		if (!accessRow?.active) {
-			error = 'Acceso inhabilitado por falta de pago. Contactar al administrador para habilitar la cuenta.';
+	try {
+		const accessResponse = await fetch('/api/auth/trainer-access');
+		if (!accessResponse.ok) {
+			const payload = (await accessResponse.json().catch(() => ({}))) as {
+				reason?: string;
+			};
+			error = resolveAccessError(payload.reason);
 			await supabaseClient.auth.signOut();
 			loading = false;
 			return;
 		}
+	} catch (accessError) {
+		console.error('trainer access verification failed', accessError);
+		error = 'No pudimos validar el estado de tu cuenta. Intentá de nuevo.';
+		await supabaseClient.auth.signOut();
+		loading = false;
+		return;
 	}
 
-	await goto('/clientes');
+	await navigateToClients();
 	loading = false;
 };
 
@@ -110,7 +134,7 @@ const register = async () => {
 		}
 	}
 
-	await goto('/clientes');
+	await navigateToClients();
 	loading = false;
 };
 

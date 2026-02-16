@@ -2,9 +2,21 @@ import { Page, expect } from '@playwright/test';
 
 // Test credentials - usar variables de entorno en CI
 export const TEST_USER = {
-	email: process.env.TEST_EMAIL || 'juampiluduena@gmail.com',
-	password: process.env.TEST_PASSWORD || 'juan1998'
+	email:
+		process.env.TEST_TRAINER_EMAIL ||
+		process.env.TEST_EMAIL ||
+		'juampiluduena@gmail.com',
+	password:
+		process.env.TEST_TRAINER_PASSWORD ||
+		process.env.TEST_PASSWORD ||
+		'juan1998'
 };
+
+const sanitize = (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, '_');
+const TEST_RUN_ID =
+	process.env.TEST_RUN_ID ||
+	sanitize(`${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+process.env.TEST_RUN_ID = TEST_RUN_ID;
 
 // Helper para login
 export async function login(page: Page, email = TEST_USER.email, password = TEST_USER.password) {
@@ -17,7 +29,10 @@ export async function login(page: Page, email = TEST_USER.email, password = TEST
 
 // Helper para logout
 export async function logout(page: Page) {
-	await page.click('button:has-text("Cerrar sesión")');
+	await page.request.post('/logout', {
+		form: {}
+	});
+	await page.goto('/clientes');
 	await page.waitForURL(/\/login|\/$/);
 }
 
@@ -43,7 +58,7 @@ export async function deleteClient(page: Page, clientId: string) {
 
 // Helper para generar nombre único
 export function uniqueName(prefix: string) {
-	return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+	return `E2E__${TEST_RUN_ID}__${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 }
 
 // Helper para esperar feedback

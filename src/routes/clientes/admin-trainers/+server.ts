@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { fetchTrainerAdminData, isOwnerEmail } from '$lib/server/trainerAccess';
+import { fetchOwnerActionHistory, fetchTrainerAdminData, isOwnerEmail } from '$lib/server/trainerAccess';
 
 export const GET: RequestHandler = async ({ locals }) => {
 	if (!locals.session) {
@@ -12,5 +12,6 @@ export const GET: RequestHandler = async ({ locals }) => {
 	}
 
 	const trainers = await fetchTrainerAdminData();
-	return json({ trainers });
+	const ownerActionHistory = await fetchOwnerActionHistory(locals.session.user.email, 24);
+	return json({ trainers, ownerActionHistory });
 };

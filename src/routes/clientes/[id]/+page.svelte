@@ -401,8 +401,8 @@
 		<p class="rounded-lg bg-[#151827] px-3 py-2 text-sm text-emerald-200 border border-emerald-700/40">{statusMessage}</p>
 	{/if}
 
-	<section class="grid gap-6 lg:grid-cols-[2fr,1fr]">
-		<div class="space-y-5 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 md:p-6 shadow-lg shadow-black/30">
+	<section class="grid gap-6 lg:grid-cols-[2fr,1fr] lg:items-start lg:gap-x-6 lg:gap-y-3">
+		<div class="order-2 lg:order-1 lg:row-span-3 space-y-5 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 md:p-6 shadow-lg shadow-black/30">
 			<div class="flex items-center justify-between">
 				<h2 class="text-3xl font-extrabold uppercase tracking-wide text-slate-50">Rutina</h2>
 				<button
@@ -626,109 +626,107 @@
 			{/if}
 		</div>
 
-		<div class="space-y-3">
-			<div class="rounded-2xl border border-slate-800 bg-gradient-to-br from-[#0f172a] to-[#0b1224] p-4 md:p-6 shadow-lg shadow-black/30 space-y-3">
-				<div class="flex items-center justify-between">
-					<div>
-						<p class="text-sm font-semibold uppercase tracking-[0.12em] text-slate-400">Link de la rutina</p>
-						<p class="mt-1 text-base font-semibold text-emerald-200 break-all">{link}</p>
-						<p class="mt-2 text-xs text-white">El alumno accede sin login; si está archivado verá “acceso desactivado”.</p>
-					</div>
+		<div class="order-1 lg:order-3 lg:col-start-2 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 md:p-6 shadow-lg shadow-black/30">
+			<div class="flex items-center justify-between">
+				<div class="flex flex-col gap-1">
+					<h3 class="text-xl font-semibold uppercase tracking-wide text-slate-50">Semana actual</h3>
 				</div>
 			</div>
-
-			<div class="rounded-2xl border border-slate-800 bg-[#0f111b] p-4 md:p-6 shadow-lg shadow-black/30">
-				<div class="flex items-center justify-between">
-					<div class="flex flex-col gap-1">
-						<h3 class="text-xl font-semibold uppercase tracking-wide text-slate-50">Semana actual</h3>
-					</div>
-				</div>
-				<ul class="mt-3 space-y-3 text-base text-slate-200">
-					{#each WEEK_DAYS as day}
-						{#if plan[day.key] && plan[day.key].exercises.length > 0}
-							{@const completion = dayCompletion(day.key)}
-							<li class="rounded-lg border border-slate-800 bg-[#111423] overflow-hidden hover:bg-[#151827] transition-colors cursor-pointer">
-								<button type="button" class="w-full text-left px-4 py-4 sm:py-5" onclick={() => toggleDayDetail(day.key)}>
-									<div class="grid grid-cols-[auto_1fr_auto] items-center gap-3 sm:gap-4">
-										<p class="font-semibold text-slate-100">{day.label}</p>
-										<div class="flex justify-center">
-											<span
-												class={`rounded-full px-3 py-1 text-sm font-semibold whitespace-nowrap ${
-													progress[day.key]?.suspicious && completion.completed
-														? 'bg-amber-900/50 text-amber-200'
-														: completion.completed
-															? 'bg-emerald-900/50 text-emerald-300'
-															: 'bg-slate-800 text-slate-300'
-												}`}
-											>
-												{progress[day.key]?.suspicious && completion.completed
-													? 'Posible engaño'
+			<ul class="mt-3 space-y-3 text-base text-slate-200">
+				{#each WEEK_DAYS as day}
+					{#if plan[day.key] && plan[day.key].exercises.length > 0}
+						{@const completion = dayCompletion(day.key)}
+						<li class="rounded-lg border border-slate-800 bg-[#111423] overflow-hidden hover:bg-[#151827] transition-colors cursor-pointer">
+							<button type="button" class="w-full text-left px-4 py-4 sm:py-5" onclick={() => toggleDayDetail(day.key)}>
+								<div class="grid grid-cols-[auto_1fr_auto] items-center gap-3 sm:gap-4">
+									<p class="font-semibold text-slate-100">{day.label}</p>
+									<div class="flex justify-center">
+										<span
+											class={`rounded-full px-3 py-1 text-sm font-semibold whitespace-nowrap ${
+												progress[day.key]?.suspicious && completion.completed
+													? 'bg-amber-900/50 text-amber-200'
 													: completion.completed
-														? 'Completado'
-														: 'En progreso'}
-											</span>
-										</div>
-										<div class="flex items-center gap-1.5 text-sm text-slate-300">
-											<span class="hidden sm:inline">Detalle</span>
-											<svg class="w-4 h-4 transition-transform {expandedDay === day.key ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-											</svg>
-										</div>
+														? 'bg-emerald-900/50 text-emerald-300'
+														: 'bg-slate-800 text-slate-300'
+											}`}
+										>
+											{progress[day.key]?.suspicious && completion.completed
+												? 'Posible engaño'
+												: completion.completed
+													? 'Completado'
+													: 'En progreso'}
+										</span>
 									</div>
-									<p class="text-[13px] sm:text-sm text-slate-400 mt-1.5">
-										{completion.done}/{completion.total} ejercicios
-									</p>
-								</button>
-								{#if expandedDay === day.key}
-									{@const details = getExerciseDetails(day.key)}
-									<div class="border-t border-slate-800 bg-[#0d1019] px-4 py-3 space-y-1">
-										<p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Detalle</p>
-										<div class="divide-y divide-slate-800/60">
-											{#each details.exercises as ex}
-												<div class="grid grid-cols-[1fr_auto] gap-3 items-center py-2 hover:bg-slate-800/30 -mx-2 px-2 rounded transition-colors">
-													<span class="text-sm {ex.exists ? 'text-slate-200' : 'text-slate-500 italic'} line-clamp-2">{ex.name}</span>
-													<span class="inline-flex items-center gap-1 text-sm font-medium px-2 py-0.5 rounded {ex.complete ? 'bg-emerald-900/40 text-emerald-300' : 'bg-slate-800/60 text-slate-400'}">
-														{ex.done}/{ex.target}
-														{#if ex.complete}
-															<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-																<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-															</svg>
-														{/if}
-													</span>
-												</div>
-											{/each}
-										</div>
-										<div class="grid grid-cols-[1fr_auto] gap-3 items-center pt-3 mt-2 border-t border-slate-700">
-											<span class="text-sm font-medium text-slate-400">Total</span>
-											<span class="text-sm font-semibold text-slate-200">{details.doneSeries}/{details.totalSeries} series</span>
-										</div>
-										{#if details.hasInconsistency}
-											<p class="text-xs text-amber-400/80 mt-2">
-												La rutina fue modificada después del progreso registrado.
-											</p>
-										{/if}
+									<div class="flex items-center gap-1.5 text-sm text-slate-300">
+										<span class="hidden sm:inline">Detalle</span>
+										<svg class="w-4 h-4 transition-transform {expandedDay === day.key ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+										</svg>
 									</div>
-								{/if}
-							</li>
-						{/if}
-					{/each}
-				</ul>
-				{#if hasSuspicious}
-					<p class="mt-3 text-sm text-amber-200">
-						Posible engaño significa que el alumno marcó todas las series del día en menos de 60 segundos. Es posible que las haya marcado sin haber entrenado.
-					</p>
-				{/if}
-			</div>
-
-			<div class="rounded-2xl border border-slate-800 bg-[#0f111b] p-4 shadow-lg shadow-black/30 text-sm text-slate-300">
-				<p class="font-semibold text-slate-100">Última actualización</p>
-				<p class="mt-1 text-slate-400">
-					{#if data.last_completed_at}
-						{new Date(data.last_completed_at).toLocaleString()}
-					{:else}
-						—
+								</div>
+								<p class="text-[13px] sm:text-sm text-slate-400 mt-1.5">
+									{completion.done}/{completion.total} ejercicios
+								</p>
+							</button>
+							{#if expandedDay === day.key}
+								{@const details = getExerciseDetails(day.key)}
+								<div class="border-t border-slate-800 bg-[#0d1019] px-4 py-3 space-y-1">
+									<p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Detalle</p>
+									<div class="divide-y divide-slate-800/60">
+										{#each details.exercises as ex}
+											<div class="grid grid-cols-[1fr_auto] gap-3 items-center py-2 hover:bg-slate-800/30 -mx-2 px-2 rounded transition-colors">
+												<span class="text-sm {ex.exists ? 'text-slate-200' : 'text-slate-500 italic'} line-clamp-2">{ex.name}</span>
+												<span class="inline-flex items-center gap-1 text-sm font-medium px-2 py-0.5 rounded {ex.complete ? 'bg-emerald-900/40 text-emerald-300' : 'bg-slate-800/60 text-slate-400'}">
+													{ex.done}/{ex.target}
+													{#if ex.complete}
+														<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+														</svg>
+													{/if}
+												</span>
+											</div>
+										{/each}
+									</div>
+									<div class="grid grid-cols-[1fr_auto] gap-3 items-center pt-3 mt-2 border-t border-slate-700">
+										<span class="text-sm font-medium text-slate-400">Total</span>
+										<span class="text-sm font-semibold text-slate-200">{details.doneSeries}/{details.totalSeries} series</span>
+									</div>
+									{#if details.hasInconsistency}
+										<p class="text-xs text-amber-400/80 mt-2">
+											La rutina fue modificada después del progreso registrado.
+										</p>
+									{/if}
+								</div>
+							{/if}
+						</li>
 					{/if}
+				{/each}
+			</ul>
+			{#if hasSuspicious}
+				<p class="mt-3 text-sm text-amber-200">
+					Posible engaño significa que el alumno marcó todas las series del día en menos de 60 segundos. Es posible que las haya marcado sin haber entrenado.
 				</p>
+			{/if}
+		</div>
+
+		<div class="order-3 lg:order-4 lg:col-start-2 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 shadow-lg shadow-black/30 text-sm text-slate-300">
+			<p class="font-semibold text-slate-100">Última actualización</p>
+			<p class="mt-1 text-slate-400">
+				{#if data.last_completed_at}
+					{new Date(data.last_completed_at).toLocaleString()}
+				{:else}
+					—
+				{/if}
+			</p>
+		</div>
+
+		<div class="order-4 lg:order-2 lg:col-start-2 rounded-2xl border border-slate-800 bg-gradient-to-br from-[#0f172a] to-[#0b1224] p-4 md:p-6 shadow-lg shadow-black/30 space-y-3">
+			<div class="flex items-center justify-between">
+				<div>
+					<p class="text-sm font-semibold uppercase tracking-[0.12em] text-slate-400">Link de la rutina</p>
+					<p class="mt-1 text-base font-semibold text-emerald-200 break-all">{link}</p>
+					<p class="mt-2 text-xs text-white">El alumno accede sin login; si está archivado verá “acceso desactivado”.</p>
+				</div>
 			</div>
 		</div>
 	</section>

@@ -401,8 +401,8 @@
 		<p class="rounded-lg bg-[#151827] px-3 py-2 text-sm text-emerald-200 border border-emerald-700/40">{statusMessage}</p>
 	{/if}
 
-	<section class="grid gap-6 lg:grid-cols-[2fr,1fr] lg:items-start lg:gap-x-6 lg:gap-y-3">
-		<div class="order-2 lg:order-1 lg:row-span-3 space-y-5 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 md:p-6 shadow-lg shadow-black/30">
+	<section class="grid gap-6 lg:grid-cols-[2fr,1fr]">
+		<div class="order-2 lg:order-1 space-y-5 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 md:p-6 shadow-lg shadow-black/30">
 			<div class="flex items-center justify-between">
 				<h2 class="text-3xl font-extrabold uppercase tracking-wide text-slate-50">Rutina</h2>
 				<button
@@ -626,7 +626,8 @@
 			{/if}
 		</div>
 
-		<div class="order-1 lg:order-3 lg:col-start-2 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 md:p-6 shadow-lg shadow-black/30">
+		<div class="contents lg:order-2 lg:flex lg:flex-col lg:gap-3">
+		<div class="order-1 lg:order-2 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 md:p-6 shadow-lg shadow-black/30">
 			<div class="flex items-center justify-between">
 				<div class="flex flex-col gap-1">
 					<h3 class="text-xl font-semibold uppercase tracking-wide text-slate-50">Semana actual</h3>
@@ -709,7 +710,7 @@
 			{/if}
 		</div>
 
-		<div class="order-3 lg:order-4 lg:col-start-2 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 shadow-lg shadow-black/30 text-sm text-slate-300">
+		<div class="order-3 lg:order-3 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 shadow-lg shadow-black/30 text-sm text-slate-300">
 			<p class="font-semibold text-slate-100">Última actualización</p>
 			<p class="mt-1 text-slate-400">
 				{#if data.last_completed_at}
@@ -720,7 +721,7 @@
 			</p>
 		</div>
 
-		<div class="order-4 lg:order-2 lg:col-start-2 rounded-2xl border border-slate-800 bg-gradient-to-br from-[#0f172a] to-[#0b1224] p-4 md:p-6 shadow-lg shadow-black/30 space-y-3">
+		<div class="order-4 lg:order-1 rounded-2xl border border-slate-800 bg-gradient-to-br from-[#0f172a] to-[#0b1224] p-4 md:p-6 shadow-lg shadow-black/30 space-y-3">
 			<div class="flex items-center justify-between">
 				<div>
 					<p class="text-sm font-semibold uppercase tracking-[0.12em] text-slate-400">Link de la rutina</p>
@@ -728,6 +729,7 @@
 					<p class="mt-2 text-xs text-white">El alumno accede sin login; si está archivado verá “acceso desactivado”.</p>
 				</div>
 			</div>
+		</div>
 		</div>
 	</section>
 

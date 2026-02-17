@@ -402,7 +402,7 @@
 	{/if}
 
 	<section class="grid gap-6 lg:grid-cols-[2fr,1fr]">
-		<div class="order-2 lg:order-1 space-y-5 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 md:p-6 shadow-lg shadow-black/30">
+		<div class="order-3 lg:order-1 space-y-5 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 md:p-6 shadow-lg shadow-black/30">
 			<div class="flex items-center justify-between">
 				<h2 class="text-3xl font-extrabold uppercase tracking-wide text-slate-50">Rutina</h2>
 				<button
@@ -710,7 +710,7 @@
 			{/if}
 		</div>
 
-		<div class="order-3 lg:order-3 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 shadow-lg shadow-black/30 text-sm text-slate-300">
+		<div class="order-2 lg:order-3 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 shadow-lg shadow-black/30 text-sm text-slate-300">
 			<p class="font-semibold text-slate-100">Última actualización</p>
 			<p class="mt-1 text-slate-400">
 				{#if data.last_completed_at}

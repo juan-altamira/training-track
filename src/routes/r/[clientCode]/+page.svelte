@@ -649,7 +649,7 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 			Iniciar nueva semana
 		</button>
 		<p class="reset-help">
-			Cuando inicies una nueva semana debés tocar este botón para volver a completar ejercicios y registrar tu nuevo progreso.
+			Esto reinicia los contadores y comienza un nuevo registro semanal.
 		</p>
 
 		{#if showResetConfirm}

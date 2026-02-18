@@ -194,7 +194,7 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 			}
 
 			const payload = await res.json();
-			const saved = payload?.dayFeedback;
+			const saved = payload?.dayFeedback ?? payload?.data?.dayFeedback;
 			if (saved?.day_key) {
 				dayFeedback = { ...dayFeedback, [saved.day_key]: saved };
 			}
@@ -338,16 +338,27 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		};
 
 		resize();
+		requestAnimationFrame(resize);
 		node.addEventListener('input', resize);
 
 		return {
 			update(_nextValue?: string) {
 				resize();
+				requestAnimationFrame(resize);
 			},
 			destroy() {
 				node.removeEventListener('input', resize);
 			}
 		};
+	};
+
+	const handleFeedbackCommentInput = (dayKey: string, event: Event) => {
+		const node = event.currentTarget as HTMLTextAreaElement;
+		const limited = node.value.slice(0, 300);
+		if (node.value !== limited) {
+			node.value = limited;
+		}
+		updateFeedbackDraft(dayKey, { comment: limited });
 	};
 
 	const resetProgress = async () => {
@@ -514,15 +525,17 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 												<textarea
 													class="feedback-textarea"
 													rows="3"
+													maxlength="300"
 													value={draft.comment}
 													use:autoResizeTextarea={draft.comment}
 													oninput={(event) =>
-														updateFeedbackDraft(day.key, {
-															comment: (event.currentTarget as HTMLTextAreaElement).value
-														})}
+														handleFeedbackCommentInput(day.key, event)}
 													placeholder="Si querés, contame en una línea cómo te sentiste."
 												></textarea>
 												<p class={`feedback-counter ${feedbackCounterTone(draft.comment.length)}`}>{draft.comment.length}/300</p>
+												{#if draft.comment.length >= 300}
+													<p class="feedback-limit-note">Alcanzaste el maximo de 300 caracteres.</p>
+												{/if}
 											</div>
 
 											{#if feedbackErrorByDay[day.key]}
@@ -875,10 +888,13 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		color: #e7edf8;
 		border-radius: 10px;
 		padding: 0.6rem 0.7rem;
+		width: 100%;
+		box-sizing: border-box;
 		resize: none;
-		overflow-y: hidden;
+		overflow: hidden;
 		min-height: 86px;
 		font-size: 0.92rem;
+		line-height: 1.45;
 	}
 
 	.feedback-textarea:focus-visible {
@@ -904,6 +920,13 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		margin: 0;
 		font-size: 0.83rem;
 		color: #fca5a5;
+	}
+
+	.feedback-limit-note {
+		margin: -0.1rem 0 0;
+		font-size: 0.78rem;
+		color: #f3f4f6;
+		opacity: 0.88;
 	}
 
 	.feedback-actions {

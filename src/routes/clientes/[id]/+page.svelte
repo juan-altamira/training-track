@@ -736,11 +736,11 @@
 											</div>
 										{/each}
 									</div>
-										<div class="grid grid-cols-[1fr_auto] gap-3 items-center pt-3 mt-2 border-t border-slate-700">
+										<div class="grid grid-cols-[1fr_auto] gap-3 items-center pt-3 pb-1 mt-2 border-t border-slate-700">
 											<span class="text-sm font-medium text-slate-400">Total</span>
 											<span class="text-sm font-semibold text-slate-200">{details.doneExercises}/{details.totalExercises} ejercicios</span>
 										</div>
-										<div class="mt-4 rounded-lg border border-slate-800/90 bg-[#0f1422] p-3">
+										<div class="mt-7 rounded-lg border border-slate-800/90 bg-[#0f1422] p-3">
 											<button
 												type="button"
 												class="w-full flex items-center justify-between gap-3 rounded-md px-2 py-2.5 text-left hover:bg-slate-800/30"

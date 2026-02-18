@@ -327,6 +327,22 @@
 
 	const hasDayFeedback = (dayKey: string) => Boolean(dayFeedback[dayKey]);
 
+	const getDayFeedbackBadgeState = (dayKey: string): 'registered' | 'partial' | 'none' => {
+		const row = dayFeedback[dayKey];
+		if (!row) return 'none';
+		const mainAnswered =
+			(row.mood ? 1 : 0) + (typeof row.difficulty === 'number' ? 1 : 0) + (row.pain ? 1 : 0);
+		if (mainAnswered === 3) return 'registered';
+		return 'partial';
+	};
+
+	const getDayFeedbackBadgeLabel = (dayKey: string): string => {
+		const state = getDayFeedbackBadgeState(dayKey);
+		if (state === 'registered') return 'Registrado';
+		if (state === 'partial') return 'Parcial';
+		return 'No registrado';
+	};
+
 	const formatFeedbackMood = (value: DayFeedbackMood | null | undefined) =>
 		value ? DAY_FEEDBACK_MOOD_LABEL[value] : '— (Sin respuesta)';
 
@@ -730,11 +746,13 @@
 											>
 												<span class="text-sm font-semibold text-slate-200">Ver sensaciones del día</span>
 												<span class={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
-													hasDayFeedback(day.key)
+													getDayFeedbackBadgeState(day.key) === 'registered'
 														? 'border border-emerald-600/50 bg-emerald-900/30 text-emerald-300'
-														: 'border border-slate-600/60 bg-slate-800/40 text-slate-300'
+														: getDayFeedbackBadgeState(day.key) === 'partial'
+															? 'border border-amber-600/50 bg-amber-900/30 text-amber-200'
+															: 'border border-slate-600/60 bg-slate-800/40 text-slate-300'
 												}`}>
-													{hasDayFeedback(day.key) ? 'Registrado' : 'No registrado'}
+													{getDayFeedbackBadgeLabel(day.key)}
 												</span>
 											</button>
 											{#if feedbackExpanded[day.key]}
@@ -757,8 +775,8 @@
 															<span class="text-slate-400">Comentario:</span>
 															<span class={row?.comment ? 'text-slate-200' : 'text-slate-400'}>{formatFeedbackComment(row?.comment)}</span>
 														</div>
-														{#if row?.created_at}
-															<p class="pt-1 text-[11px] text-slate-500">Registrado: {new Date(row.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+														{#if row?.submitted_at}
+															<p class="pt-1 text-[11px] text-slate-500">Registrado: {new Date(row.submitted_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
 														{/if}
 													{:else}
 														<p class="text-slate-400">El alumno no completó la encuesta este día.</p>

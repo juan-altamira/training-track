@@ -1,12 +1,15 @@
 import { getTargetSets, normalizePlan, normalizeProgress, WEEK_DAYS } from '$lib/routines';
 import {
+	DAY_FEEDBACK_COMMENT_MAX_LENGTH,
 	buildProgressCycleKey,
+	isFeedbackCommentTooLong,
 	isValidDayKey,
 	isValidMood,
 	isValidPain,
 	normalizeFeedbackComment,
 	toDayFeedbackByDay
 } from '$lib/dayFeedback';
+import { env as privateEnv } from '$env/dynamic/private';
 import { supabaseAdmin } from '$lib/server/supabaseAdmin';
 import { ensureTrainerAccessByTrainerId } from '$lib/server/trainerAccess';
 import type { ProgressState, RoutinePlan } from '$lib/types';
@@ -25,10 +28,26 @@ const fetchClient = async (clientCode: string) => {
 
 const isTrainerAllowed = async (trainerId: string) => ensureTrainerAccessByTrainerId(trainerId);
 
+const PRODUCT_FEEDBACK_TZ =
+	(privateEnv.PRIVATE_PRODUCT_TIMEZONE || '').trim() || 'America/Argentina/Buenos_Aires';
+
+const toLocalDateInTimezone = (date: Date, timeZone: string): string => {
+	const parts = new Intl.DateTimeFormat('en-CA', {
+		timeZone,
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit'
+	}).formatToParts(date);
+	const year = parts.find((part) => part.type === 'year')?.value ?? '1970';
+	const month = parts.find((part) => part.type === 'month')?.value ?? '01';
+	const day = parts.find((part) => part.type === 'day')?.value ?? '01';
+	return `${year}-${month}-${day}`;
+};
+
 const loadDayFeedback = async (clientId: string, cycleKey: string) => {
 	const { data, error: feedbackError } = await supabaseAdmin
 		.from('client_day_feedback')
-		.select('day_key,mood,difficulty,pain,comment,created_at,updated_at')
+		.select('day_key,day_local,submitted_at,mood,difficulty,pain,comment,created_at,updated_at')
 		.eq('client_id', clientId)
 		.eq('cycle_key', cycleKey);
 
@@ -328,6 +347,12 @@ export const actions: Actions = {
 			return fail(400, { message: 'Completá al menos una respuesta antes de guardar.' });
 		}
 
+		if (isFeedbackCommentTooLong(comment)) {
+			return fail(400, {
+				message: `El comentario no puede superar ${DAY_FEEDBACK_COMMENT_MAX_LENGTH} caracteres.`
+			});
+		}
+
 		const { data: progressRow, error: progressError } = await supabaseAdmin
 			.from('progress')
 			.select('progress')
@@ -343,9 +368,14 @@ export const actions: Actions = {
 		const cycleStartedAt = progress._meta?.last_reset_utc ?? null;
 		const cycleKey = buildProgressCycleKey(cycleStartedAt);
 
+		const submittedAt = nowIsoUtc();
+		const dayLocal = toLocalDateInTimezone(new Date(submittedAt), PRODUCT_FEEDBACK_TZ);
+
 		const payload = {
 			client_id: client.id,
 			day_key: dayKey,
+			day_local: dayLocal,
+			submitted_at: submittedAt,
 			cycle_key: cycleKey,
 			cycle_started_at: cycleStartedAt,
 			mood,
@@ -357,7 +387,7 @@ export const actions: Actions = {
 		const { data: savedRow, error: saveError } = await supabaseAdmin
 			.from('client_day_feedback')
 			.upsert(payload, { onConflict: 'client_id,day_key,cycle_key' })
-			.select('day_key,mood,difficulty,pain,comment,created_at,updated_at')
+			.select('day_key,day_local,submitted_at,mood,difficulty,pain,comment,created_at,updated_at')
 			.single();
 
 		if (saveError) {
@@ -369,6 +399,8 @@ export const actions: Actions = {
 			success: true,
 			dayFeedback: {
 				day_key: savedRow.day_key,
+				day_local: savedRow.day_local,
+				submitted_at: savedRow.submitted_at,
 				mood: savedRow.mood,
 				difficulty: savedRow.difficulty,
 				pain: savedRow.pain,

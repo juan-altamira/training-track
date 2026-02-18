@@ -30,7 +30,7 @@ const firstRelation = <T>(relation: T | T[] | null | undefined): T | null => {
 const loadDayFeedback = async (clientId: string, cycleKey: string) => {
 	const { data, error: feedbackError } = await supabaseAdmin
 		.from('client_day_feedback')
-		.select('day_key,mood,difficulty,pain,comment,created_at,updated_at')
+		.select('day_key,day_local,submitted_at,mood,difficulty,pain,comment,created_at,updated_at')
 		.eq('client_id', clientId)
 		.eq('cycle_key', cycleKey);
 

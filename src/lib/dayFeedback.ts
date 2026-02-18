@@ -9,12 +9,15 @@ export const DAY_FEEDBACK_MOOD_VALUES = [
 ] as const;
 
 export const DAY_FEEDBACK_PAIN_VALUES = ['none', 'mild', 'moderate', 'severe'] as const;
+export const DAY_FEEDBACK_COMMENT_MAX_LENGTH = 300;
 
 export type DayFeedbackMood = (typeof DAY_FEEDBACK_MOOD_VALUES)[number];
 export type DayFeedbackPain = (typeof DAY_FEEDBACK_PAIN_VALUES)[number];
 
 export type DayFeedbackRow = {
 	day_key: string;
+	day_local: string | null;
+	submitted_at: string | null;
 	mood: DayFeedbackMood | null;
 	difficulty: number | null;
 	pain: DayFeedbackPain | null;
@@ -52,8 +55,11 @@ export const isValidPain = (value: string): value is DayFeedbackPain =>
 export const normalizeFeedbackComment = (raw: string): string | null => {
 	const trimmed = raw.trim();
 	if (!trimmed) return null;
-	return trimmed.slice(0, 300);
+	return trimmed;
 };
+
+export const isFeedbackCommentTooLong = (comment: string | null): boolean =>
+	(comment?.length ?? 0) > DAY_FEEDBACK_COMMENT_MAX_LENGTH;
 
 export const buildProgressCycleKey = (lastResetUtc: string | null | undefined): string => {
 	const clean = (lastResetUtc ?? '').trim();
@@ -77,6 +83,8 @@ export const toDayFeedbackByDay = (
 		if (!row.day_key || !isValidDayKey(row.day_key)) continue;
 		base[row.day_key] = {
 			day_key: row.day_key,
+			day_local: typeof row.day_local === 'string' ? row.day_local : null,
+			submitted_at: typeof row.submitted_at === 'string' ? row.submitted_at : null,
 			mood: (row.mood as DayFeedbackMood | null) ?? null,
 			difficulty: typeof row.difficulty === 'number' ? row.difficulty : null,
 			pain: (row.pain as DayFeedbackPain | null) ?? null,

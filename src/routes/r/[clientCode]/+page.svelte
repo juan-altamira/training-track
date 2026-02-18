@@ -76,9 +76,16 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		return answered;
 	};
 
+	const hasRealProgressForDay = (dayKey: string): boolean => {
+		const dayPlan = plan[dayKey];
+		if (!dayPlan || dayPlan.exercises.length === 0) return false;
+		const dayExercises = progress[dayKey]?.exercises ?? {};
+		return dayPlan.exercises.some((exercise) => (dayExercises[exercise.id] ?? 0) > 0);
+	};
+
 	const getFeedbackCardMode = (dayKey: string): 'prompt' | 'form' | 'reminder' | null => {
 		if (dayFeedback[dayKey]) return null;
-		if (!isDayCompleted(dayKey)) return null;
+		if (!hasRealProgressForDay(dayKey)) return null;
 		return feedbackCardModeByDay[dayKey] ?? 'prompt';
 	};
 
@@ -166,7 +173,7 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		const dayPlan = plan[dayKey];
 		const exercise = dayPlan.exercises.find((ex) => ex.id === exerciseId);
 		if (!exercise) return;
-		const wasCompleted = isDayCompleted(dayKey);
+		const hadRealProgress = hasRealProgressForDay(dayKey);
 
 		const target = Math.max(1, getTargetSets(exercise) || 0);
 		const current = progress[dayKey]?.exercises?.[exerciseId] ?? 0;
@@ -199,8 +206,8 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 			const done = progress[dayKey].exercises?.[ex.id] ?? 0;
 			return done >= t;
 		});
-		const nowCompleted = progress[dayKey].completed;
-		if (!wasCompleted && nowCompleted && !dayFeedback[dayKey]) {
+		const nowHasRealProgress = hasRealProgressForDay(dayKey);
+		if (!hadRealProgress && nowHasRealProgress && !dayFeedback[dayKey]) {
 			feedbackCardModeByDay = {
 				...feedbackCardModeByDay,
 				[dayKey]: feedbackCardModeByDay[dayKey] ?? 'prompt'
@@ -353,32 +360,6 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 
 							{#if expanded[day.key]}
 								<div class="day-body">
-									{#each plan[day.key].exercises as exercise (exercise.id)}
-										<div class="exercise-card">
-										<div class="exercise-head">
-											<div>
-												<p class="exercise-name">{exercise.name}</p>
-												<p class="exercise-scheme">{formatPrescriptionLong(exercise) || exercise.scheme}</p>
-											</div>
-											{#if (progress[day.key]?.exercises?.[exercise.id] ?? 0) >= Math.max(1, getTargetSets(exercise) || 0)}
-												<span class="badge success">Completado</span>
-											{/if}
-										</div>
-										{#if exercise.note}
-											<p class="exercise-note">{exercise.note}</p>
-										{/if}
-											<div class="exercise-controls">
-												<button class="pill-btn" type="button" onclick={() => adjustSets(day.key, exercise.id, -1)}>−</button>
-												<div class="sets">
-												<span class="sets-done">{progress[day.key]?.exercises?.[exercise.id] ?? 0}</span>
-												<span class="sets-separator">/</span>
-												<span class="sets-total">{Math.max(1, getTargetSets(exercise) || 0)}</span>
-											</div>
-											<button class="pill-btn" type="button" onclick={() => adjustSets(day.key, exercise.id, 1)}>+</button>
-											</div>
-										</div>
-									{/each}
-
 									{#if getFeedbackCardMode(day.key) === 'prompt'}
 										<div class="feedback-card">
 											<h3>¿Cómo te fue hoy?</h3>
@@ -481,6 +462,32 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 											</div>
 										</div>
 									{/if}
+
+									{#each plan[day.key].exercises as exercise (exercise.id)}
+										<div class="exercise-card">
+										<div class="exercise-head">
+											<div>
+												<p class="exercise-name">{exercise.name}</p>
+												<p class="exercise-scheme">{formatPrescriptionLong(exercise) || exercise.scheme}</p>
+											</div>
+											{#if (progress[day.key]?.exercises?.[exercise.id] ?? 0) >= Math.max(1, getTargetSets(exercise) || 0)}
+												<span class="badge success">Completado</span>
+											{/if}
+										</div>
+										{#if exercise.note}
+											<p class="exercise-note">{exercise.note}</p>
+										{/if}
+											<div class="exercise-controls">
+												<button class="pill-btn" type="button" onclick={() => adjustSets(day.key, exercise.id, -1)}>−</button>
+												<div class="sets">
+												<span class="sets-done">{progress[day.key]?.exercises?.[exercise.id] ?? 0}</span>
+												<span class="sets-separator">/</span>
+												<span class="sets-total">{Math.max(1, getTargetSets(exercise) || 0)}</span>
+											</div>
+											<button class="pill-btn" type="button" onclick={() => adjustSets(day.key, exercise.id, 1)}>+</button>
+											</div>
+										</div>
+									{/each}
 								</div>
 							{/if}
 						</article>

@@ -722,7 +722,7 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 	}
 
 	.feedback-field + .feedback-field {
-		margin-top: 0.25rem;
+		margin-top: 0.95rem;
 	}
 
 	.feedback-label {

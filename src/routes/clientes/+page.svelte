@@ -959,7 +959,7 @@
 		</section>
 	{/if}
 
-		<section class="grid gap-6 lg:grid-cols-[2fr,1fr] lg:items-start">
+		<section class="grid gap-8 sm:gap-10 lg:gap-6 lg:grid-cols-[2fr,1fr] lg:items-start">
 			<form
 				method="post"
 				action="?/create"
@@ -1027,7 +1027,11 @@
 				{/if}
 			</form>
 
-			<div class="order-2 lg:order-1 lg:col-start-1 flex flex-wrap items-center gap-3 rounded-xl border border-slate-800 bg-[#0f111b] px-4 py-3 shadow-md shadow-black/30">
+			<div class="order-2 px-1 pt-1 pb-0 lg:hidden">
+				<div class="h-px w-full bg-gradient-to-r from-transparent via-slate-500/40 to-transparent"></div>
+			</div>
+
+			<div class="order-3 mt-8 sm:mt-10 lg:mt-0 lg:order-1 lg:col-start-1 flex flex-wrap items-center gap-3 rounded-xl border border-slate-800 bg-[#0f111b] px-4 py-3 shadow-md shadow-black/30">
 				<form
 					class="flex w-full flex-col gap-3 sm:flex-row sm:items-center"
 					on:submit|preventDefault={() => (searchTerm = searchTerm.trim())}
@@ -1050,7 +1054,7 @@
 				</form>
 			</div>
 
-			<div class="order-3 lg:order-2 lg:col-start-1 space-y-3">
+			<div class="order-4 lg:order-2 lg:col-start-1 space-y-3">
 				{#if clients.length === 0}
 					<div class="rounded-xl border border-dashed border-slate-700 bg-[#0f111b] p-7 text-base text-slate-300">
 						Aún no tenés alumnos. Creá uno y compartí el link público.

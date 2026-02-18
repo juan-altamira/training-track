@@ -1100,12 +1100,13 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 
 	.reset-btn {
 		width: 100%;
-		margin-top: 1.5rem;
+		margin-top: 2.75rem;
 		background: #111423;
 		color: #e4e7ec;
 		border: 1px solid #1f2333;
 		border-radius: 12px;
-		padding: 0.75rem 1rem;
+		min-height: 58px;
+		padding: 1.05rem 1rem;
 		font-weight: 700;
 		cursor: pointer;
 		box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);

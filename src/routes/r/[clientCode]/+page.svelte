@@ -1,5 +1,12 @@
 <script lang="ts">
-import { DAY_FEEDBACK_MOOD_LABEL, DAY_FEEDBACK_PAIN_LABEL, type DayFeedbackByDay, type DayFeedbackMood, type DayFeedbackPain } from '$lib/dayFeedback';
+import {
+	DAY_FEEDBACK_MOOD_LABEL,
+	DAY_FEEDBACK_PAIN_LABEL,
+	type DayFeedbackByDay,
+	type DayFeedbackMood,
+	type DayFeedbackPain,
+	type DayFeedbackRow
+} from '$lib/dayFeedback';
 import { WEEK_DAYS, getTargetSets, formatPrescriptionLong } from '$lib/routines';
 import type { ProgressState, RoutinePlan } from '$lib/types';
 
@@ -158,9 +165,54 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		feedbackDraftByDay = { ...feedbackDraftByDay, [dayKey]: next };
 	};
 
+	const extractActionPayload = async (response: Response): Promise<Record<string, any>> => {
+		const raw = await response.text();
+		if (!raw) return {};
+		try {
+			return JSON.parse(raw) as Record<string, any>;
+		} catch {
+			return {};
+		}
+	};
+
+	const extractSavedDayFeedback = (payload: Record<string, any>) =>
+		payload?.dayFeedback ?? payload?.data?.dayFeedback ?? null;
+
+	const parseFeedbackDifficulty = (raw: string): number | null => {
+		const value = Number(raw);
+		if (!Number.isInteger(value) || value < 1 || value > 10) return null;
+		return value;
+	};
+
+	const buildOptimisticDayFeedbackRow = (
+		dayKey: string,
+		draft: {
+			mood: DayFeedbackMood | '';
+			difficulty: string;
+			pain: DayFeedbackPain | '';
+			comment: string;
+		},
+		previous: DayFeedbackRow | null
+	): DayFeedbackRow => {
+		const nowIso = new Date().toISOString();
+		const trimmedComment = draft.comment.trim();
+		return {
+			day_key: dayKey,
+			day_local: previous?.day_local ?? null,
+			submitted_at: nowIso,
+			mood: draft.mood || null,
+			difficulty: parseFeedbackDifficulty(draft.difficulty),
+			pain: draft.pain || null,
+			comment: trimmedComment ? trimmedComment : null,
+			created_at: previous?.created_at ?? nowIso,
+			updated_at: nowIso
+		};
+	};
+
 	const saveDayFeedback = async (dayKey: string) => {
 		ensureFeedbackDraft(dayKey);
 		const draft = feedbackDraftByDay[dayKey];
+		const optimisticRow = buildOptimisticDayFeedbackRow(dayKey, draft, dayFeedback[dayKey]);
 
 		if (feedbackAnsweredCount(dayKey) === 0) {
 			feedbackErrorByDay = {
@@ -180,27 +232,28 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		if (draft.pain) formData.set('pain', draft.pain);
 		if (draft.comment.trim()) formData.set('comment', draft.comment.trim());
 
-		try {
-			const res = await fetch('?/saveDayFeedback', {
-				method: 'POST',
-				body: formData
-			});
+			try {
+				const res = await fetch('?/saveDayFeedback', {
+					method: 'POST',
+					body: formData
+				});
+				const payload = await extractActionPayload(res);
 
-			if (!res.ok) {
-				const payload = await res.json().catch(() => ({}));
-				const serverMessage = payload?.data?.message ?? payload?.message ?? 'No pudimos guardar tu respuesta.';
-				feedbackErrorByDay = { ...feedbackErrorByDay, [dayKey]: serverMessage };
-				return;
-			}
+				if (!res.ok) {
+					const serverMessage = payload?.data?.message ?? payload?.message ?? 'No pudimos guardar tu respuesta.';
+					feedbackErrorByDay = { ...feedbackErrorByDay, [dayKey]: serverMessage };
+					return;
+				}
 
-			const payload = await res.json();
-			const saved = payload?.dayFeedback ?? payload?.data?.dayFeedback;
-			if (saved?.day_key) {
-				dayFeedback = { ...dayFeedback, [saved.day_key]: saved };
-			}
-			feedbackCardModeByDay = { ...feedbackCardModeByDay, [dayKey]: 'saved' };
-			feedbackDraftByDay = { ...feedbackDraftByDay, [dayKey]: emptyFeedbackDraft() };
-			feedbackErrorByDay = { ...feedbackErrorByDay, [dayKey]: '' };
+				// Update inmediato en UI para que "Editar respuestas" use los datos nuevos sin F5.
+				const saved = extractSavedDayFeedback(payload);
+				dayFeedback = {
+					...dayFeedback,
+					[dayKey]: saved ? { ...optimisticRow, ...saved, day_key: dayKey } : optimisticRow
+				};
+				feedbackCardModeByDay = { ...feedbackCardModeByDay, [dayKey]: 'saved' };
+				feedbackDraftByDay = { ...feedbackDraftByDay, [dayKey]: emptyFeedbackDraft() };
+				feedbackErrorByDay = { ...feedbackErrorByDay, [dayKey]: '' };
 		} catch (e) {
 			console.error(e);
 			feedbackErrorByDay = {

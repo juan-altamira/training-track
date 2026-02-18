@@ -512,128 +512,132 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 										</div>
 									{/each}
 
-									{#if getFeedbackCardMode(day.key) === 'prompt'}
-										<div class="feedback-card">
-											<h3>¿Cómo te fue hoy?</h3>
-											<p class="feedback-subtitle">10 segundos. Me ayuda a ajustar tu rutina.</p>
-											<div class="feedback-actions">
-												<button class="btn primary" type="button" onclick={() => openFeedbackForm(day.key)}>Responder</button>
-												<button class="btn ghost" type="button" onclick={() => skipFeedbackForNow(day.key)}>Ahora no</button>
-											</div>
-										</div>
-									{:else if getFeedbackCardMode(day.key) === 'reminder'}
-										<div class="feedback-reminder">
-											<p>¿Cómo te fue hoy?</p>
-											<button class="btn ghost" type="button" onclick={() => openFeedbackForm(day.key)}>Responder</button>
-										</div>
-									{:else if getFeedbackCardMode(day.key) === 'saved'}
-										<div class="feedback-card feedback-card-saved">
-											<h3>¿Como te fue hoy?</h3>
-											<p class="feedback-saved-status">
-												<span aria-hidden="true">✅</span>
-												<span>Registro guardado</span>
-											</p>
-											<button class="btn ghost feedback-edit-btn" type="button" onclick={() => openFeedbackForm(day.key)}>
-												Editar respuestas.
-											</button>
-										</div>
-									{:else if getFeedbackCardMode(day.key) === 'form'}
-										{@const draft = feedbackDraftByDay[day.key] ?? emptyFeedbackDraft()}
-										<div class="feedback-card">
-											<h3>¿Cómo te fue hoy?</h3>
-											<p class="feedback-subtitle">10 segundos. Me ayuda a ajustar tu rutina.</p>
-
-											<div class="feedback-field">
-												<p class="feedback-label">1) ¿Cómo te sentiste hoy?</p>
-												<div class="chip-grid">
-													{#each moodOptions as item}
-														<button
-															type="button"
-															class={`chip-btn mood-chip mood-${item.value} ${draft.mood === item.value ? 'is-selected' : ''}`}
-															onclick={() => updateFeedbackDraft(day.key, { mood: draft.mood === item.value ? '' : item.value })}
-														>
-															<span>{item.icon}</span>
-															<span>{item.label}</span>
+										{#if getFeedbackCardMode(day.key)}
+											<div class="feedback-zone">
+												{#if getFeedbackCardMode(day.key) === 'prompt'}
+													<div class="feedback-card">
+														<h3>¿Cómo te fue hoy?</h3>
+														<p class="feedback-subtitle">10 segundos. Me ayuda a ajustar tu rutina.</p>
+														<div class="feedback-actions">
+															<button class="btn primary" type="button" onclick={() => openFeedbackForm(day.key)}>Responder</button>
+															<button class="btn ghost" type="button" onclick={() => skipFeedbackForNow(day.key)}>Ahora no</button>
+														</div>
+													</div>
+												{:else if getFeedbackCardMode(day.key) === 'reminder'}
+													<div class="feedback-reminder">
+														<p>¿Cómo te fue hoy?</p>
+														<button class="btn ghost" type="button" onclick={() => openFeedbackForm(day.key)}>Responder</button>
+													</div>
+												{:else if getFeedbackCardMode(day.key) === 'saved'}
+													<div class="feedback-card feedback-card-saved">
+														<h3>¿Como te fue hoy?</h3>
+														<p class="feedback-saved-status">
+															<span aria-hidden="true">✅</span>
+															<span>Registro guardado</span>
+														</p>
+														<button class="btn ghost feedback-edit-btn" type="button" onclick={() => openFeedbackForm(day.key)}>
+															Editar respuestas.
 														</button>
-													{/each}
-												</div>
-											</div>
+													</div>
+												{:else if getFeedbackCardMode(day.key) === 'form'}
+													{@const draft = feedbackDraftByDay[day.key] ?? emptyFeedbackDraft()}
+													<div class="feedback-card">
+														<h3>¿Cómo te fue hoy?</h3>
+														<p class="feedback-subtitle">10 segundos. Me ayuda a ajustar tu rutina.</p>
 
-											<div class="feedback-field">
-												<p class="feedback-label">2) ¿Qué tan difícil fue el entrenamiento de hoy?</p>
-												<p class="feedback-help">(1 = muy fácil / 10 = extremadamente difícil)</p>
-												<div class="scale-grid">
-													{#each Array.from({ length: 10 }, (_, i) => String(i + 1)) as level}
-														<button
-															type="button"
-															class={`scale-btn ${draft.difficulty === level ? 'is-selected' : ''}`}
-															onclick={() =>
-																updateFeedbackDraft(day.key, {
-																	difficulty: draft.difficulty === level ? '' : level
-																})}
-														>
-															{level}
-														</button>
-													{/each}
-												</div>
-												{#if draft.difficulty}
-													{@const difficultyText = difficultyLabel(draft.difficulty)}
-													{#if difficultyText}
-														<p class="difficulty-selection">Seleccionaste: {draft.difficulty} ({difficultyText})</p>
-													{/if}
+														<div class="feedback-field">
+															<p class="feedback-label">1) ¿Cómo te sentiste hoy?</p>
+															<div class="chip-grid">
+																{#each moodOptions as item}
+																	<button
+																		type="button"
+																		class={`chip-btn mood-chip mood-${item.value} ${draft.mood === item.value ? 'is-selected' : ''}`}
+																		onclick={() => updateFeedbackDraft(day.key, { mood: draft.mood === item.value ? '' : item.value })}
+																	>
+																		<span>{item.icon}</span>
+																		<span>{item.label}</span>
+																	</button>
+																{/each}
+															</div>
+														</div>
+
+														<div class="feedback-field">
+															<p class="feedback-label">2) ¿Qué tan difícil fue el entrenamiento de hoy?</p>
+															<p class="feedback-help">(1 = muy fácil / 10 = extremadamente difícil)</p>
+															<div class="scale-grid">
+																{#each Array.from({ length: 10 }, (_, i) => String(i + 1)) as level}
+																	<button
+																		type="button"
+																		class={`scale-btn ${draft.difficulty === level ? 'is-selected' : ''}`}
+																		onclick={() =>
+																			updateFeedbackDraft(day.key, {
+																				difficulty: draft.difficulty === level ? '' : level
+																			})}
+																	>
+																		{level}
+																	</button>
+																{/each}
+															</div>
+															{#if draft.difficulty}
+																{@const difficultyText = difficultyLabel(draft.difficulty)}
+																{#if difficultyText}
+																	<p class="difficulty-selection">Seleccionaste: {draft.difficulty} ({difficultyText})</p>
+																{/if}
+															{/if}
+														</div>
+
+														<div class="feedback-field">
+															<p class="feedback-label">3) ¿Tuviste dolor o molestias?</p>
+															<div class="chip-grid">
+																{#each painOptions as item}
+																	<button
+																		type="button"
+																		class={`chip-btn ${draft.pain === item.value ? 'is-selected' : ''}`}
+																		onclick={() => updateFeedbackDraft(day.key, { pain: draft.pain === item.value ? '' : item.value })}
+																	>
+																		{item.label}
+																	</button>
+																{/each}
+															</div>
+														</div>
+
+														<div class="feedback-field">
+															<p class="feedback-label">4) Comentario opcional (máx. 300 caracteres)</p>
+															<textarea
+																class="feedback-textarea"
+																rows="3"
+																maxlength="300"
+																value={draft.comment}
+																use:autoResizeTextarea={draft.comment}
+																oninput={(event) =>
+																	handleFeedbackCommentInput(day.key, event)}
+																placeholder="Si querés, contame en una línea cómo te sentiste."
+															></textarea>
+															<p class={`feedback-counter ${feedbackCounterTone(draft.comment.length)}`}>{draft.comment.length}/300</p>
+															{#if draft.comment.length >= 300}
+																<p class="feedback-limit-note">Alcanzaste el maximo de 300 caracteres.</p>
+															{/if}
+														</div>
+
+														{#if feedbackErrorByDay[day.key]}
+															<p class="feedback-error">{feedbackErrorByDay[day.key]}</p>
+														{/if}
+
+														<div class="feedback-actions">
+															<button
+																class="btn primary"
+																type="button"
+																onclick={() => saveDayFeedback(day.key)}
+																disabled={feedbackSavingByDay[day.key]}
+															>
+																{feedbackSavingByDay[day.key] ? 'Guardando...' : 'Guardar'}
+															</button>
+															<button class="btn ghost" type="button" onclick={() => cancelFeedbackForm(day.key)}>Cancelar</button>
+														</div>
+													</div>
 												{/if}
 											</div>
-
-											<div class="feedback-field">
-												<p class="feedback-label">3) ¿Tuviste dolor o molestias?</p>
-												<div class="chip-grid">
-													{#each painOptions as item}
-														<button
-															type="button"
-															class={`chip-btn ${draft.pain === item.value ? 'is-selected' : ''}`}
-															onclick={() => updateFeedbackDraft(day.key, { pain: draft.pain === item.value ? '' : item.value })}
-														>
-															{item.label}
-														</button>
-													{/each}
-												</div>
-											</div>
-
-											<div class="feedback-field">
-												<p class="feedback-label">4) Comentario opcional (máx. 300 caracteres)</p>
-												<textarea
-													class="feedback-textarea"
-													rows="3"
-													maxlength="300"
-													value={draft.comment}
-													use:autoResizeTextarea={draft.comment}
-													oninput={(event) =>
-														handleFeedbackCommentInput(day.key, event)}
-													placeholder="Si querés, contame en una línea cómo te sentiste."
-												></textarea>
-												<p class={`feedback-counter ${feedbackCounterTone(draft.comment.length)}`}>{draft.comment.length}/300</p>
-												{#if draft.comment.length >= 300}
-													<p class="feedback-limit-note">Alcanzaste el maximo de 300 caracteres.</p>
-												{/if}
-											</div>
-
-											{#if feedbackErrorByDay[day.key]}
-												<p class="feedback-error">{feedbackErrorByDay[day.key]}</p>
-											{/if}
-
-											<div class="feedback-actions">
-												<button
-													class="btn primary"
-													type="button"
-													onclick={() => saveDayFeedback(day.key)}
-													disabled={feedbackSavingByDay[day.key]}
-												>
-													{feedbackSavingByDay[day.key] ? 'Guardando...' : 'Guardar'}
-												</button>
-												<button class="btn ghost" type="button" onclick={() => cancelFeedbackForm(day.key)}>Cancelar</button>
-											</div>
-										</div>
-									{/if}
+										{/if}
 								</div>
 							{/if}
 						</article>
@@ -780,12 +784,15 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 	}
 
 	.feedback-card {
-		border: 1px solid #24314f;
-		background: linear-gradient(180deg, #12172b 0%, #0d1324 100%);
+		border: 1px solid #2f4f83;
+		background: linear-gradient(160deg, #17244a 0%, #111c3d 46%, #0f1731 100%);
 		border-radius: 14px;
 		padding: 1.2rem;
 		display: grid;
 		gap: 1.2rem;
+		box-shadow:
+			0 16px 36px rgba(8, 14, 34, 0.45),
+			inset 0 1px 0 rgba(255, 255, 255, 0.08);
 	}
 
 	.feedback-card-saved {
@@ -816,14 +823,17 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 	}
 
 	.feedback-reminder {
-		border: 1px solid #22314c;
-		background: #10182a;
+		border: 1px solid #365a93;
+		background: linear-gradient(150deg, #16274a 0%, #101b34 100%);
 		border-radius: 12px;
 		padding: 0.95rem 1rem;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: 1rem;
+		box-shadow:
+			0 12px 30px rgba(8, 14, 34, 0.35),
+			inset 0 1px 0 rgba(255, 255, 255, 0.07);
 	}
 
 	.feedback-reminder p {
@@ -835,6 +845,12 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 	.feedback-field {
 		display: grid;
 		gap: 0.72rem;
+	}
+
+	.feedback-zone {
+		margin-top: 2.3rem;
+		padding-top: 1.55rem;
+		border-top: 1px solid #2a3551;
 	}
 
 	.feedback-field + .feedback-field {

@@ -583,30 +583,30 @@
 
 	{#if accountSubscription && accountSubscription.state !== 'owner'}
 		{@const accountSubscriptionVisualState = getSubscriptionVisualState(accountSubscription)}
-		<div
-			class={`rounded-xl border px-4 py-3 text-sm shadow-md shadow-black/20 ${
-				accountSubscriptionVisualState === 'expired'
-					? 'border-red-700/60 bg-red-900/20 text-red-200'
-					: accountSubscriptionVisualState === 'expiring'
-						? 'border-amber-700/60 bg-amber-900/20 text-amber-200'
-						: 'border-emerald-700/50 bg-emerald-900/10 text-emerald-200'
-			}`}
-		>
-			<p class="font-semibold text-base">{subscriptionStateLabel(accountSubscriptionVisualState)}</p>
-			{#if accountSubscription.active_until}
-				<p>
-					Vence: <span class="font-semibold">{formatDateTime(accountSubscription.active_until)}</span>
-				</p>
-			{/if}
-			{#if accountSubscription.days_remaining != null}
-				<p>
-					Quedan:
-					<span class="font-semibold">
-						{formatRemainingLabel(accountSubscription.active_until, accountSubscription.days_remaining)}
-					</span>
-				</p>
-			{/if}
-		</div>
+		{#if accountSubscriptionVisualState !== 'active'}
+			<div
+				class={`rounded-xl border px-4 py-3 text-sm shadow-md shadow-black/20 ${
+					accountSubscriptionVisualState === 'expired'
+						? 'border-red-700/60 bg-red-900/20 text-red-200'
+						: 'border-amber-700/60 bg-amber-900/20 text-amber-200'
+				}`}
+			>
+				<p class="font-semibold text-base">{subscriptionStateLabel(accountSubscriptionVisualState)}</p>
+				{#if accountSubscription.active_until}
+					<p>
+						Vence: <span class="font-semibold">{formatDateTime(accountSubscription.active_until)}</span>
+					</p>
+				{/if}
+				{#if accountSubscription.days_remaining != null}
+					<p>
+						Quedan:
+						<span class="font-semibold">
+							{formatRemainingLabel(accountSubscription.active_until, accountSubscription.days_remaining)}
+						</span>
+					</p>
+				{/if}
+			</div>
+		{/if}
 	{/if}
 
 	{#if subscriptionWarning}

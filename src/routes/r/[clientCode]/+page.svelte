@@ -1,4 +1,5 @@
 <script lang="ts">
+import { onMount } from 'svelte';
 import {
 	DAY_FEEDBACK_MOOD_LABEL,
 	DAY_FEEDBACK_PAIN_LABEL,
@@ -39,6 +40,96 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 	let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 	let pendingSaveDay: string | null = null;
 	let saveInFlight = false;
+	let timerPanelOpen = $state(false);
+	let timerBottomOffset = $state(24);
+	let timerNowMs = $state(Date.now());
+	let timerAccumulatedMs = $state(0);
+	let timerStartedAtMs = $state<number | null>(null);
+	let timerTickIntervalId: ReturnType<typeof setInterval> | null = null;
+
+	const startTimerTicking = () => {
+		if (timerTickIntervalId) return;
+		timerTickIntervalId = setInterval(() => {
+			timerNowMs = Date.now();
+		}, 250);
+	};
+
+	const stopTimerTicking = () => {
+		if (!timerTickIntervalId) return;
+		clearInterval(timerTickIntervalId);
+		timerTickIntervalId = null;
+	};
+
+	const timerIsRunning = () => timerStartedAtMs !== null;
+
+	const timerElapsedMs = () =>
+		timerAccumulatedMs + (timerStartedAtMs ? Math.max(0, timerNowMs - timerStartedAtMs) : 0);
+
+	const formatTimer = (valueMs: number) => {
+		const totalSeconds = Math.floor(Math.max(0, valueMs) / 1000);
+		const hours = Math.floor(totalSeconds / 3600);
+		const minutes = Math.floor((totalSeconds % 3600) / 60);
+		const seconds = totalSeconds % 60;
+
+		if (hours > 0) {
+			return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+		}
+
+		return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+	};
+
+	const startTimer = () => {
+		if (timerStartedAtMs !== null) return;
+		timerNowMs = Date.now();
+		timerStartedAtMs = timerNowMs;
+		startTimerTicking();
+	};
+
+	const stopTimer = () => {
+		if (timerStartedAtMs === null) return;
+		const now = Date.now();
+		timerAccumulatedMs += Math.max(0, now - timerStartedAtMs);
+		timerStartedAtMs = null;
+		timerNowMs = now;
+		stopTimerTicking();
+	};
+
+	const resetTimer = () => {
+		timerAccumulatedMs = 0;
+		timerStartedAtMs = null;
+		timerNowMs = Date.now();
+		stopTimerTicking();
+	};
+
+	const updateTimerBottomOffset = () => {
+		const viewport = window.visualViewport;
+		if (!viewport) {
+			timerBottomOffset = 24;
+			return;
+		}
+
+		const keyboardOverlap = Math.max(
+			0,
+			Math.round(window.innerHeight - (viewport.height + viewport.offsetTop))
+		);
+		timerBottomOffset = 24 + keyboardOverlap;
+	};
+
+	onMount(() => {
+		updateTimerBottomOffset();
+
+		const viewport = window.visualViewport;
+		viewport?.addEventListener('resize', updateTimerBottomOffset);
+		viewport?.addEventListener('scroll', updateTimerBottomOffset);
+		window.addEventListener('resize', updateTimerBottomOffset);
+
+		return () => {
+			stopTimerTicking();
+			viewport?.removeEventListener('resize', updateTimerBottomOffset);
+			viewport?.removeEventListener('scroll', updateTimerBottomOffset);
+			window.removeEventListener('resize', updateTimerBottomOffset);
+		};
+	});
 
 	const emptyDayFeedbackByDay = (): DayFeedbackByDay =>
 		WEEK_DAYS.reduce((acc, day) => {
@@ -651,6 +742,33 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		<p class="reset-help">
 			Esto reinicia los contadores y comienza un nuevo registro semanal.
 		</p>
+		<div class="timer-fab-wrap" style={`--timer-bottom-offset: ${timerBottomOffset}px;`}>
+			{#if timerPanelOpen}
+				<div class="timer-panel" role="region" aria-label="Cronómetro">
+					<p class="timer-readout">
+						<span aria-hidden="true">⏱</span>
+						<span>{formatTimer(timerElapsedMs())}</span>
+					</p>
+					<div class="timer-actions">
+						{#if timerIsRunning()}
+							<button class="timer-btn timer-btn-danger" type="button" onclick={stopTimer}>STOP</button>
+							<button class="timer-btn timer-btn-ghost" type="button" onclick={resetTimer}>RESET</button>
+						{:else}
+							<button class="timer-btn timer-btn-primary timer-btn-full" type="button" onclick={startTimer}>START</button>
+						{/if}
+					</div>
+				</div>
+			{/if}
+			<button
+				class={`timer-fab ${timerIsRunning() ? 'is-running' : ''}`}
+				type="button"
+				aria-label={timerPanelOpen ? 'Ocultar cronómetro' : 'Mostrar cronómetro'}
+				aria-expanded={timerPanelOpen}
+				onclick={() => (timerPanelOpen = !timerPanelOpen)}
+			>
+				<span class="timer-fab-icon" aria-hidden="true">⏱</span>
+			</button>
+		</div>
 
 		{#if showResetConfirm}
 			<div class="modal-backdrop" role="dialog" aria-modal="true">
@@ -680,12 +798,12 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 	.client-shell {
 		max-width: 960px;
 		margin: 0 auto;
-		padding: 1.5rem 0.5rem 2rem;
+		padding: 1.5rem 0.5rem calc(100px + env(safe-area-inset-bottom));
 	}
 
 	@media (min-width: 640px) {
 		.client-shell {
-			padding: 1.5rem 1.25rem 2rem;
+			padding: 1.5rem 1.25rem calc(100px + env(safe-area-inset-bottom));
 		}
 	}
 
@@ -1123,6 +1241,132 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		text-align: center;
 	}
 
+	.timer-fab-wrap {
+		position: fixed;
+		right: 16px;
+		bottom: calc(var(--timer-bottom-offset, 24px) + env(safe-area-inset-bottom));
+		z-index: 45;
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		gap: 0.65rem;
+		pointer-events: none;
+	}
+
+	.timer-fab-wrap > * {
+		pointer-events: auto;
+	}
+
+	.timer-fab {
+		position: relative;
+		width: 48px;
+		height: 48px;
+		border-radius: 50%;
+		border: 1px solid #1a2236;
+		background: #151b2e;
+		color: #f4f7ff;
+		display: grid;
+		place-items: center;
+		cursor: pointer;
+		box-shadow: 0 8px 14px rgba(0, 0, 0, 0.3);
+	}
+
+	.timer-fab:hover {
+		background: #19233b;
+	}
+
+	.timer-fab:focus-visible {
+		outline: 2px solid #3ea0ff;
+		outline-offset: 2px;
+	}
+
+	.timer-fab.is-running {
+		border-color: #2f4f88;
+		background: #1b2846;
+		box-shadow: 0 10px 16px rgba(31, 74, 153, 0.3);
+	}
+
+	.timer-fab-icon {
+		font-size: 21px;
+		line-height: 1;
+	}
+
+	.timer-fab.is-running .timer-fab-icon {
+		animation: timer-pulse 1.6s ease-in-out infinite;
+	}
+
+	@keyframes timer-pulse {
+		0%,
+		100% {
+			opacity: 1;
+		}
+		50% {
+			opacity: 0.78;
+		}
+	}
+
+	.timer-panel {
+		width: min(180px, calc(100vw - 32px));
+		border: 1px solid #25324d;
+		background: #11182a;
+		border-radius: 16px;
+		padding: 0.7rem;
+		box-shadow: 0 14px 24px rgba(0, 0, 0, 0.34);
+	}
+
+	.timer-readout {
+		margin: 0;
+		display: flex;
+		align-items: center;
+		gap: 0.45rem;
+		font-size: 1.1rem;
+		font-weight: 800;
+		color: #edf3ff;
+	}
+
+	.timer-actions {
+		display: flex;
+		gap: 0.5rem;
+		margin-top: 0.55rem;
+	}
+
+	.timer-btn {
+		flex: 1 1 auto;
+		min-height: 38px;
+		border-radius: 12px;
+		border: 1px solid transparent;
+		font-size: 0.76rem;
+		font-weight: 800;
+		letter-spacing: 0.02em;
+		cursor: pointer;
+	}
+
+	.timer-btn-full {
+		flex-basis: 100%;
+	}
+
+	.timer-btn-primary {
+		background: #0f9960;
+		border-color: #1f7c42;
+		color: #f5fffa;
+	}
+
+	.timer-btn-primary:hover {
+		filter: brightness(1.08);
+	}
+
+	.timer-btn-danger {
+		background: #9f281f;
+		border-color: #e35656;
+		color: #fff;
+	}
+
+	.timer-btn-ghost {
+		background: #0f1729;
+		border-color: #2a3a58;
+		color: #d5deef;
+	}
+
 	.modal-backdrop {
 		position: fixed;
 		inset: 0;
@@ -1198,7 +1442,7 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 
 	@media (min-width: 768px) {
 		.client-shell {
-			padding: 2rem 1.5rem 2.5rem;
+			padding: 2rem 1.5rem calc(104px + env(safe-area-inset-bottom));
 		}
 	}
 </style>

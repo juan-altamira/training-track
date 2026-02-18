@@ -762,7 +762,7 @@
 												class="w-full flex items-center justify-between gap-3 py-1.5 text-left"
 												onclick={() => toggleFeedbackDetail(day.key)}
 											>
-												<span class="text-sm font-semibold text-slate-200">🧠 Sensaciones del día</span>
+												<span class="text-sm font-semibold text-slate-200">🧠 Ver sensaciones del día</span>
 												<span class={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
 													getDayFeedbackBadgeState(day.key) === 'registered'
 														? 'bg-slate-800/80 text-slate-200'

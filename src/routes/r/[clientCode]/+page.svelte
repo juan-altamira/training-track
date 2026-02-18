@@ -646,20 +646,23 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		</div>
 
 		<button class="reset-btn" type="button" onclick={() => (showResetConfirm = true)}>
-			Reiniciar contadores
+			Iniciar nueva semana
 		</button>
+		<p class="reset-help">
+			Cuando inicies una nueva semana debés tocar este botón para volver a completar ejercicios y registrar tu nuevo progreso.
+		</p>
 
 		{#if showResetConfirm}
 			<div class="modal-backdrop" role="dialog" aria-modal="true">
 				<div class="modal">
-					<h2>Reiniciar contadores</h2>
-					<p>Al confirmar, reiniciarás todas las series y días completados. ¿Querés continuar?</p>
+					<h2>Iniciar nueva semana</h2>
+					<p>Esto reiniciará los progresos actuales.</p>
 					<div class="modal-actions">
 						<button class="btn ghost" type="button" onclick={() => (showResetConfirm = false)}>
 							Cancelar
 						</button>
 						<button class="btn danger" type="button" onclick={resetProgress}>
-							Confirmar
+							Iniciar nueva semana
 						</button>
 					</div>
 				</div>
@@ -1110,6 +1113,13 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 
 	.reset-btn:hover {
 		background: #15192a;
+	}
+
+	.reset-help {
+		margin: 0.5rem 0 0;
+		font-size: 0.8rem;
+		color: #8d95ab;
+		text-align: center;
 	}
 
 	.modal-backdrop {

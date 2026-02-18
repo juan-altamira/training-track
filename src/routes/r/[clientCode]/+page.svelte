@@ -20,7 +20,7 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 	let firstSeriesTs = $state<Record<string, string>>({});
 	let lastSeriesTs = $state<Record<string, string>>({});
 	let baselineProgress = $state<Record<string, boolean>>({});
-	let feedbackCardModeByDay = $state<Record<string, 'prompt' | 'form' | 'reminder'>>({});
+	let feedbackCardModeByDay = $state<Record<string, 'prompt' | 'form' | 'reminder' | 'saved'>>({});
 	let feedbackSavingByDay = $state<Record<string, boolean>>({});
 	let feedbackErrorByDay = $state<Record<string, string>>({});
 	let feedbackDraftByDay = $state<Record<string, {
@@ -45,6 +45,24 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		pain: '' as DayFeedbackPain | '',
 		comment: ''
 	});
+
+	const feedbackDraftFromSaved = (
+		dayKey: string
+	): {
+		mood: DayFeedbackMood | '';
+		difficulty: string;
+		pain: DayFeedbackPain | '';
+		comment: string;
+	} => {
+		const row = dayFeedback[dayKey];
+		if (!row) return emptyFeedbackDraft();
+		return {
+			mood: row.mood ?? '',
+			difficulty: typeof row.difficulty === 'number' ? String(row.difficulty) : '',
+			pain: row.pain ?? '',
+			comment: row.comment ?? ''
+		};
+	};
 
 	const moodOptions: Array<{ value: DayFeedbackMood; icon: string; label: string }> = [
 		{ value: 'excellent', icon: '🔵', label: DAY_FEEDBACK_MOOD_LABEL.excellent },
@@ -83,14 +101,15 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		return dayPlan.exercises.some((exercise) => (dayExercises[exercise.id] ?? 0) > 0);
 	};
 
-	const getFeedbackCardMode = (dayKey: string): 'prompt' | 'form' | 'reminder' | null => {
-		if (dayFeedback[dayKey]) return null;
+	const getFeedbackCardMode = (dayKey: string): 'prompt' | 'form' | 'reminder' | 'saved' | null => {
+		if (feedbackCardModeByDay[dayKey] === 'form') return 'form';
+		if (dayFeedback[dayKey]) return 'saved';
 		if (!hasRealProgressForDay(dayKey)) return null;
 		return feedbackCardModeByDay[dayKey] ?? 'prompt';
 	};
 
 	const openFeedbackForm = (dayKey: string) => {
-		ensureFeedbackDraft(dayKey);
+		feedbackDraftByDay = { ...feedbackDraftByDay, [dayKey]: feedbackDraftFromSaved(dayKey) };
 		feedbackErrorByDay = { ...feedbackErrorByDay, [dayKey]: '' };
 		feedbackCardModeByDay = { ...feedbackCardModeByDay, [dayKey]: 'form' };
 	};
@@ -155,7 +174,7 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 			if (saved?.day_key) {
 				dayFeedback = { ...dayFeedback, [saved.day_key]: saved };
 			}
-			feedbackCardModeByDay = { ...feedbackCardModeByDay, [dayKey]: 'prompt' };
+			feedbackCardModeByDay = { ...feedbackCardModeByDay, [dayKey]: 'saved' };
 			feedbackDraftByDay = { ...feedbackDraftByDay, [dayKey]: emptyFeedbackDraft() };
 			feedbackErrorByDay = { ...feedbackErrorByDay, [dayKey]: '' };
 		} catch (e) {
@@ -373,6 +392,17 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 										<div class="feedback-reminder">
 											<p>¿Cómo te fue hoy?</p>
 											<button class="btn ghost" type="button" onclick={() => openFeedbackForm(day.key)}>Responder</button>
+										</div>
+									{:else if getFeedbackCardMode(day.key) === 'saved'}
+										<div class="feedback-card feedback-card-saved">
+											<h3>¿Como te fue hoy?</h3>
+											<p class="feedback-saved-status">
+												<span aria-hidden="true">✅</span>
+												<span>Registro guardado</span>
+											</p>
+											<button class="btn ghost feedback-edit-btn" type="button" onclick={() => openFeedbackForm(day.key)}>
+												Editar respuestas.
+											</button>
 										</div>
 									{:else if getFeedbackCardMode(day.key) === 'form'}
 										{@const draft = feedbackDraftByDay[day.key] ?? emptyFeedbackDraft()}
@@ -630,16 +660,20 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		background: #0b0d14;
 		border-top: 1px solid #1f2333;
 		display: grid;
-		gap: 0.9rem;
+		gap: 1.35rem;
 	}
 
 	.feedback-card {
 		border: 1px solid #24314f;
 		background: linear-gradient(180deg, #12172b 0%, #0d1324 100%);
 		border-radius: 14px;
-		padding: 0.95rem;
+		padding: 1.2rem;
 		display: grid;
-		gap: 0.85rem;
+		gap: 1.2rem;
+	}
+
+	.feedback-card-saved {
+		gap: 0.95rem;
 	}
 
 	.feedback-card h3 {
@@ -655,15 +689,25 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		color: #a8b1c7;
 	}
 
+	.feedback-saved-status {
+		margin: 0;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.55rem;
+		font-size: 0.95rem;
+		font-weight: 700;
+		color: #b7f7d0;
+	}
+
 	.feedback-reminder {
 		border: 1px solid #22314c;
 		background: #10182a;
 		border-radius: 12px;
-		padding: 0.65rem 0.8rem;
+		padding: 0.95rem 1rem;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 0.7rem;
+		gap: 1rem;
 	}
 
 	.feedback-reminder p {
@@ -674,7 +718,11 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 
 	.feedback-field {
 		display: grid;
-		gap: 0.45rem;
+		gap: 0.72rem;
+	}
+
+	.feedback-field + .feedback-field {
+		margin-top: 0.25rem;
 	}
 
 	.feedback-label {
@@ -693,7 +741,7 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 	.chip-grid {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.5rem;
+		gap: 0.8rem;
 	}
 
 	.chip-btn {
@@ -701,12 +749,12 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		background: #111b30;
 		color: #dce4f7;
 		border-radius: 999px;
-		padding: 0.45rem 0.72rem;
+		padding: 0.62rem 1rem;
 		font-size: 0.84rem;
 		font-weight: 700;
 		display: inline-flex;
 		align-items: center;
-		gap: 0.35rem;
+		gap: 0.45rem;
 		cursor: pointer;
 	}
 
@@ -723,7 +771,7 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 	.scale-grid {
 		display: grid;
 		grid-template-columns: repeat(5, minmax(0, 1fr));
-		gap: 0.4rem;
+		gap: 0.65rem;
 	}
 
 	.scale-btn {
@@ -731,7 +779,7 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		background: #111b30;
 		color: #dce4f7;
 		border-radius: 10px;
-		padding: 0.42rem 0;
+		padding: 0.65rem 0;
 		font-size: 0.83rem;
 		font-weight: 800;
 		cursor: pointer;
@@ -778,7 +826,8 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 	.feedback-actions {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.55rem;
+		gap: 0.9rem;
+		margin-top: 0.3rem;
 	}
 
 	.exercise-card {
@@ -936,9 +985,13 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 	.btn {
 		border: 1px solid transparent;
 		border-radius: 10px;
-		padding: 0.6rem 0.9rem;
+		padding: 0.72rem 1.05rem;
 		font-weight: 700;
 		cursor: pointer;
+	}
+
+	.feedback-edit-btn {
+		justify-self: flex-start;
 	}
 
 	.btn.ghost {

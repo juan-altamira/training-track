@@ -313,12 +313,14 @@
 		const allExercises = [...currentExercises, ...deletedExercises];
 		const totalSeries = allExercises.reduce((sum, ex) => sum + ex.target, 0);
 		const doneSeries = allExercises.reduce((sum, ex) => sum + Math.min(ex.done, ex.target), 0);
+		const totalExercises = allExercises.length;
+		const doneExercises = allExercises.filter((ex) => ex.complete).length;
 		
 		// Detectar si la rutina fue modificada después del progreso
 		const hasInconsistency = deletedExercises.length > 0 || 
 			currentExercises.some(ex => ex.done > ex.target);
 		
-		return { exercises: allExercises, totalSeries, doneSeries, hasInconsistency };
+		return { exercises: allExercises, totalSeries, doneSeries, totalExercises, doneExercises, hasInconsistency };
 	};
 
 	const toggleFeedbackDetail = (dayKey: string) => {
@@ -736,12 +738,12 @@
 									</div>
 										<div class="grid grid-cols-[1fr_auto] gap-3 items-center pt-3 mt-2 border-t border-slate-700">
 											<span class="text-sm font-medium text-slate-400">Total</span>
-											<span class="text-sm font-semibold text-slate-200">{details.doneSeries}/{details.totalSeries} series</span>
+											<span class="text-sm font-semibold text-slate-200">{details.doneExercises}/{details.totalExercises} ejercicios</span>
 										</div>
-										<div class="mt-2 rounded-lg border border-slate-800/90 bg-[#0f1422] p-2.5">
+										<div class="mt-4 rounded-lg border border-slate-800/90 bg-[#0f1422] p-3">
 											<button
 												type="button"
-												class="w-full flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left hover:bg-slate-800/30"
+												class="w-full flex items-center justify-between gap-3 rounded-md px-2 py-2.5 text-left hover:bg-slate-800/30"
 												onclick={() => toggleFeedbackDetail(day.key)}
 											>
 												<span class="text-sm font-semibold text-slate-200">Ver sensaciones del día</span>

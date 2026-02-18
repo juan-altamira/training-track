@@ -774,38 +774,40 @@
 												</span>
 											</button>
 											{#if feedbackExpanded[day.key]}
-												<div class="mt-4 space-y-4 text-xs text-slate-300">
+												<div class="mt-4 rounded-lg border border-slate-800 bg-[#0b1120] px-3 py-3 text-xs text-slate-300">
 													{#if hasDayFeedback(day.key)}
 														{@const row = dayFeedback[day.key]}
-														<div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
-															<span class="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">Sensación</span>
-															{#if row?.mood}
-																<span class={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${feedbackMoodBadgeTone(row?.mood)}`}>
-																	<span>{feedbackMoodIcon(row?.mood)}</span>
-																	<span>{formatFeedbackMood(row?.mood)}</span>
+														<div class="space-y-0">
+															<div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-slate-700/40 py-2.5">
+																<span class="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-400">🧠 Sensación</span>
+																{#if row?.mood}
+																	<span class={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${feedbackMoodBadgeTone(row?.mood)}`}>
+																		<span>{feedbackMoodIcon(row?.mood)}</span>
+																		<span>{formatFeedbackMood(row?.mood)}</span>
+																	</span>
+																{:else}
+																	<span class="text-xs text-slate-500">— (Sin respuesta)</span>
+																{/if}
+															</div>
+															<div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-slate-700/40 py-2.5">
+																<span class="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-400">📊 Dificultad</span>
+																<span class={feedbackDifficultyTone(row?.difficulty)}>{formatFeedbackDifficulty(row?.difficulty)}</span>
+															</div>
+															<div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 py-2.5">
+																<span class="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-400">⚠️ Dolor / molestias</span>
+																<span class={row?.pain ? 'text-sm font-semibold text-slate-200' : 'text-xs text-slate-500'}>
+																	{formatFeedbackPain(row?.pain)}
 																</span>
-															{:else}
-																<span class="text-xs text-slate-500">— (Sin respuesta)</span>
-															{/if}
+															</div>
 														</div>
-														<div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
-															<span class="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">Dificultad</span>
-															<span class={feedbackDifficultyTone(row?.difficulty)}>{formatFeedbackDifficulty(row?.difficulty)}</span>
-														</div>
-														<div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
-															<span class="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">Dolor / molestias</span>
-															<span class={row?.pain ? 'text-sm font-semibold text-slate-200' : 'text-xs text-slate-500'}>
-																{formatFeedbackPain(row?.pain)}
-															</span>
-														</div>
-														<div class="space-y-2 pt-1">
-															<p class="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">Comentario</p>
-															<p class={`text-xs leading-relaxed ${row?.comment ? 'text-slate-200' : 'text-slate-500'}`}>
+														<div class="mt-3 rounded-md border border-slate-800/80 bg-[#0a101d] px-3 py-2.5">
+															<p class="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-400">📝 Comentario</p>
+															<p class={`mt-2 border-t border-slate-700/40 pt-2 text-xs leading-relaxed ${row?.comment ? 'text-slate-200' : 'text-slate-500'}`}>
 																{formatFeedbackComment(row?.comment)}
 															</p>
 														</div>
 														{#if row?.submitted_at}
-															<p class="pt-1 text-[11px] text-slate-500">Registrado: {new Date(row.submitted_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+															<p class="pt-2 text-[11px] text-slate-500">Registrado: {new Date(row.submitted_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
 														{/if}
 													{:else}
 														<p class="text-slate-400">El alumno no completó la encuesta este día.</p>

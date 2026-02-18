@@ -486,6 +486,32 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 
 							{#if expanded[day.key]}
 								<div class="day-body">
+									{#each plan[day.key].exercises as exercise (exercise.id)}
+										<div class="exercise-card">
+										<div class="exercise-head">
+											<div>
+												<p class="exercise-name">{exercise.name}</p>
+												<p class="exercise-scheme">{formatPrescriptionLong(exercise) || exercise.scheme}</p>
+											</div>
+											{#if (progress[day.key]?.exercises?.[exercise.id] ?? 0) >= Math.max(1, getTargetSets(exercise) || 0)}
+												<span class="badge success">Completado</span>
+											{/if}
+										</div>
+										{#if exercise.note}
+											<p class="exercise-note">{exercise.note}</p>
+										{/if}
+											<div class="exercise-controls">
+												<button class="pill-btn" type="button" onclick={() => adjustSets(day.key, exercise.id, -1)}>−</button>
+												<div class="sets">
+												<span class="sets-done">{progress[day.key]?.exercises?.[exercise.id] ?? 0}</span>
+												<span class="sets-separator">/</span>
+												<span class="sets-total">{Math.max(1, getTargetSets(exercise) || 0)}</span>
+											</div>
+											<button class="pill-btn" type="button" onclick={() => adjustSets(day.key, exercise.id, 1)}>+</button>
+											</div>
+										</div>
+									{/each}
+
 									{#if getFeedbackCardMode(day.key) === 'prompt'}
 										<div class="feedback-card">
 											<h3>¿Cómo te fue hoy?</h3>
@@ -608,32 +634,6 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 											</div>
 										</div>
 									{/if}
-
-									{#each plan[day.key].exercises as exercise (exercise.id)}
-										<div class="exercise-card">
-										<div class="exercise-head">
-											<div>
-												<p class="exercise-name">{exercise.name}</p>
-												<p class="exercise-scheme">{formatPrescriptionLong(exercise) || exercise.scheme}</p>
-											</div>
-											{#if (progress[day.key]?.exercises?.[exercise.id] ?? 0) >= Math.max(1, getTargetSets(exercise) || 0)}
-												<span class="badge success">Completado</span>
-											{/if}
-										</div>
-										{#if exercise.note}
-											<p class="exercise-note">{exercise.note}</p>
-										{/if}
-											<div class="exercise-controls">
-												<button class="pill-btn" type="button" onclick={() => adjustSets(day.key, exercise.id, -1)}>−</button>
-												<div class="sets">
-												<span class="sets-done">{progress[day.key]?.exercises?.[exercise.id] ?? 0}</span>
-												<span class="sets-separator">/</span>
-												<span class="sets-total">{Math.max(1, getTargetSets(exercise) || 0)}</span>
-											</div>
-											<button class="pill-btn" type="button" onclick={() => adjustSets(day.key, exercise.id, 1)}>+</button>
-											</div>
-										</div>
-									{/each}
 								</div>
 							{/if}
 						</article>

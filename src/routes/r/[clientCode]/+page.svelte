@@ -715,7 +715,7 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 
 	.days {
 		display: grid;
-		gap: 0.9rem;
+		gap: 1.2rem;
 	}
 
 	.day-card {
@@ -784,15 +784,12 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 	}
 
 	.feedback-card {
-		border: 1px solid #2f4f83;
-		background: linear-gradient(160deg, #17244a 0%, #111c3d 46%, #0f1731 100%);
+		border: 1px solid #24314f;
+		background: linear-gradient(180deg, #12172b 0%, #0d1324 100%);
 		border-radius: 14px;
 		padding: 1.2rem;
 		display: grid;
 		gap: 1.2rem;
-		box-shadow:
-			0 16px 36px rgba(8, 14, 34, 0.45),
-			inset 0 1px 0 rgba(255, 255, 255, 0.08);
 	}
 
 	.feedback-card-saved {
@@ -823,17 +820,14 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 	}
 
 	.feedback-reminder {
-		border: 1px solid #365a93;
-		background: linear-gradient(150deg, #16274a 0%, #101b34 100%);
+		border: 1px solid #22314c;
+		background: #10182a;
 		border-radius: 12px;
 		padding: 0.95rem 1rem;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: 1rem;
-		box-shadow:
-			0 12px 30px rgba(8, 14, 34, 0.35),
-			inset 0 1px 0 rgba(255, 255, 255, 0.07);
 	}
 
 	.feedback-reminder p {
@@ -1103,7 +1097,7 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 
 	.reset-btn {
 		width: 100%;
-		margin-top: 0.75rem;
+		margin-top: 1.5rem;
 		background: #111423;
 		color: #e4e7ec;
 		border: 1px solid #1f2333;

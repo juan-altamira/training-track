@@ -697,7 +697,7 @@
 					<h3 class="text-xl font-semibold uppercase tracking-wide text-slate-50">Semana actual</h3>
 				</div>
 			</div>
-			<ul class="mt-3 space-y-3 text-base text-slate-200">
+			<ul class="mt-4 space-y-5 text-base text-slate-200">
 				{#each WEEK_DAYS as day}
 					{#if plan[day.key] && plan[day.key].exercises.length > 0}
 						{@const completion = dayCompletion(day.key)}
@@ -735,49 +735,49 @@
 							</button>
 							{#if expandedDay === day.key}
 								{@const details = getExerciseDetails(day.key)}
-								<div class="border-t border-slate-800 bg-[#0d1019] px-4 py-3 space-y-1">
-									<p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Detalle</p>
-									<div class="divide-y divide-slate-800/60">
-										{#each details.exercises as ex}
-											<div class="grid grid-cols-[1fr_auto] gap-3 items-center py-2 hover:bg-slate-800/30 -mx-2 px-2 rounded transition-colors">
-												<span class="text-sm {ex.exists ? 'text-slate-200' : 'text-slate-500 italic'} line-clamp-2">{ex.name}</span>
-												<span class="inline-flex items-center gap-1 text-sm font-medium px-2 py-0.5 rounded {ex.complete ? 'bg-emerald-900/40 text-emerald-300' : 'bg-slate-800/60 text-slate-400'}">
-													{ex.done}/{ex.target}
-													{#if ex.complete}
-														<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-														</svg>
-													{/if}
-												</span>
-											</div>
-										{/each}
-									</div>
-										<div class="grid grid-cols-[1fr_auto] gap-3 items-center pt-3 pb-2 mt-2 border-t border-slate-700">
+									<div class="border-t border-slate-800 bg-[#0d1019] px-4 py-3 space-y-1">
+										<p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Detalle</p>
+										<div class="divide-y divide-slate-800/60">
+											{#each details.exercises as ex}
+												<div class="grid grid-cols-[1fr_auto] gap-3 items-center py-2.5 hover:bg-slate-800/20 -mx-2 px-2 rounded transition-colors">
+													<span class="text-sm {ex.exists ? 'text-slate-400' : 'text-slate-500 italic'} line-clamp-2">{ex.name}</span>
+													<span class="inline-flex items-center gap-1 text-sm font-semibold px-2.5 py-1 rounded border {ex.complete ? 'border-slate-600/70 bg-slate-800/80 text-slate-100' : 'border-slate-700/70 bg-slate-900/50 text-slate-400'}">
+														{ex.done}/{ex.target}
+														{#if ex.complete}
+															<svg class="w-3.5 h-3.5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+															</svg>
+														{/if}
+													</span>
+												</div>
+											{/each}
+										</div>
+										<div class="grid grid-cols-[1fr_auto] gap-3 items-center pt-3 pb-2 mt-3 border-t border-slate-700">
 											<span class="text-sm font-medium text-slate-400">Total</span>
 											<span class="text-sm font-semibold text-slate-200">{details.doneExercises}/{details.totalExercises} ejercicios</span>
 										</div>
-										<div class="mt-12 rounded-lg border border-slate-800/90 bg-[#0f1422] p-3">
+										<div class="mt-5 border-t border-slate-700/70 pt-4">
 											<button
 												type="button"
-												class="w-full flex items-center justify-between gap-3 rounded-md px-2 py-2.5 text-left hover:bg-slate-800/30"
+												class="w-full flex items-center justify-between gap-3 py-1.5 text-left"
 												onclick={() => toggleFeedbackDetail(day.key)}
 											>
-												<span class="text-sm font-semibold text-slate-200">Ver sensaciones del día</span>
-												<span class={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
+												<span class="text-sm font-semibold text-slate-200">🧠 Sensaciones del día</span>
+												<span class={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
 													getDayFeedbackBadgeState(day.key) === 'registered'
-														? 'border border-emerald-600/50 bg-emerald-900/30 text-emerald-300'
+														? 'border border-slate-600/70 bg-slate-800/70 text-slate-200'
 														: getDayFeedbackBadgeState(day.key) === 'partial'
-															? 'border border-amber-600/50 bg-amber-900/30 text-amber-200'
-															: 'border border-slate-600/60 bg-slate-800/40 text-slate-300'
+															? 'border border-amber-600/40 bg-amber-900/20 text-amber-200'
+															: 'border border-slate-700/80 bg-slate-900/60 text-slate-400'
 												}`}>
 													{getDayFeedbackBadgeLabel(day.key)}
 												</span>
 											</button>
 											{#if feedbackExpanded[day.key]}
-												<div class="mt-2 rounded-md border border-slate-800 bg-[#0b1120] px-3 py-3 text-xs text-slate-300">
-													{#if hasDayFeedback(day.key)}
-														{@const row = dayFeedback[day.key]}
-														<p class="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Resumen del día</p>
+												<div class="mt-3 rounded-md border border-slate-800 bg-[#0b1120] px-3 py-3 text-xs text-slate-300">
+														{#if hasDayFeedback(day.key)}
+															{@const row = dayFeedback[day.key]}
+															<p class="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Resumen del día</p>
 														<div class="divide-y divide-slate-700/40 overflow-hidden rounded-md border border-slate-800/80 bg-[#0e1524]">
 															<div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5">
 																<span class="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">🧠 Sensación</span>
@@ -819,13 +819,13 @@
 											{/if}
 										</div>
 										{#if details.hasInconsistency}
-											<p class="text-xs text-amber-400/80 mt-2">
+											<p class="text-xs text-amber-400/80 mt-3">
 												La rutina fue modificada después del progreso registrado.
-										</p>
-									{/if}
-								</div>
-							{/if}
-						</li>
+											</p>
+										{/if}
+									</div>
+								{/if}
+							</li>
 					{/if}
 				{/each}
 			</ul>

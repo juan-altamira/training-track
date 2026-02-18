@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto, preloadData } from '$app/navigation';
+	import { DAY_FEEDBACK_MOOD_LABEL, DAY_FEEDBACK_PAIN_LABEL, type DayFeedbackByDay, type DayFeedbackMood, type DayFeedbackPain } from '$lib/dayFeedback';
 	import { WEEK_DAYS, getTargetSets } from '$lib/routines';
 	import type { OtherClientRow, ProgressState, RoutineExercise, RoutinePlan } from '$lib/types';
 	import { onMount } from 'svelte';
@@ -30,6 +31,8 @@
 	let lazyOtherClients = $state(data.lazyOtherClients === true);
 	let loadingOtherClients = $state(false);
 	let otherClientsError = $state<string | null>(null);
+	let dayFeedback = $state((data.dayFeedback ?? {}) as DayFeedbackByDay);
+	let feedbackExpanded = $state<Record<string, boolean>>({});
 	const hasSuspicious = WEEK_DAYS.some((d) => progress[d.key]?.suspicious && progress[d.key]?.completed);
 
 	const SITE_URL = (data.siteUrl ?? '').replace(/\/?$/, '');
@@ -316,6 +319,33 @@
 			currentExercises.some(ex => ex.done > ex.target);
 		
 		return { exercises: allExercises, totalSeries, doneSeries, hasInconsistency };
+	};
+
+	const toggleFeedbackDetail = (dayKey: string) => {
+		feedbackExpanded = { ...feedbackExpanded, [dayKey]: !feedbackExpanded[dayKey] };
+	};
+
+	const hasDayFeedback = (dayKey: string) => Boolean(dayFeedback[dayKey]);
+
+	const formatFeedbackMood = (value: DayFeedbackMood | null | undefined) =>
+		value ? DAY_FEEDBACK_MOOD_LABEL[value] : '— (Sin respuesta)';
+
+	const formatFeedbackPain = (value: DayFeedbackPain | null | undefined) =>
+		value ? DAY_FEEDBACK_PAIN_LABEL[value] : '— (Sin respuesta)';
+
+	const formatFeedbackDifficulty = (value: number | null | undefined) =>
+		typeof value === 'number' ? `${value}/10` : '— (Sin respuesta)';
+
+	const formatFeedbackComment = (value: string | null | undefined) =>
+		value && value.trim() ? value : '— (Sin comentario)';
+
+	const feedbackMoodTone = (value: DayFeedbackMood | null | undefined) => {
+		if (!value) return 'text-slate-400';
+		if (value === 'excellent') return 'text-emerald-300';
+		if (value === 'good') return 'text-cyan-300';
+		if (value === 'normal') return 'text-amber-200';
+		if (value === 'tired') return 'text-orange-300';
+		return 'text-rose-300';
 	};
 
 	const toggleDayDetail = (dayKey: string) => {
@@ -688,13 +718,57 @@
 											</div>
 										{/each}
 									</div>
-									<div class="grid grid-cols-[1fr_auto] gap-3 items-center pt-3 mt-2 border-t border-slate-700">
-										<span class="text-sm font-medium text-slate-400">Total</span>
-										<span class="text-sm font-semibold text-slate-200">{details.doneSeries}/{details.totalSeries} series</span>
-									</div>
-									{#if details.hasInconsistency}
-										<p class="text-xs text-amber-400/80 mt-2">
-											La rutina fue modificada después del progreso registrado.
+										<div class="grid grid-cols-[1fr_auto] gap-3 items-center pt-3 mt-2 border-t border-slate-700">
+											<span class="text-sm font-medium text-slate-400">Total</span>
+											<span class="text-sm font-semibold text-slate-200">{details.doneSeries}/{details.totalSeries} series</span>
+										</div>
+										<div class="mt-2 rounded-lg border border-slate-800/90 bg-[#0f1422] p-2.5">
+											<button
+												type="button"
+												class="w-full flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left hover:bg-slate-800/30"
+												onclick={() => toggleFeedbackDetail(day.key)}
+											>
+												<span class="text-sm font-semibold text-slate-200">Ver sensaciones del día</span>
+												<span class={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
+													hasDayFeedback(day.key)
+														? 'border border-emerald-600/50 bg-emerald-900/30 text-emerald-300'
+														: 'border border-slate-600/60 bg-slate-800/40 text-slate-300'
+												}`}>
+													{hasDayFeedback(day.key) ? 'Registrado' : 'No registrado'}
+												</span>
+											</button>
+											{#if feedbackExpanded[day.key]}
+												<div class="mt-2 rounded-md border border-slate-800 bg-[#0b1120] px-3 py-2 text-xs text-slate-300 space-y-1">
+													{#if hasDayFeedback(day.key)}
+														{@const row = dayFeedback[day.key]}
+														<div class="grid grid-cols-[auto_1fr] gap-x-2">
+															<span class="text-slate-400">Sensación:</span>
+															<span class={`font-medium ${feedbackMoodTone(row?.mood)}`}>{formatFeedbackMood(row?.mood)}</span>
+														</div>
+														<div class="grid grid-cols-[auto_1fr] gap-x-2">
+															<span class="text-slate-400">Dificultad:</span>
+															<span class="font-semibold text-slate-200">{formatFeedbackDifficulty(row?.difficulty)}</span>
+														</div>
+														<div class="grid grid-cols-[auto_1fr] gap-x-2">
+															<span class="text-slate-400">Dolor/molestias:</span>
+															<span class={row?.pain ? 'text-slate-200' : 'text-slate-400'}>{formatFeedbackPain(row?.pain)}</span>
+														</div>
+														<div class="grid grid-cols-[auto_1fr] gap-x-2">
+															<span class="text-slate-400">Comentario:</span>
+															<span class={row?.comment ? 'text-slate-200' : 'text-slate-400'}>{formatFeedbackComment(row?.comment)}</span>
+														</div>
+														{#if row?.created_at}
+															<p class="pt-1 text-[11px] text-slate-500">Registrado: {new Date(row.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+														{/if}
+													{:else}
+														<p class="text-slate-400">El alumno no completó la encuesta este día.</p>
+													{/if}
+												</div>
+											{/if}
+										</div>
+										{#if details.hasInconsistency}
+											<p class="text-xs text-amber-400/80 mt-2">
+												La rutina fue modificada después del progreso registrado.
 										</p>
 									{/if}
 								</div>

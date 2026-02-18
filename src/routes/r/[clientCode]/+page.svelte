@@ -1,4 +1,5 @@
 <script lang="ts">
+import { DAY_FEEDBACK_MOOD_LABEL, DAY_FEEDBACK_PAIN_LABEL, type DayFeedbackByDay, type DayFeedbackMood, type DayFeedbackPain } from '$lib/dayFeedback';
 import { WEEK_DAYS, getTargetSets, formatPrescriptionLong } from '$lib/routines';
 import type { ProgressState, RoutinePlan } from '$lib/types';
 
@@ -8,22 +9,164 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 	let progress: ProgressState = $state(
 		data.status === 'ok' ? structuredClone(data.progress) : ({} as ProgressState)
 	);
-let expanded = $state<Record<string, boolean>>({});
-let saving = $state(false);
-let message = $state('');
-let showResetConfirm = $state(false);
-let sessionStarts = $state<Record<string, string>>({});
-let firstSeriesTs = $state<Record<string, string>>({});
-let lastSeriesTs = $state<Record<string, string>>({});
-let baselineProgress = $state<Record<string, boolean>>({});
-let saveTimeout: ReturnType<typeof setTimeout> | null = null;
-let pendingSaveDay: string | null = null;
-let saveInFlight = false;
+	let dayFeedback: DayFeedbackByDay = $state(
+		data.status === 'ok' ? structuredClone(data.dayFeedback) : ({} as DayFeedbackByDay)
+	);
+	let expanded = $state<Record<string, boolean>>({});
+	let saving = $state(false);
+	let message = $state('');
+	let showResetConfirm = $state(false);
+	let sessionStarts = $state<Record<string, string>>({});
+	let firstSeriesTs = $state<Record<string, string>>({});
+	let lastSeriesTs = $state<Record<string, string>>({});
+	let baselineProgress = $state<Record<string, boolean>>({});
+	let feedbackCardModeByDay = $state<Record<string, 'prompt' | 'form' | 'reminder'>>({});
+	let feedbackSavingByDay = $state<Record<string, boolean>>({});
+	let feedbackErrorByDay = $state<Record<string, string>>({});
+	let feedbackDraftByDay = $state<Record<string, {
+		mood: DayFeedbackMood | '';
+		difficulty: string;
+		pain: DayFeedbackPain | '';
+		comment: string;
+	}>>({});
+	let saveTimeout: ReturnType<typeof setTimeout> | null = null;
+	let pendingSaveDay: string | null = null;
+	let saveInFlight = false;
+
+	const emptyDayFeedbackByDay = (): DayFeedbackByDay =>
+		WEEK_DAYS.reduce((acc, day) => {
+			acc[day.key] = null;
+			return acc;
+		}, {} as DayFeedbackByDay);
+
+	const emptyFeedbackDraft = () => ({
+		mood: '' as DayFeedbackMood | '',
+		difficulty: '',
+		pain: '' as DayFeedbackPain | '',
+		comment: ''
+	});
+
+	const moodOptions: Array<{ value: DayFeedbackMood; icon: string; label: string }> = [
+		{ value: 'excellent', icon: '🔵', label: DAY_FEEDBACK_MOOD_LABEL.excellent },
+		{ value: 'good', icon: '🟢', label: DAY_FEEDBACK_MOOD_LABEL.good },
+		{ value: 'normal', icon: '🟡', label: DAY_FEEDBACK_MOOD_LABEL.normal },
+		{ value: 'tired', icon: '🟠', label: DAY_FEEDBACK_MOOD_LABEL.tired },
+		{ value: 'very_fatigued', icon: '🔴', label: DAY_FEEDBACK_MOOD_LABEL.very_fatigued }
+	];
+
+	const painOptions: Array<{ value: DayFeedbackPain; label: string }> = [
+		{ value: 'none', label: DAY_FEEDBACK_PAIN_LABEL.none },
+		{ value: 'mild', label: DAY_FEEDBACK_PAIN_LABEL.mild },
+		{ value: 'moderate', label: DAY_FEEDBACK_PAIN_LABEL.moderate },
+		{ value: 'severe', label: DAY_FEEDBACK_PAIN_LABEL.severe }
+	];
+
+	const ensureFeedbackDraft = (dayKey: string) => {
+		if (feedbackDraftByDay[dayKey]) return;
+		feedbackDraftByDay = { ...feedbackDraftByDay, [dayKey]: emptyFeedbackDraft() };
+	};
+
+	const feedbackAnsweredCount = (dayKey: string) => {
+		const draft = feedbackDraftByDay[dayKey] ?? emptyFeedbackDraft();
+		let answered = 0;
+		if (draft.mood) answered += 1;
+		if (draft.difficulty) answered += 1;
+		if (draft.pain) answered += 1;
+		if (draft.comment.trim()) answered += 1;
+		return answered;
+	};
+
+	const getFeedbackCardMode = (dayKey: string): 'prompt' | 'form' | 'reminder' | null => {
+		if (dayFeedback[dayKey]) return null;
+		if (!isDayCompleted(dayKey)) return null;
+		return feedbackCardModeByDay[dayKey] ?? 'prompt';
+	};
+
+	const openFeedbackForm = (dayKey: string) => {
+		ensureFeedbackDraft(dayKey);
+		feedbackErrorByDay = { ...feedbackErrorByDay, [dayKey]: '' };
+		feedbackCardModeByDay = { ...feedbackCardModeByDay, [dayKey]: 'form' };
+	};
+
+	const skipFeedbackForNow = (dayKey: string) => {
+		feedbackErrorByDay = { ...feedbackErrorByDay, [dayKey]: '' };
+		feedbackCardModeByDay = { ...feedbackCardModeByDay, [dayKey]: 'reminder' };
+	};
+
+	const updateFeedbackDraft = (
+		dayKey: string,
+		patch: Partial<{
+			mood: DayFeedbackMood | '';
+			difficulty: string;
+			pain: DayFeedbackPain | '';
+			comment: string;
+		}>
+	) => {
+		const current = feedbackDraftByDay[dayKey] ?? emptyFeedbackDraft();
+		const next = { ...current, ...patch };
+		next.comment = (next.comment ?? '').slice(0, 300);
+		feedbackDraftByDay = { ...feedbackDraftByDay, [dayKey]: next };
+	};
+
+	const saveDayFeedback = async (dayKey: string) => {
+		ensureFeedbackDraft(dayKey);
+		const draft = feedbackDraftByDay[dayKey];
+
+		if (feedbackAnsweredCount(dayKey) === 0) {
+			feedbackErrorByDay = {
+				...feedbackErrorByDay,
+				[dayKey]: 'Completá al menos una respuesta antes de guardar.'
+			};
+			return;
+		}
+
+		feedbackSavingByDay = { ...feedbackSavingByDay, [dayKey]: true };
+		feedbackErrorByDay = { ...feedbackErrorByDay, [dayKey]: '' };
+
+		const formData = new FormData();
+		formData.set('day_key', dayKey);
+		if (draft.mood) formData.set('mood', draft.mood);
+		if (draft.difficulty) formData.set('difficulty', draft.difficulty);
+		if (draft.pain) formData.set('pain', draft.pain);
+		if (draft.comment.trim()) formData.set('comment', draft.comment.trim());
+
+		try {
+			const res = await fetch('?/saveDayFeedback', {
+				method: 'POST',
+				body: formData
+			});
+
+			if (!res.ok) {
+				const payload = await res.json().catch(() => ({}));
+				const serverMessage = payload?.data?.message ?? payload?.message ?? 'No pudimos guardar tu respuesta.';
+				feedbackErrorByDay = { ...feedbackErrorByDay, [dayKey]: serverMessage };
+				return;
+			}
+
+			const payload = await res.json();
+			const saved = payload?.dayFeedback;
+			if (saved?.day_key) {
+				dayFeedback = { ...dayFeedback, [saved.day_key]: saved };
+			}
+			feedbackCardModeByDay = { ...feedbackCardModeByDay, [dayKey]: 'prompt' };
+			feedbackDraftByDay = { ...feedbackDraftByDay, [dayKey]: emptyFeedbackDraft() };
+			feedbackErrorByDay = { ...feedbackErrorByDay, [dayKey]: '' };
+		} catch (e) {
+			console.error(e);
+			feedbackErrorByDay = {
+				...feedbackErrorByDay,
+				[dayKey]: 'No pudimos guardar tu respuesta. Intentá de nuevo.'
+			};
+		} finally {
+			feedbackSavingByDay = { ...feedbackSavingByDay, [dayKey]: false };
+		}
+	};
 
 	const adjustSets = (dayKey: string, exerciseId: string, delta: number) => {
 		const dayPlan = plan[dayKey];
 		const exercise = dayPlan.exercises.find((ex) => ex.id === exerciseId);
 		if (!exercise) return;
+		const wasCompleted = isDayCompleted(dayKey);
 
 		const target = Math.max(1, getTargetSets(exercise) || 0);
 		const current = progress[dayKey]?.exercises?.[exerciseId] ?? 0;
@@ -56,6 +199,13 @@ let saveInFlight = false;
 			const done = progress[dayKey].exercises?.[ex.id] ?? 0;
 			return done >= t;
 		});
+		const nowCompleted = progress[dayKey].completed;
+		if (!wasCompleted && nowCompleted && !dayFeedback[dayKey]) {
+			feedbackCardModeByDay = {
+				...feedbackCardModeByDay,
+				[dayKey]: feedbackCardModeByDay[dayKey] ?? 'prompt'
+			};
+		}
 		lastSeriesTs = { ...lastSeriesTs, [dayKey]: new Date().toISOString() };
 		saveProgress(dayKey);
 	};
@@ -153,14 +303,18 @@ let saveInFlight = false;
 			message = 'No se pudo reiniciar. Intentá de nuevo.';
 		}
 		saving = false;
-		showResetConfirm = false;
-		// limpiar estado de sesión
-		sessionStarts = {};
-		firstSeriesTs = {};
-		lastSeriesTs = {};
-		baselineProgress = {};
-	};
-</script>
+			showResetConfirm = false;
+			// limpiar estado de sesión
+			sessionStarts = {};
+			firstSeriesTs = {};
+			lastSeriesTs = {};
+			baselineProgress = {};
+			dayFeedback = emptyDayFeedbackByDay();
+			feedbackCardModeByDay = {};
+			feedbackDraftByDay = {};
+			feedbackErrorByDay = {};
+		};
+	</script>
 
 {#if data.status === 'invalid'}
 	<section class="mx-auto max-w-xl space-y-3 rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
@@ -197,10 +351,10 @@ let saveInFlight = false;
 							<span class="arrow">{expanded[day.key] ? '▾' : '▸'}</span>
 						</button>
 
-						{#if expanded[day.key]}
-							<div class="day-body">
-								{#each plan[day.key].exercises as exercise (exercise.id)}
-									<div class="exercise-card">
+							{#if expanded[day.key]}
+								<div class="day-body">
+									{#each plan[day.key].exercises as exercise (exercise.id)}
+										<div class="exercise-card">
 										<div class="exercise-head">
 											<div>
 												<p class="exercise-name">{exercise.name}</p>
@@ -213,20 +367,123 @@ let saveInFlight = false;
 										{#if exercise.note}
 											<p class="exercise-note">{exercise.note}</p>
 										{/if}
-										<div class="exercise-controls">
-											<button class="pill-btn" type="button" onclick={() => adjustSets(day.key, exercise.id, -1)}>−</button>
-											<div class="sets">
+											<div class="exercise-controls">
+												<button class="pill-btn" type="button" onclick={() => adjustSets(day.key, exercise.id, -1)}>−</button>
+												<div class="sets">
 												<span class="sets-done">{progress[day.key]?.exercises?.[exercise.id] ?? 0}</span>
 												<span class="sets-separator">/</span>
 												<span class="sets-total">{Math.max(1, getTargetSets(exercise) || 0)}</span>
 											</div>
 											<button class="pill-btn" type="button" onclick={() => adjustSets(day.key, exercise.id, 1)}>+</button>
+											</div>
 										</div>
-									</div>
-								{/each}
-							</div>
-						{/if}
-					</article>
+									{/each}
+
+									{#if getFeedbackCardMode(day.key) === 'prompt'}
+										<div class="feedback-card">
+											<h3>¿Cómo te fue hoy?</h3>
+											<p class="feedback-subtitle">10 segundos. Me ayuda a ajustar tu rutina.</p>
+											<div class="feedback-actions">
+												<button class="btn primary" type="button" onclick={() => openFeedbackForm(day.key)}>Responder</button>
+												<button class="btn ghost" type="button" onclick={() => skipFeedbackForNow(day.key)}>Ahora no</button>
+											</div>
+										</div>
+									{:else if getFeedbackCardMode(day.key) === 'reminder'}
+										<div class="feedback-reminder">
+											<p>¿Cómo te fue hoy?</p>
+											<button class="btn ghost" type="button" onclick={() => openFeedbackForm(day.key)}>Responder</button>
+										</div>
+									{:else if getFeedbackCardMode(day.key) === 'form'}
+										{@const draft = feedbackDraftByDay[day.key] ?? emptyFeedbackDraft()}
+										<div class="feedback-card">
+											<h3>¿Cómo te fue hoy?</h3>
+											<p class="feedback-subtitle">10 segundos. Me ayuda a ajustar tu rutina.</p>
+
+											<div class="feedback-field">
+												<p class="feedback-label">1) ¿Cómo te sentiste hoy?</p>
+												<div class="chip-grid">
+													{#each moodOptions as item}
+														<button
+															type="button"
+															class={`chip-btn ${draft.mood === item.value ? 'is-selected' : ''}`}
+															onclick={() => updateFeedbackDraft(day.key, { mood: draft.mood === item.value ? '' : item.value })}
+														>
+															<span>{item.icon}</span>
+															<span>{item.label}</span>
+														</button>
+													{/each}
+												</div>
+											</div>
+
+											<div class="feedback-field">
+												<p class="feedback-label">2) ¿Qué tan difícil fue el entrenamiento de hoy?</p>
+												<p class="feedback-help">(1 = muy fácil / 10 = extremadamente difícil)</p>
+												<div class="scale-grid">
+													{#each Array.from({ length: 10 }, (_, i) => String(i + 1)) as level}
+														<button
+															type="button"
+															class={`scale-btn ${draft.difficulty === level ? 'is-selected' : ''}`}
+															onclick={() =>
+																updateFeedbackDraft(day.key, {
+																	difficulty: draft.difficulty === level ? '' : level
+																})}
+														>
+															{level}
+														</button>
+													{/each}
+												</div>
+											</div>
+
+											<div class="feedback-field">
+												<p class="feedback-label">3) ¿Tuviste dolor o molestias?</p>
+												<div class="chip-grid">
+													{#each painOptions as item}
+														<button
+															type="button"
+															class={`chip-btn ${draft.pain === item.value ? 'is-selected' : ''}`}
+															onclick={() => updateFeedbackDraft(day.key, { pain: draft.pain === item.value ? '' : item.value })}
+														>
+															{item.label}
+														</button>
+													{/each}
+												</div>
+											</div>
+
+											<div class="feedback-field">
+												<p class="feedback-label">4) Comentario opcional (máx. 300 caracteres)</p>
+												<textarea
+													class="feedback-textarea"
+													rows="3"
+													value={draft.comment}
+													oninput={(event) =>
+														updateFeedbackDraft(day.key, {
+															comment: (event.currentTarget as HTMLTextAreaElement).value
+														})}
+													placeholder="Si querés, contame en una línea cómo te sentiste."
+												></textarea>
+												<p class="feedback-counter">{draft.comment.length}/300</p>
+											</div>
+
+											{#if feedbackErrorByDay[day.key]}
+												<p class="feedback-error">{feedbackErrorByDay[day.key]}</p>
+											{/if}
+
+											<div class="feedback-actions">
+												<button
+													class="btn primary"
+													type="button"
+													onclick={() => saveDayFeedback(day.key)}
+													disabled={feedbackSavingByDay[day.key]}
+												>
+													{feedbackSavingByDay[day.key] ? 'Guardando...' : 'Guardar'}
+												</button>
+												<button class="btn ghost" type="button" onclick={() => skipFeedbackForNow(day.key)}>Ahora no</button>
+											</div>
+										</div>
+									{/if}
+								</div>
+							{/if}
+						</article>
 				{/if}
 			{/each}
 		</div>
@@ -367,6 +624,154 @@ let saveInFlight = false;
 		border-top: 1px solid #1f2333;
 		display: grid;
 		gap: 0.9rem;
+	}
+
+	.feedback-card {
+		border: 1px solid #24314f;
+		background: linear-gradient(180deg, #12172b 0%, #0d1324 100%);
+		border-radius: 14px;
+		padding: 0.95rem;
+		display: grid;
+		gap: 0.85rem;
+	}
+
+	.feedback-card h3 {
+		margin: 0;
+		font-size: 1.05rem;
+		font-weight: 800;
+		color: #f7f8fb;
+	}
+
+	.feedback-subtitle {
+		margin: -0.35rem 0 0;
+		font-size: 0.9rem;
+		color: #a8b1c7;
+	}
+
+	.feedback-reminder {
+		border: 1px solid #22314c;
+		background: #10182a;
+		border-radius: 12px;
+		padding: 0.65rem 0.8rem;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.7rem;
+	}
+
+	.feedback-reminder p {
+		margin: 0;
+		font-size: 0.9rem;
+		color: #d0d8ea;
+	}
+
+	.feedback-field {
+		display: grid;
+		gap: 0.45rem;
+	}
+
+	.feedback-label {
+		margin: 0;
+		font-size: 0.92rem;
+		font-weight: 700;
+		color: #e5eaf7;
+	}
+
+	.feedback-help {
+		margin: -0.2rem 0 0;
+		font-size: 0.78rem;
+		color: #9ea7c0;
+	}
+
+	.chip-grid {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+
+	.chip-btn {
+		border: 1px solid #2c3856;
+		background: #111b30;
+		color: #dce4f7;
+		border-radius: 999px;
+		padding: 0.45rem 0.72rem;
+		font-size: 0.84rem;
+		font-weight: 700;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		cursor: pointer;
+	}
+
+	.chip-btn:hover {
+		background: #15213a;
+	}
+
+	.chip-btn.is-selected {
+		border-color: #3ea0ff;
+		background: #17345d;
+		color: #f2f7ff;
+	}
+
+	.scale-grid {
+		display: grid;
+		grid-template-columns: repeat(5, minmax(0, 1fr));
+		gap: 0.4rem;
+	}
+
+	.scale-btn {
+		border: 1px solid #2d3957;
+		background: #111b30;
+		color: #dce4f7;
+		border-radius: 10px;
+		padding: 0.42rem 0;
+		font-size: 0.83rem;
+		font-weight: 800;
+		cursor: pointer;
+	}
+
+	.scale-btn:hover {
+		background: #15213a;
+	}
+
+	.scale-btn.is-selected {
+		border-color: #34d399;
+		background: #114033;
+		color: #d7ffef;
+	}
+
+	.feedback-textarea {
+		border: 1px solid #2b3753;
+		background: #0f172a;
+		color: #e7edf8;
+		border-radius: 10px;
+		padding: 0.6rem 0.7rem;
+		resize: vertical;
+		min-height: 86px;
+		font-size: 0.92rem;
+	}
+
+	.feedback-textarea:focus-visible {
+		outline: 2px solid #22c55e;
+	}
+
+	.feedback-counter {
+		margin: 0;
+		text-align: right;
+		font-size: 0.76rem;
+		color: #9ca8c2;
+	}
+
+	.feedback-error {
+		margin: 0;
+		font-size: 0.83rem;
+		color: #fca5a5;
+	}
+
+	.feedback-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.55rem;
 	}
 
 	.exercise-card {
@@ -533,6 +938,16 @@ let saveInFlight = false;
 		background: #111423;
 		color: #c4c8d4;
 		border-color: #1f2333;
+	}
+
+	.btn.primary {
+		background: #0f9960;
+		border-color: #1f7c42;
+		color: #f8fffb;
+	}
+
+	.btn.primary:hover {
+		filter: brightness(1.08);
 	}
 
 	.btn.danger {

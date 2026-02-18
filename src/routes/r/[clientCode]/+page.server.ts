@@ -1,4 +1,12 @@
 import { getTargetSets, normalizePlan, normalizeProgress, WEEK_DAYS } from '$lib/routines';
+import {
+	buildProgressCycleKey,
+	isValidDayKey,
+	isValidMood,
+	isValidPain,
+	normalizeFeedbackComment,
+	toDayFeedbackByDay
+} from '$lib/dayFeedback';
 import { supabaseAdmin } from '$lib/server/supabaseAdmin';
 import { ensureTrainerAccessByTrainerId } from '$lib/server/trainerAccess';
 import type { ProgressState, RoutinePlan } from '$lib/types';
@@ -16,6 +24,21 @@ const fetchClient = async (clientCode: string) => {
 };
 
 const isTrainerAllowed = async (trainerId: string) => ensureTrainerAccessByTrainerId(trainerId);
+
+const loadDayFeedback = async (clientId: string, cycleKey: string) => {
+	const { data, error: feedbackError } = await supabaseAdmin
+		.from('client_day_feedback')
+		.select('day_key,mood,difficulty,pain,comment,created_at,updated_at')
+		.eq('client_id', clientId)
+		.eq('cycle_key', cycleKey);
+
+	if (feedbackError) {
+		console.error(feedbackError);
+		return toDayFeedbackByDay([]);
+	}
+
+	return toDayFeedbackByDay(data as any[]);
+};
 
 export const load: PageServerLoad = async ({ params }) => {
 	const clientCode = params.clientCode;
@@ -59,6 +82,8 @@ export const load: PageServerLoad = async ({ params }) => {
 		.maybeSingle();
 
 	const progress = normalizeProgress(progressRow?.progress as ProgressState | null);
+	const cycleKey = buildProgressCycleKey(progress._meta?.last_reset_utc ?? null);
+	const dayFeedback = await loadDayFeedback(client.id, cycleKey);
 
 	if (!progressRow) {
 		await supabaseAdmin.from('progress').insert({ client_id: client.id, progress });
@@ -71,6 +96,7 @@ export const load: PageServerLoad = async ({ params }) => {
 		objective: client.objective,
 		plan,
 		progress,
+		dayFeedback,
 		last_completed_at: progressRow?.last_completed_at ?? null
 	};
 };
@@ -257,6 +283,100 @@ export const actions: Actions = {
 		}
 
 		return { success: true };
+	},
+	saveDayFeedback: async ({ request, params }) => {
+		const clientCode = params.clientCode;
+		const { data: client } = await fetchClient(clientCode);
+
+		const trainerAllowed = client?.trainer_id ? await isTrainerAllowed(client.trainer_id) : false;
+
+		if (!client || client.status !== 'active' || !trainerAllowed) {
+			return fail(403, { message: 'Acceso desactivado' });
+		}
+
+		const formData = await request.formData();
+		const dayKey = String(formData.get('day_key') || '').trim().toLowerCase();
+		const moodRaw = String(formData.get('mood') || '').trim().toLowerCase();
+		const difficultyRaw = String(formData.get('difficulty') || '').trim();
+		const painRaw = String(formData.get('pain') || '').trim().toLowerCase();
+		const comment = normalizeFeedbackComment(String(formData.get('comment') || ''));
+
+		if (!isValidDayKey(dayKey)) {
+			return fail(400, { message: 'Día inválido' });
+		}
+
+		const mood = moodRaw ? (isValidMood(moodRaw) ? moodRaw : null) : null;
+		if (moodRaw && !mood) {
+			return fail(400, { message: 'Sensación inválida' });
+		}
+
+		let difficulty: number | null = null;
+		if (difficultyRaw) {
+			const parsedDifficulty = Number(difficultyRaw);
+			if (!Number.isInteger(parsedDifficulty) || parsedDifficulty < 1 || parsedDifficulty > 10) {
+				return fail(400, { message: 'Dificultad inválida' });
+			}
+			difficulty = parsedDifficulty;
+		}
+
+		const pain = painRaw ? (isValidPain(painRaw) ? painRaw : null) : null;
+		if (painRaw && !pain) {
+			return fail(400, { message: 'Nivel de dolor inválido' });
+		}
+
+		if (!mood && !difficulty && !pain && !comment) {
+			return fail(400, { message: 'Completá al menos una respuesta antes de guardar.' });
+		}
+
+		const { data: progressRow, error: progressError } = await supabaseAdmin
+			.from('progress')
+			.select('progress')
+			.eq('client_id', client.id)
+			.maybeSingle();
+
+		if (progressError) {
+			console.error(progressError);
+			return fail(500, { message: 'No pudimos guardar tus sensaciones.' });
+		}
+
+		const progress = normalizeProgress(progressRow?.progress as ProgressState | null);
+		const cycleStartedAt = progress._meta?.last_reset_utc ?? null;
+		const cycleKey = buildProgressCycleKey(cycleStartedAt);
+
+		const payload = {
+			client_id: client.id,
+			day_key: dayKey,
+			cycle_key: cycleKey,
+			cycle_started_at: cycleStartedAt,
+			mood,
+			difficulty,
+			pain,
+			comment
+		};
+
+		const { data: savedRow, error: saveError } = await supabaseAdmin
+			.from('client_day_feedback')
+			.upsert(payload, { onConflict: 'client_id,day_key,cycle_key' })
+			.select('day_key,mood,difficulty,pain,comment,created_at,updated_at')
+			.single();
+
+		if (saveError) {
+			console.error(saveError);
+			return fail(500, { message: 'No pudimos guardar tus sensaciones.' });
+		}
+
+		return {
+			success: true,
+			dayFeedback: {
+				day_key: savedRow.day_key,
+				mood: savedRow.mood,
+				difficulty: savedRow.difficulty,
+				pain: savedRow.pain,
+				comment: savedRow.comment,
+				created_at: savedRow.created_at,
+				updated_at: savedRow.updated_at
+			}
+		};
 	},
 	resetProgress: async ({ params }) => {
 		const clientCode = params.clientCode;

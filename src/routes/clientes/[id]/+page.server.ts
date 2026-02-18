@@ -1,5 +1,6 @@
 import { normalizePlan, normalizeProgress, WEEK_DAYS } from '$lib/routines';
 import type { RoutinePlan } from '$lib/types';
+import { buildProgressCycleKey, toDayFeedbackByDay } from '$lib/dayFeedback';
 import { error, fail, redirect } from '@sveltejs/kit';
 import { nowIsoUtc } from '$lib/time';
 import type { Actions, PageServerLoad } from './$types';
@@ -24,6 +25,21 @@ type ProgressRelation = {
 const firstRelation = <T>(relation: T | T[] | null | undefined): T | null => {
 	if (!relation) return null;
 	return Array.isArray(relation) ? (relation[0] ?? null) : relation;
+};
+
+const loadDayFeedback = async (clientId: string, cycleKey: string) => {
+	const { data, error: feedbackError } = await supabaseAdmin
+		.from('client_day_feedback')
+		.select('day_key,mood,difficulty,pain,comment,created_at,updated_at')
+		.eq('client_id', clientId)
+		.eq('cycle_key', cycleKey);
+
+	if (feedbackError) {
+		console.error(feedbackError);
+		return toDayFeedbackByDay([]);
+	}
+
+	return toDayFeedbackByDay(data as any[]);
 };
 
 export const load: PageServerLoad = async ({ params, locals, url }) => {
@@ -64,6 +80,9 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 
 			const routineRow = firstRelation<RoutineRelation>(clientRow.routines as any);
 			const progressRow = firstRelation<ProgressRelation>(clientRow.progress as any);
+			const normalizedProgress = normalizeProgress(progressRow?.progress as any);
+			const cycleKey = buildProgressCycleKey(normalizedProgress._meta?.last_reset_utc ?? null);
+			const dayFeedback = await loadDayFeedback(clientId, cycleKey);
 
 			return {
 				client: {
@@ -75,7 +94,8 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 					created_at: clientRow.created_at
 				},
 				plan: normalizePlan(routineRow?.plan as RoutinePlan | null),
-				progress: normalizeProgress(progressRow?.progress as any),
+				progress: normalizedProgress,
+				dayFeedback,
 				last_completed_at: progressRow?.last_completed_at ?? null,
 				siteUrl,
 				otherClients: [],
@@ -112,6 +132,10 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 			console.error(progressError);
 		}
 
+		const normalizedProgress = normalizeProgress(progressRow?.progress as any);
+		const cycleKey = buildProgressCycleKey(normalizedProgress._meta?.last_reset_utc ?? null);
+		const dayFeedback = await loadDayFeedback(clientId, cycleKey);
+
 		const { data: otherClients } = await supabase
 			.from('clients')
 			.select('id,name')
@@ -122,7 +146,8 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 		return {
 			client,
 			plan: normalizePlan(routineRow?.plan as RoutinePlan | null),
-			progress: normalizeProgress(progressRow?.progress as any),
+			progress: normalizedProgress,
+			dayFeedback,
 			last_completed_at: progressRow?.last_completed_at ?? null,
 			siteUrl,
 			otherClients: otherClients ?? [],

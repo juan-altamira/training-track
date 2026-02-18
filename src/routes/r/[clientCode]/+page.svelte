@@ -751,10 +751,10 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 					</p>
 					<div class="timer-actions">
 						{#if timerIsRunning()}
-							<button class="timer-btn timer-btn-danger" type="button" onclick={stopTimer}>STOP</button>
-							<button class="timer-btn timer-btn-ghost" type="button" onclick={resetTimer}>RESET</button>
+							<button class="timer-btn timer-btn-danger" type="button" onclick={stopTimer}>DETENER</button>
+							<button class="timer-btn timer-btn-ghost" type="button" onclick={resetTimer}>REINICIAR</button>
 						{:else}
-							<button class="timer-btn timer-btn-primary timer-btn-full" type="button" onclick={startTimer}>START</button>
+							<button class="timer-btn timer-btn-primary timer-btn-full" type="button" onclick={startTimer}>INICIAR</button>
 						{/if}
 					</div>
 				</div>
@@ -798,12 +798,12 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 	.client-shell {
 		max-width: 960px;
 		margin: 0 auto;
-		padding: 1.5rem 0.5rem calc(100px + env(safe-area-inset-bottom));
+		padding: 1.5rem 0.5rem calc(120px + env(safe-area-inset-bottom));
 	}
 
 	@media (min-width: 640px) {
 		.client-shell {
-			padding: 1.5rem 1.25rem calc(100px + env(safe-area-inset-bottom));
+			padding: 1.5rem 1.25rem calc(120px + env(safe-area-inset-bottom));
 		}
 	}
 
@@ -1259,8 +1259,8 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 
 	.timer-fab {
 		position: relative;
-		width: 48px;
-		height: 48px;
+		width: 62px;
+		height: 62px;
 		border-radius: 50%;
 		border: 1px solid #1a2236;
 		background: #151b2e;
@@ -1287,7 +1287,7 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 	}
 
 	.timer-fab-icon {
-		font-size: 21px;
+		font-size: 28px;
 		line-height: 1;
 	}
 
@@ -1306,11 +1306,11 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 	}
 
 	.timer-panel {
-		width: min(180px, calc(100vw - 32px));
+		width: min(230px, calc(100vw - 32px));
 		border: 1px solid #25324d;
 		background: #11182a;
-		border-radius: 16px;
-		padding: 0.7rem;
+		border-radius: 18px;
+		padding: 0.95rem;
 		box-shadow: 0 14px 24px rgba(0, 0, 0, 0.34);
 	}
 
@@ -1318,24 +1318,24 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		margin: 0;
 		display: flex;
 		align-items: center;
-		gap: 0.45rem;
-		font-size: 1.1rem;
+		gap: 0.6rem;
+		font-size: 1.45rem;
 		font-weight: 800;
 		color: #edf3ff;
 	}
 
 	.timer-actions {
 		display: flex;
-		gap: 0.5rem;
-		margin-top: 0.55rem;
+		gap: 0.6rem;
+		margin-top: 0.75rem;
 	}
 
 	.timer-btn {
 		flex: 1 1 auto;
-		min-height: 38px;
-		border-radius: 12px;
+		min-height: 46px;
+		border-radius: 13px;
 		border: 1px solid transparent;
-		font-size: 0.76rem;
+		font-size: 0.9rem;
 		font-weight: 800;
 		letter-spacing: 0.02em;
 		cursor: pointer;
@@ -1442,7 +1442,7 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 
 	@media (min-width: 768px) {
 		.client-shell {
-			padding: 2rem 1.5rem calc(104px + env(safe-area-inset-bottom));
+			padding: 2rem 1.5rem calc(124px + env(safe-area-inset-bottom));
 		}
 	}
 </style>

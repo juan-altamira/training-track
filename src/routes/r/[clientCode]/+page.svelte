@@ -40,12 +40,49 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 	let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 	let pendingSaveDay: string | null = null;
 	let saveInFlight = false;
-	let timerPanelOpen = $state(false);
+	let timerMinimized = $state(true);
 	let timerBottomOffset = $state(24);
 	let timerNowMs = $state(Date.now());
 	let timerAccumulatedMs = $state(0);
 	let timerStartedAtMs = $state<number | null>(null);
 	let timerTickIntervalId: ReturnType<typeof setInterval> | null = null;
+	const TIMER_STORAGE_KEY = 'training_track_rest_timer_v1';
+
+	type PersistedTimerState = {
+		accumulatedMs: number;
+		startedAtMs: number | null;
+		minimized: boolean;
+	};
+
+	const readPersistedTimerState = (): PersistedTimerState | null => {
+		try {
+			const raw = localStorage.getItem(TIMER_STORAGE_KEY);
+			if (!raw) return null;
+			const parsed = JSON.parse(raw) as Record<string, unknown>;
+			const accumulatedMs = Number(parsed.accumulatedMs);
+			const startedAtRaw = parsed.startedAtMs;
+			const startedAtMs = startedAtRaw === null ? null : Number(startedAtRaw);
+			const minimized = parsed.minimized === true;
+			if (!Number.isFinite(accumulatedMs) || accumulatedMs < 0) return null;
+			if (startedAtMs !== null && (!Number.isFinite(startedAtMs) || startedAtMs <= 0)) return null;
+			return { accumulatedMs, startedAtMs, minimized };
+		} catch {
+			return null;
+		}
+	};
+
+	const persistTimerState = () => {
+		try {
+			const payload: PersistedTimerState = {
+				accumulatedMs: timerAccumulatedMs,
+				startedAtMs: timerStartedAtMs,
+				minimized: timerMinimized
+			};
+			localStorage.setItem(TIMER_STORAGE_KEY, JSON.stringify(payload));
+		} catch {
+			// no-op
+		}
+	};
 
 	const startTimerTicking = () => {
 		if (timerTickIntervalId) return;
@@ -78,11 +115,17 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 	};
 
+	const toggleTimerMinimized = () => {
+		timerMinimized = !timerMinimized;
+		persistTimerState();
+	};
+
 	const startTimer = () => {
 		if (timerStartedAtMs !== null) return;
 		timerNowMs = Date.now();
 		timerStartedAtMs = timerNowMs;
 		startTimerTicking();
+		persistTimerState();
 	};
 
 	const stopTimer = () => {
@@ -92,6 +135,7 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		timerStartedAtMs = null;
 		timerNowMs = now;
 		stopTimerTicking();
+		persistTimerState();
 	};
 
 	const resetTimer = () => {
@@ -99,6 +143,7 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		timerStartedAtMs = null;
 		timerNowMs = Date.now();
 		stopTimerTicking();
+		persistTimerState();
 	};
 
 	const updateTimerBottomOffset = () => {
@@ -116,18 +161,38 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 	};
 
 	onMount(() => {
+		const persisted = readPersistedTimerState();
+		if (persisted) {
+			timerAccumulatedMs = persisted.accumulatedMs;
+			timerStartedAtMs = persisted.startedAtMs;
+			timerMinimized = persisted.minimized;
+			timerNowMs = Date.now();
+			if (timerStartedAtMs !== null) {
+				startTimerTicking();
+			}
+		}
+
 		updateTimerBottomOffset();
+		const handleVisibilityRefresh = () => {
+			timerNowMs = Date.now();
+			if (timerIsRunning()) startTimerTicking();
+		};
 
 		const viewport = window.visualViewport;
 		viewport?.addEventListener('resize', updateTimerBottomOffset);
 		viewport?.addEventListener('scroll', updateTimerBottomOffset);
 		window.addEventListener('resize', updateTimerBottomOffset);
+		window.addEventListener('focus', handleVisibilityRefresh);
+		document.addEventListener('visibilitychange', handleVisibilityRefresh);
 
 		return () => {
+			persistTimerState();
 			stopTimerTicking();
 			viewport?.removeEventListener('resize', updateTimerBottomOffset);
 			viewport?.removeEventListener('scroll', updateTimerBottomOffset);
 			window.removeEventListener('resize', updateTimerBottomOffset);
+			window.removeEventListener('focus', handleVisibilityRefresh);
+			document.removeEventListener('visibilitychange', handleVisibilityRefresh);
 		};
 	});
 
@@ -742,32 +807,52 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		<p class="reset-help">
 			Esto reinicia los contadores y comienza un nuevo registro semanal.
 		</p>
-		<div class="timer-fab-wrap" style={`--timer-bottom-offset: ${timerBottomOffset}px;`}>
-			{#if timerPanelOpen}
-				<div class="timer-panel" role="region" aria-label="Cronómetro">
-					<p class="timer-readout">
-						<span aria-hidden="true">⏱</span>
-						<span>{formatTimer(timerElapsedMs())}</span>
-					</p>
-					<div class="timer-actions">
-						{#if timerIsRunning()}
-							<button class="timer-btn timer-btn-danger" type="button" onclick={stopTimer}>DETENER</button>
-							<button class="timer-btn timer-btn-ghost" type="button" onclick={resetTimer}>REINICIAR</button>
-						{:else}
-							<button class="timer-btn timer-btn-primary timer-btn-full" type="button" onclick={startTimer}>INICIAR</button>
-						{/if}
+		<div class="timer-dock-wrap" style={`--timer-bottom-offset: ${timerBottomOffset}px;`}>
+			<div class={`timer-dock ${timerIsRunning() ? 'is-running' : ''} ${timerMinimized ? 'is-minimized' : ''}`}>
+				{#if timerMinimized}
+					<button
+						class={`timer-pill ${timerIsRunning() ? 'is-running' : ''}`}
+						type="button"
+						aria-label="Expandir cronómetro"
+						aria-expanded="false"
+						onclick={toggleTimerMinimized}
+					>
+						<span class="timer-pill-icon" aria-hidden="true">⏱</span>
+						<span class="timer-pill-time">{formatTimer(timerElapsedMs())}</span>
+					</button>
+				{:else}
+					<div class="timer-time-wrap" aria-live="polite">
+						<span class="timer-clock" aria-hidden="true">⏱</span>
+						<span class="timer-time">{formatTimer(timerElapsedMs())}</span>
 					</div>
-				</div>
-			{/if}
-			<button
-				class={`timer-fab ${timerIsRunning() ? 'is-running' : ''}`}
-				type="button"
-				aria-label={timerPanelOpen ? 'Ocultar cronómetro' : 'Mostrar cronómetro'}
-				aria-expanded={timerPanelOpen}
-				onclick={() => (timerPanelOpen = !timerPanelOpen)}
-			>
-				<span class="timer-fab-icon" aria-hidden="true">⏱</span>
-			</button>
+					<div class="timer-controls">
+						<button
+							class="timer-control-btn timer-control-btn-main"
+							type="button"
+							aria-label={timerIsRunning() ? 'Pausar cronómetro' : 'Iniciar cronómetro'}
+							onclick={timerIsRunning() ? stopTimer : startTimer}
+						>
+							{timerIsRunning() ? '⏸' : '▶'}
+						</button>
+						<button
+							class="timer-control-btn"
+							type="button"
+							aria-label="Reiniciar cronómetro"
+							onclick={resetTimer}
+						>
+							⟳
+						</button>
+						<button
+							class="timer-control-btn timer-control-btn-minimize"
+							type="button"
+							aria-label="Minimizar cronómetro"
+							onclick={toggleTimerMinimized}
+						>
+							▾
+						</button>
+					</div>
+				{/if}
+			</div>
 		</div>
 
 		{#if showResetConfirm}
@@ -798,12 +883,12 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 	.client-shell {
 		max-width: 960px;
 		margin: 0 auto;
-		padding: 1.5rem 0.5rem calc(120px + env(safe-area-inset-bottom));
+		padding: 1.5rem 0.5rem calc(132px + env(safe-area-inset-bottom));
 	}
 
 	@media (min-width: 640px) {
 		.client-shell {
-			padding: 1.5rem 1.25rem calc(120px + env(safe-area-inset-bottom));
+			padding: 1.5rem 1.25rem calc(132px + env(safe-area-inset-bottom));
 		}
 	}
 
@@ -1241,130 +1326,141 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		text-align: center;
 	}
 
-	.timer-fab-wrap {
+	.timer-dock-wrap {
 		position: fixed;
-		right: 16px;
+		left: 50%;
+		transform: translateX(-50%);
+		width: min(420px, 80vw);
+		max-width: calc(100vw - 32px);
 		bottom: calc(var(--timer-bottom-offset, 24px) + env(safe-area-inset-bottom));
 		z-index: 45;
-		display: flex;
-		flex-direction: column;
-		align-items: flex-end;
-		gap: 0.65rem;
 		pointer-events: none;
 	}
 
-	.timer-fab-wrap > * {
+	.timer-dock-wrap > * {
 		pointer-events: auto;
 	}
 
-	.timer-fab {
-		position: relative;
-		width: 62px;
-		height: 62px;
-		border-radius: 50%;
-		border: 1px solid #1a2236;
-		background: #151b2e;
-		color: #f4f7ff;
-		display: grid;
-		place-items: center;
-		cursor: pointer;
-		box-shadow: 0 8px 14px rgba(0, 0, 0, 0.3);
-	}
-
-	.timer-fab:hover {
-		background: #19233b;
-	}
-
-	.timer-fab:focus-visible {
-		outline: 2px solid #3ea0ff;
-		outline-offset: 2px;
-	}
-
-	.timer-fab.is-running {
-		border-color: #2f4f88;
-		background: #1b2846;
-		box-shadow: 0 10px 16px rgba(31, 74, 153, 0.3);
-	}
-
-	.timer-fab-icon {
-		font-size: 28px;
-		line-height: 1;
-	}
-
-	.timer-fab.is-running .timer-fab-icon {
-		animation: timer-pulse 1.6s ease-in-out infinite;
-	}
-
-	@keyframes timer-pulse {
-		0%,
-		100% {
-			opacity: 1;
-		}
-		50% {
-			opacity: 0.78;
-		}
-	}
-
-	.timer-panel {
-		width: min(230px, calc(100vw - 32px));
-		border: 1px solid #25324d;
-		background: #11182a;
-		border-radius: 18px;
-		padding: 0.95rem;
-		box-shadow: 0 14px 24px rgba(0, 0, 0, 0.34);
-	}
-
-	.timer-readout {
-		margin: 0;
+	.timer-dock {
+		min-height: 56px;
 		display: flex;
 		align-items: center;
-		gap: 0.6rem;
-		font-size: 1.45rem;
-		font-weight: 800;
-		color: #edf3ff;
+		justify-content: space-between;
+		gap: 0.85rem;
+		padding: 0.45rem 0.7rem;
+		border-radius: 22px;
+		border: 1px solid #1a2236;
+		background: #151b2e;
+		box-shadow: 0 10px 18px rgba(0, 0, 0, 0.32);
 	}
 
-	.timer-actions {
+	.timer-dock.is-running {
+		border-color: #2f4f88;
+		box-shadow: 0 10px 18px rgba(31, 74, 153, 0.28);
+	}
+
+	.timer-dock.is-minimized {
+		min-height: 40px;
+		padding: 0;
+		border: none;
+		background: transparent;
+		box-shadow: none;
+	}
+
+	.timer-time-wrap {
 		display: flex;
-		gap: 0.6rem;
-		margin-top: 0.75rem;
+		align-items: center;
+		gap: 0.55rem;
+		min-width: 0;
 	}
 
-	.timer-btn {
-		flex: 1 1 auto;
-		min-height: 46px;
-		border-radius: 13px;
-		border: 1px solid transparent;
-		font-size: 0.9rem;
+	.timer-clock {
+		font-size: 1.2rem;
+	}
+
+	.timer-time {
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+		font-size: 1.2rem;
 		font-weight: 800;
 		letter-spacing: 0.02em;
+		color: #eaf1ff;
+	}
+
+	.timer-dock.is-running .timer-time {
+		color: #9ed4ff;
+	}
+
+	.timer-controls {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.timer-control-btn {
+		width: 44px;
+		height: 44px;
+		border-radius: 14px;
+		border: 1px solid #2a3a58;
+		background: #0f1729;
+		color: #dbe6ff;
+		font-size: 1.15rem;
+		font-weight: 800;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 		cursor: pointer;
 	}
 
-	.timer-btn-full {
-		flex-basis: 100%;
+	.timer-control-btn:hover {
+		background: #14213b;
 	}
 
-	.timer-btn-primary {
-		background: #0f9960;
-		border-color: #1f7c42;
-		color: #f5fffa;
+	.timer-control-btn-main {
+		background: #16324f;
+		border-color: #2f4f88;
+		color: #f2f7ff;
 	}
 
-	.timer-btn-primary:hover {
-		filter: brightness(1.08);
+	.timer-dock.is-running .timer-control-btn-main {
+		background: #2a2435;
+		border-color: #5e4c78;
+		color: #f7efff;
 	}
 
-	.timer-btn-danger {
-		background: #9f281f;
-		border-color: #e35656;
-		color: #fff;
+	.timer-control-btn-minimize {
+		font-size: 1rem;
+		color: #b5c0d8;
 	}
 
-	.timer-btn-ghost {
+	.timer-pill {
+		height: 40px;
+		border-radius: 999px;
+		border: 1px solid #2a3a58;
 		background: #0f1729;
-		border-color: #2a3a58;
-		color: #d5deef;
+		color: #dce7ff;
+		padding: 0 0.9rem;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-weight: 700;
+		cursor: pointer;
+	}
+
+	.timer-pill.is-running {
+		border-color: #2f4f88;
+		background: #152743;
+		color: #eaf3ff;
+	}
+
+	.timer-pill-icon {
+		font-size: 1rem;
+	}
+
+	.timer-pill-time {
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+		font-size: 0.95rem;
+		font-weight: 800;
+		letter-spacing: 0.02em;
 	}
 
 	.modal-backdrop {
@@ -1442,7 +1538,7 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 
 	@media (min-width: 768px) {
 		.client-shell {
-			padding: 2rem 1.5rem calc(124px + env(safe-area-inset-bottom));
+			padding: 2rem 1.5rem calc(136px + env(safe-area-inset-bottom));
 		}
 	}
 </style>

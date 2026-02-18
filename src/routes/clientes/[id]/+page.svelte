@@ -352,18 +352,34 @@
 		value ? DAY_FEEDBACK_PAIN_LABEL[value] : '— (Sin respuesta)';
 
 	const formatFeedbackDifficulty = (value: number | null | undefined) =>
-		typeof value === 'number' ? `${value}/10` : '— (Sin respuesta)';
+		typeof value === 'number' ? `${value} / 10` : '— (Sin respuesta)';
 
 	const formatFeedbackComment = (value: string | null | undefined) =>
 		value && value.trim() ? value : '— (Sin comentario)';
 
-	const feedbackMoodTone = (value: DayFeedbackMood | null | undefined) => {
-		if (!value) return 'text-slate-400';
-		if (value === 'excellent') return 'text-emerald-300';
-		if (value === 'good') return 'text-cyan-300';
-		if (value === 'normal') return 'text-amber-200';
-		if (value === 'tired') return 'text-orange-300';
-		return 'text-rose-300';
+	const feedbackMoodIcon = (value: DayFeedbackMood | null | undefined) => {
+		if (value === 'excellent') return '🔵';
+		if (value === 'good') return '🟢';
+		if (value === 'normal') return '🟡';
+		if (value === 'tired') return '🟠';
+		if (value === 'very_fatigued') return '🔴';
+		return '⚪';
+	};
+
+	const feedbackMoodBadgeTone = (value: DayFeedbackMood | null | undefined) => {
+		if (value === 'excellent') return 'border-blue-500/40 bg-blue-900/30 text-blue-200';
+		if (value === 'good') return 'border-emerald-500/40 bg-emerald-900/30 text-emerald-200';
+		if (value === 'normal') return 'border-amber-500/40 bg-amber-900/30 text-amber-200';
+		if (value === 'tired') return 'border-orange-500/40 bg-orange-900/30 text-orange-200';
+		if (value === 'very_fatigued') return 'border-red-500/40 bg-red-900/30 text-red-200';
+		return 'border-slate-600/60 bg-slate-800/40 text-slate-300';
+	};
+
+	const feedbackDifficultyTone = (value: number | null | undefined) => {
+		if (typeof value !== 'number') return 'text-slate-500 text-xs font-medium';
+		if (value <= 4) return 'text-emerald-300 text-lg font-extrabold';
+		if (value <= 7) return 'text-amber-200 text-lg font-extrabold';
+		return 'text-red-300 text-lg font-extrabold';
 	};
 
 	const toggleDayDetail = (dayKey: string) => {
@@ -758,27 +774,43 @@
 												</span>
 											</button>
 											{#if feedbackExpanded[day.key]}
-												<div class="mt-2 rounded-md border border-slate-800 bg-[#0b1120] px-3 py-2 text-xs text-slate-300 space-y-1">
+												<div class="mt-2 rounded-md border border-slate-800 bg-[#0b1120] px-3 py-3 text-xs text-slate-300">
 													{#if hasDayFeedback(day.key)}
 														{@const row = dayFeedback[day.key]}
-														<div class="grid grid-cols-[auto_1fr] gap-x-2">
-															<span class="text-slate-400">Sensación:</span>
-															<span class={`font-medium ${feedbackMoodTone(row?.mood)}`}>{formatFeedbackMood(row?.mood)}</span>
+														<p class="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Resumen del día</p>
+														<div class="divide-y divide-slate-700/40 overflow-hidden rounded-md border border-slate-800/80 bg-[#0e1524]">
+															<div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5">
+																<span class="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">🧠 Sensación</span>
+																{#if row?.mood}
+																	<span class={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${feedbackMoodBadgeTone(row?.mood)}`}>
+																		<span>{feedbackMoodIcon(row?.mood)}</span>
+																		<span>{formatFeedbackMood(row?.mood)}</span>
+																	</span>
+																{:else}
+																	<span class="text-xs text-slate-500">— (Sin respuesta)</span>
+																{/if}
+															</div>
+															<div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5">
+																<span class="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">📊 Dificultad</span>
+																<span class={feedbackDifficultyTone(row?.difficulty)}>{formatFeedbackDifficulty(row?.difficulty)}</span>
+															</div>
+															<div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5">
+																<span class="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">⚠️ Dolor / molestias</span>
+																<span class={row?.pain ? 'text-sm font-semibold text-slate-200' : 'text-xs text-slate-500'}>
+																	{formatFeedbackPain(row?.pain)}
+																</span>
+															</div>
 														</div>
-														<div class="grid grid-cols-[auto_1fr] gap-x-2">
-															<span class="text-slate-400">Dificultad:</span>
-															<span class="font-semibold text-slate-200">{formatFeedbackDifficulty(row?.difficulty)}</span>
-														</div>
-														<div class="grid grid-cols-[auto_1fr] gap-x-2">
-															<span class="text-slate-400">Dolor/molestias:</span>
-															<span class={row?.pain ? 'text-slate-200' : 'text-slate-400'}>{formatFeedbackPain(row?.pain)}</span>
-														</div>
-														<div class="grid grid-cols-[auto_1fr] gap-x-2">
-															<span class="text-slate-400">Comentario:</span>
-															<span class={row?.comment ? 'text-slate-200' : 'text-slate-400'}>{formatFeedbackComment(row?.comment)}</span>
+														<div class="mt-3 rounded-md border border-slate-800/80 bg-[#0a101d] px-3 py-3">
+															<p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">📝 Comentario</p>
+															<div class="mt-2 border-t border-slate-700/40 pt-2">
+																<p class={`text-xs leading-relaxed ${row?.comment ? 'text-slate-200' : 'text-slate-500'}`}>
+																	{formatFeedbackComment(row?.comment)}
+																</p>
+															</div>
 														</div>
 														{#if row?.submitted_at}
-															<p class="pt-1 text-[11px] text-slate-500">Registrado: {new Date(row.submitted_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+															<p class="pt-2 text-[11px] text-slate-500">Registrado: {new Date(row.submitted_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
 														{/if}
 													{:else}
 														<p class="text-slate-400">El alumno no completó la encuesta este día.</p>

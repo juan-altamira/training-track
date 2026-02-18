@@ -73,10 +73,10 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 	];
 
 	const painOptions: Array<{ value: DayFeedbackPain; label: string }> = [
-		{ value: 'none', label: DAY_FEEDBACK_PAIN_LABEL.none },
-		{ value: 'mild', label: DAY_FEEDBACK_PAIN_LABEL.mild },
-		{ value: 'moderate', label: DAY_FEEDBACK_PAIN_LABEL.moderate },
-		{ value: 'severe', label: DAY_FEEDBACK_PAIN_LABEL.severe }
+		{ value: 'none', label: 'No' },
+		{ value: 'mild', label: 'Leve (soportable)' },
+		{ value: 'moderate', label: 'Moderado (interfiere)' },
+		{ value: 'severe', label: 'Fuerte (me limita)' }
 	];
 
 	const ensureFeedbackDraft = (dayKey: string) => {
@@ -117,6 +117,30 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 	const skipFeedbackForNow = (dayKey: string) => {
 		feedbackErrorByDay = { ...feedbackErrorByDay, [dayKey]: '' };
 		feedbackCardModeByDay = { ...feedbackCardModeByDay, [dayKey]: 'reminder' };
+	};
+
+	const cancelFeedbackForm = (dayKey: string) => {
+		feedbackErrorByDay = { ...feedbackErrorByDay, [dayKey]: '' };
+		feedbackCardModeByDay = {
+			...feedbackCardModeByDay,
+			[dayKey]: dayFeedback[dayKey] ? 'saved' : 'reminder'
+		};
+	};
+
+	const difficultyLabel = (difficultyRaw: string): string | null => {
+		const value = Number(difficultyRaw);
+		if (!Number.isInteger(value) || value < 1 || value > 10) return null;
+		if (value <= 2) return 'Muy fácil';
+		if (value <= 4) return 'Fácil';
+		if (value <= 6) return 'Intermedia';
+		if (value <= 8) return 'Difícil';
+		return 'Muy difícil';
+	};
+
+	const feedbackCounterTone = (length: number) => {
+		if (length >= 300) return 'is-danger';
+		if (length >= 280) return 'is-warning';
+		return '';
 	};
 
 	const updateFeedbackDraft = (
@@ -307,6 +331,25 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		}, 300);
 	};
 
+	const autoResizeTextarea = (node: HTMLTextAreaElement, _value?: string) => {
+		const resize = () => {
+			node.style.height = 'auto';
+			node.style.height = `${node.scrollHeight}px`;
+		};
+
+		resize();
+		node.addEventListener('input', resize);
+
+		return {
+			update(_nextValue?: string) {
+				resize();
+			},
+			destroy() {
+				node.removeEventListener('input', resize);
+			}
+		};
+	};
+
 	const resetProgress = async () => {
 		saving = true;
 		message = '';
@@ -416,7 +459,7 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 													{#each moodOptions as item}
 														<button
 															type="button"
-															class={`chip-btn ${draft.mood === item.value ? 'is-selected' : ''}`}
+															class={`chip-btn mood-chip mood-${item.value} ${draft.mood === item.value ? 'is-selected' : ''}`}
 															onclick={() => updateFeedbackDraft(day.key, { mood: draft.mood === item.value ? '' : item.value })}
 														>
 															<span>{item.icon}</span>
@@ -443,6 +486,12 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 														</button>
 													{/each}
 												</div>
+												{#if draft.difficulty}
+													{@const difficultyText = difficultyLabel(draft.difficulty)}
+													{#if difficultyText}
+														<p class="difficulty-selection">Seleccionaste: {draft.difficulty} ({difficultyText})</p>
+													{/if}
+												{/if}
 											</div>
 
 											<div class="feedback-field">
@@ -466,13 +515,14 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 													class="feedback-textarea"
 													rows="3"
 													value={draft.comment}
+													use:autoResizeTextarea={draft.comment}
 													oninput={(event) =>
 														updateFeedbackDraft(day.key, {
 															comment: (event.currentTarget as HTMLTextAreaElement).value
 														})}
 													placeholder="Si querés, contame en una línea cómo te sentiste."
 												></textarea>
-												<p class="feedback-counter">{draft.comment.length}/300</p>
+												<p class={`feedback-counter ${feedbackCounterTone(draft.comment.length)}`}>{draft.comment.length}/300</p>
 											</div>
 
 											{#if feedbackErrorByDay[day.key]}
@@ -488,7 +538,7 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 												>
 													{feedbackSavingByDay[day.key] ? 'Guardando...' : 'Guardar'}
 												</button>
-												<button class="btn ghost" type="button" onclick={() => skipFeedbackForNow(day.key)}>Ahora no</button>
+												<button class="btn ghost" type="button" onclick={() => cancelFeedbackForm(day.key)}>Cancelar</button>
 											</div>
 										</div>
 									{/if}
@@ -686,7 +736,7 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 	.feedback-subtitle {
 		margin: -0.35rem 0 0;
 		font-size: 0.9rem;
-		color: #a8b1c7;
+		color: #7e89a5;
 	}
 
 	.feedback-saved-status {
@@ -722,7 +772,7 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 	}
 
 	.feedback-field + .feedback-field {
-		margin-top: 0.95rem;
+		margin-top: 1.25rem;
 	}
 
 	.feedback-label {
@@ -768,10 +818,28 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		color: #f2f7ff;
 	}
 
+	.mood-chip.mood-tired.is-selected {
+		border-color: #f59e0b;
+		background: #4a3410;
+		color: #ffe2b2;
+	}
+
+	.mood-chip.mood-very_fatigued.is-selected {
+		border-color: #ef4444;
+		background: #5a111a;
+		color: #ffd6dc;
+	}
+
 	.scale-grid {
 		display: grid;
-		grid-template-columns: repeat(5, minmax(0, 1fr));
+		grid-template-columns: repeat(3, minmax(0, 1fr));
 		gap: 0.65rem;
+	}
+
+	@media (min-width: 640px) {
+		.scale-grid {
+			grid-template-columns: repeat(5, minmax(0, 1fr));
+		}
 	}
 
 	.scale-btn {
@@ -795,13 +863,20 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		color: #d7ffef;
 	}
 
+	.difficulty-selection {
+		margin: 0.2rem 0 0;
+		font-size: 0.82rem;
+		color: #afbad4;
+	}
+
 	.feedback-textarea {
 		border: 1px solid #2b3753;
 		background: #0f172a;
 		color: #e7edf8;
 		border-radius: 10px;
 		padding: 0.6rem 0.7rem;
-		resize: vertical;
+		resize: none;
+		overflow-y: hidden;
 		min-height: 86px;
 		font-size: 0.92rem;
 	}
@@ -815,6 +890,14 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		text-align: right;
 		font-size: 0.76rem;
 		color: #9ca8c2;
+	}
+
+	.feedback-counter.is-warning {
+		color: #fcd34d;
+	}
+
+	.feedback-counter.is-danger {
+		color: #f87171;
 	}
 
 	.feedback-error {

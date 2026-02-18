@@ -574,11 +574,13 @@
 </script>
 
 <section class="flex flex-col gap-8 text-slate-100">
-	<div class="py-5 sm:py-6 mb-4 text-center">
-		<h1 class="text-2xl sm:text-3xl md:text-4xl font-semibold tracking-tight text-slate-100">
-			Todos tus alumnos en un solo lugar.
-		</h1>
-		<p class="mt-3 text-base sm:text-lg text-slate-400">Ves actividad y abrís su rutina en un click.</p>
+	<div class="py-12 sm:py-14 text-center">
+		<div class="flex flex-col items-center justify-center gap-4 sm:gap-5">
+			<h1 class="text-2xl sm:text-3xl md:text-4xl font-semibold tracking-tight text-slate-100">
+				Todos tus alumnos en un solo lugar.
+			</h1>
+			<p class="text-base sm:text-lg text-slate-400">Ves actividad y abrís su rutina en un click.</p>
+		</div>
 	</div>
 
 	{#if accountSubscription && accountSubscription.state !== 'owner'}

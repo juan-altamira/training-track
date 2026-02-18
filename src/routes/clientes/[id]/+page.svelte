@@ -701,7 +701,7 @@
 				{#each WEEK_DAYS as day}
 					{#if plan[day.key] && plan[day.key].exercises.length > 0}
 						{@const completion = dayCompletion(day.key)}
-						<li class="rounded-lg border border-slate-800 bg-[#111423] overflow-hidden hover:bg-[#151827] transition-colors cursor-pointer">
+							<li class="rounded-lg border border-slate-700/90 bg-gradient-to-b from-[#1a223a] to-[#131b2f] overflow-hidden hover:from-[#1e2947] hover:to-[#16223a] transition-colors cursor-pointer shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
 							<button type="button" class="w-full text-left px-4 py-4 sm:py-5" onclick={() => toggleDayDetail(day.key)}>
 								<div class="grid grid-cols-[auto_1fr_auto] items-center gap-3 sm:gap-4">
 									<p class="font-semibold text-slate-100">{day.label}</p>
@@ -735,39 +735,34 @@
 							</button>
 							{#if expandedDay === day.key}
 								{@const details = getExerciseDetails(day.key)}
-									<div class="border-t border-slate-800 bg-[#0d1019] px-4 py-3 space-y-1">
-										<p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Detalle</p>
+										<div class="border-t border-slate-700/70 bg-[#0b1222] px-4 py-3 space-y-1">
 										<div class="divide-y divide-slate-800/60">
-											{#each details.exercises as ex}
-												<div class="grid grid-cols-[1fr_auto] gap-3 items-center py-2.5 hover:bg-slate-800/20 -mx-2 px-2 rounded transition-colors">
-													<span class="text-sm {ex.exists ? 'text-slate-400' : 'text-slate-500 italic'} line-clamp-2">{ex.name}</span>
-													<span class="inline-flex items-center gap-1 text-sm font-semibold px-2.5 py-1 rounded border {ex.complete ? 'border-slate-600/70 bg-slate-800/80 text-slate-100' : 'border-slate-700/70 bg-slate-900/50 text-slate-400'}">
-														{ex.done}/{ex.target}
-														{#if ex.complete}
-															<svg class="w-3.5 h-3.5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-																<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-															</svg>
-														{/if}
-													</span>
-												</div>
-											{/each}
-										</div>
-										<div class="grid grid-cols-[1fr_auto] gap-3 items-center pt-3 pb-2 mt-3 border-t border-slate-700">
-											<span class="text-sm font-medium text-slate-400">Total</span>
-											<span class="text-sm font-semibold text-slate-200">{details.doneExercises}/{details.totalExercises} ejercicios</span>
-										</div>
-										<div class="mt-5 border-t border-slate-700/70 pt-4">
-											<button
-												type="button"
-												class="w-full flex items-center justify-between gap-3 py-1.5 text-left"
-												onclick={() => toggleFeedbackDetail(day.key)}
-											>
-												<span class="text-sm font-semibold text-slate-200">🧠 Ver sensaciones del día</span>
-												<span class={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-													getDayFeedbackBadgeState(day.key) === 'registered'
-														? 'bg-slate-800/80 text-slate-200'
-														: getDayFeedbackBadgeState(day.key) === 'partial'
-															? 'bg-amber-900/25 text-amber-200'
+												{#each details.exercises as ex}
+													<div class="grid grid-cols-[1fr_auto] gap-3 items-center py-3.5 hover:bg-slate-800/20 -mx-2 px-2 rounded transition-colors">
+														<span class="text-sm {ex.exists ? 'text-slate-400' : 'text-slate-500 italic'} line-clamp-2">{ex.name}</span>
+														<span class="inline-flex items-center gap-1 text-sm font-semibold px-2.5 py-1 rounded border {ex.complete ? 'border-teal-800/50 bg-teal-950/40 text-teal-200' : 'border-slate-700/70 bg-slate-900/50 text-slate-400'}">
+															{ex.done}/{ex.target}
+															{#if ex.complete}
+																<svg class="w-3.5 h-3.5 text-teal-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																	<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+																</svg>
+															{/if}
+														</span>
+													</div>
+												{/each}
+											</div>
+											<div class="mt-11 border-t border-slate-700/70 pt-7">
+												<button
+													type="button"
+													class="w-full flex items-center justify-between gap-3 rounded-lg bg-[#0e1526] px-3 py-4 text-left transition-colors hover:bg-[#111b31]"
+													onclick={() => toggleFeedbackDetail(day.key)}
+												>
+													<span class="text-sm font-semibold text-slate-200">🧠 Ver sensaciones del día</span>
+													<span class={`inline-flex min-h-[1.75rem] min-w-[7rem] items-center justify-center whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold text-center ${
+														getDayFeedbackBadgeState(day.key) === 'registered'
+															? 'bg-slate-800/80 text-slate-200'
+															: getDayFeedbackBadgeState(day.key) === 'partial'
+																? 'bg-amber-900/25 text-amber-200'
 															: 'bg-slate-900/70 text-slate-400'
 												}`}>
 													{getDayFeedbackBadgeLabel(day.key)}

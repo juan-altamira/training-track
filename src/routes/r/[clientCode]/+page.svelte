@@ -465,8 +465,8 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 		<section class="client-shell">
 			<header class="hero">
 				<h1>Rutina de Entrenamiento</h1>
-				{#if data.objective}
-					<p class="objective">{data.objective}</p>
+				{#if data.clientName}
+					<p class="objective">{data.clientName}</p>
 				{/if}
 			</header>
 

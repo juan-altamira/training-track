@@ -15,6 +15,16 @@ type LineBucket = {
 
 const Y_TOLERANCE = 2.5;
 
+const ensurePdfRuntimePolyfills = async () => {
+	const globalScope = globalThis as {
+		DOMMatrix?: unknown;
+	};
+	if (typeof globalScope.DOMMatrix === 'undefined') {
+		const domMatrixModule = await import('@thednp/dommatrix');
+		globalScope.DOMMatrix = domMatrixModule.default as unknown;
+	}
+};
+
 const toLinesByPage = (items: PdfTextItem[]) => {
 	const buckets: LineBucket[] = [];
 	for (const item of items) {
@@ -40,6 +50,7 @@ export const parsePdfDigitalPayload = async (
 	payload: Uint8Array,
 	context: ParserContext
 ): Promise<ParserOutput> => {
+	await ensurePdfRuntimePolyfills();
 	const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
 	const loadingTask = pdfjs.getDocument({ data: payload });
 	const doc = await loadingTask.promise;

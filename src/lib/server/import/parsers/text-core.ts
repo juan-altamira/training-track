@@ -168,6 +168,33 @@ const SINGLE_WORD_EXERCISE_LEXICON_STRICT = new Set(['gemelos', 'plancha', 'domi
 
 const isLikelyNoteLine = (line: string) => /^(nota|note|rir|rpe|descanso|tempo)\b/i.test(line);
 
+const NOTE_CONTINUATION_TOKENS = new Set([
+	'final',
+	'parte',
+	'movimiento',
+	'tecnica',
+	'tecnica',
+	'controla',
+	'controlalo',
+	'controlala',
+	'mantene',
+	'manten',
+	'lento',
+	'lenta',
+	'lentas',
+	'rapido',
+	'rapida',
+	'rapidas',
+	'pausa',
+	'tempo',
+	'del',
+	'de',
+	'en',
+	'con',
+	'para',
+	'al'
+]);
+
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const normalizeComparable = (value: string) =>
@@ -226,6 +253,14 @@ const sanitizeNote = (raw: string | null) => {
 	if (!value || /^[\W_]+$/.test(value)) return null;
 	if (/^(repeticiones?|reps?)\.?$/i.test(value)) return null;
 	return value;
+};
+
+const appendNoteContinuation = (existing: string | null, continuation: string) => {
+	const left = sanitizeNote(existing);
+	const right = sanitizeNote(continuation);
+	if (!right) return left;
+	if (!left) return right;
+	return sanitizeNote(`${left} ${right}`);
 };
 
 const removeLineDecorators = (line: string) =>
@@ -303,6 +338,25 @@ const hasSemanticInstructionSignal = (note: string) => {
 	if (hasStrongCommentSignal(normalized)) return true;
 	if (/\b(?:exc|conc|tempo|pausa|descanso|tecnica|tecnica|controlado|controlada)\b/.test(normalized)) return true;
 	return false;
+};
+
+const isLikelyNoteContinuationLine = (line: string, hasExistingNote: boolean) => {
+	if (!hasExistingNote) return false;
+	const cleaned = sanitizeNote(line);
+	if (!cleaned) return false;
+	if (isLikelyNoteLine(cleaned)) return false;
+	if (collectPrescriptionSpans(cleaned).length > 0) return false;
+
+	const startsLowercase = /^[a-záéíóúñ]/.test(cleaned);
+	const normalized = normalizeComparable(cleaned);
+	const tokens = normalized.split(' ').filter(Boolean);
+	const firstToken = tokens[0] ?? '';
+	const startsWithContinuationToken = NOTE_CONTINUATION_TOKENS.has(firstToken);
+
+	if (!startsLowercase && !startsWithContinuationToken && !hasStrongCommentSignal(cleaned)) return false;
+	if (tokens.length <= 1 && !hasStrongCommentSignal(cleaned)) return false;
+
+	return true;
 };
 
 const confidencePenaltyByDelta = (delta: ImportNameSplitConfidenceDelta) => {
@@ -1007,6 +1061,17 @@ export const parseLinesToDraft = (lines: ParsedLine[], context: ParserContext): 
 
 			if (lastNode && isLikelyNoteLine(splitNormalized)) {
 				lastNode.note = mergeNotes(lastNode.note, splitNormalized);
+				if (lastNode.note) {
+					lastNode.field_meta.note = {
+						confidence: toConfidence(Math.max(0.4, baseConfidence - 0.25)),
+						provenance: makeProvenance(sourceLine.text, sourceLine.lineIndex, sourceLine.sourcePage)
+					};
+				}
+				continue;
+			}
+
+			if (lastNode && isLikelyNoteContinuationLine(splitNormalized, Boolean(lastNode.note))) {
+				lastNode.note = appendNoteContinuation(lastNode.note, splitNormalized);
 				if (lastNode.note) {
 					lastNode.field_meta.note = {
 						confidence: toConfidence(Math.max(0.4, baseConfidence - 0.25)),

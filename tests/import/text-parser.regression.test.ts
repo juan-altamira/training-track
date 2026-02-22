@@ -119,3 +119,18 @@ test('regression: emits warning when multi-exercise-like line cannot be safely s
 	assert.ok((draft.coverage.unresolved_multi_exercise_lines ?? 0) >= 1);
 	assert.ok(bundle.issues.some((issue) => issue.code === 'possible_multi_exercise_line'));
 });
+
+test('regression: keeps full continuation note when sentence wraps to next line', async () => {
+	const raw = `LUNES
+• Vuelos Posteriores (4x12) + 2 series aguantando en la parte
+final del movimiento`;
+	const draft = await parseDraft(raw);
+	const node = draft.days[0]?.blocks[0]?.nodes[0];
+
+	assert.ok(node);
+	assert.equal(node.raw_exercise_name, 'Vuelos Posteriores');
+	assert.equal(node.sets, 4);
+	assert.equal(node.reps_min, 12);
+	assert.ok(node.note?.includes('2 series aguantando en la parte'));
+	assert.ok(node.note?.includes('final del movimiento'));
+});

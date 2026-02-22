@@ -25,6 +25,21 @@ const ensurePdfRuntimePolyfills = async () => {
 	}
 };
 
+const ensurePdfWorkerHandler = async () => {
+	const globalScope = globalThis as {
+		pdfjsWorker?: {
+			WorkerMessageHandler?: unknown;
+		};
+	};
+	if (!globalScope.pdfjsWorker?.WorkerMessageHandler) {
+		const workerModule = await import('pdfjs-dist/legacy/build/pdf.worker.mjs');
+		globalScope.pdfjsWorker = {
+			...(globalScope.pdfjsWorker ?? {}),
+			WorkerMessageHandler: workerModule.WorkerMessageHandler
+		};
+	}
+};
+
 const toLinesByPage = (items: PdfTextItem[]) => {
 	const buckets: LineBucket[] = [];
 	for (const item of items) {
@@ -51,13 +66,9 @@ export const parsePdfDigitalPayload = async (
 	context: ParserContext
 ): Promise<ParserOutput> => {
 	await ensurePdfRuntimePolyfills();
+	await ensurePdfWorkerHandler();
 	const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-	const loadingTask = pdfjs.getDocument(({
-		data: payload,
-		// In serverless/node environments the worker asset may not be bundled.
-		// Parsing on the main thread is acceptable for V1 PDF-digital scope.
-		disableWorker: true
-	} satisfies Record<string, unknown>) as Parameters<typeof pdfjs.getDocument>[0]);
+	const loadingTask = pdfjs.getDocument({ data: payload });
 	const doc = await loadingTask.promise;
 	if (doc.numPages > IMPORT_MAX_PAGE_COUNT) {
 		throw new Error(`PDF exceeds page limit (${IMPORT_MAX_PAGE_COUNT}).`);

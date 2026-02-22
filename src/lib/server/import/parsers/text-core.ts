@@ -13,6 +13,16 @@ import { makeId, makeProvenance, mapSpanishWeekdayToKey, normalizeLine, toConfid
 const DAY_HEADING_REGEX =
 	/^(lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|d[ií]a\s*\d+|day\s*\d+)\b[:\-]?\s*(.*)?$/i;
 
+const INDEXED_DAY_TO_WEEKDAY = [
+	'monday',
+	'tuesday',
+	'wednesday',
+	'thursday',
+	'friday',
+	'saturday',
+	'sunday'
+] as const;
+
 const NOISE_LINE_REGEX = /^(rutina|semana|objetivo|total|resumen|series?\s+de)\b/i;
 
 const EXERCISE_PATTERNS = [
@@ -261,6 +271,19 @@ const appendNoteContinuation = (existing: string | null, continuation: string) =
 	if (!right) return left;
 	if (!left) return right;
 	return sanitizeNote(`${left} ${right}`);
+};
+
+const mapIndexedDayLabelToKey = (raw: string): ImportDraftDay['mapped_day_key'] => {
+	const normalized = raw
+		.normalize('NFD')
+		.replace(/\p{Diacritic}/gu, '')
+		.toLowerCase()
+		.trim();
+	const match = normalized.match(/^(?:dia|day)\s*(\d{1,2})\b/);
+	if (!match) return null;
+	const dayNumber = Number.parseInt(match[1] ?? '', 10);
+	if (!Number.isFinite(dayNumber) || dayNumber < 1) return null;
+	return INDEXED_DAY_TO_WEEKDAY[dayNumber - 1] ?? null;
 };
 
 const removeLineDecorators = (line: string) =>
@@ -1015,8 +1038,10 @@ export const parseLinesToDraft = (lines: ParsedLine[], context: ParserContext): 
 		const heading = normalized.match(DAY_HEADING_REGEX);
 		if (heading) {
 			const headingLabel = normalized;
+			const headingToken = heading[1] ?? '';
 			const mapped =
-				mapSpanishWeekdayToKey(heading[1] ?? '') ??
+				mapSpanishWeekdayToKey(headingToken) ??
+				mapIndexedDayLabelToKey(headingToken) ??
 				(null as ImportDraftDay['mapped_day_key']);
 			const nextDay = createDay(headingLabel, mapped);
 			days.push(nextDay);

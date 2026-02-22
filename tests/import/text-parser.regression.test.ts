@@ -134,3 +134,22 @@ final del movimiento`;
 	assert.ok(node.note?.includes('2 series aguantando en la parte'));
 	assert.ok(node.note?.includes('final del movimiento'));
 });
+
+test('regression: auto maps DIA 1/2/3 headings to monday/tuesday/wednesday', async () => {
+	const raw = `DIA 1 (Piernas):
+Sentadillas (3x8)
+
+DIA 2 (Empuje) :
+Banco Plano (3x10)
+
+DIA 3 (Traccion) :
+Remo en Maquina (4x12)`;
+
+	const draft = await parseDraft(raw);
+	const bundle = buildDraftBundle(draft);
+
+	assert.equal(draft.days[0]?.mapped_day_key, 'monday');
+	assert.equal(draft.days[1]?.mapped_day_key, 'tuesday');
+	assert.equal(draft.days[2]?.mapped_day_key, 'wednesday');
+	assert.equal(bundle.issues.some((issue) => issue.code === 'day_mapping_required'), false);
+});

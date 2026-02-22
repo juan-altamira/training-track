@@ -52,7 +52,12 @@ export const parsePdfDigitalPayload = async (
 ): Promise<ParserOutput> => {
 	await ensurePdfRuntimePolyfills();
 	const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-	const loadingTask = pdfjs.getDocument({ data: payload });
+	const loadingTask = pdfjs.getDocument(({
+		data: payload,
+		// In serverless/node environments the worker asset may not be bundled.
+		// Parsing on the main thread is acceptable for V1 PDF-digital scope.
+		disableWorker: true
+	} satisfies Record<string, unknown>) as Parameters<typeof pdfjs.getDocument>[0]);
 	const doc = await loadingTask.promise;
 	if (doc.numPages > IMPORT_MAX_PAGE_COUNT) {
 		throw new Error(`PDF exceeds page limit (${IMPORT_MAX_PAGE_COUNT}).`);

@@ -15,6 +15,7 @@ const MAX_EXERCISES_PER_DAY = 50;
 type RoutineRelation = {
 	plan: RoutinePlan | null;
 	reset_progress_on_change?: boolean | null;
+	version?: number | null;
 };
 
 type ProgressRelation = {
@@ -68,7 +69,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 			const { data: clientRow, error: clientError } = await supabase
 				.from('clients')
 				.select(
-					'id,name,objective,status,client_code,created_at,routines(plan,reset_progress_on_change),progress(progress,last_completed_at)'
+					'id,name,objective,status,client_code,created_at,routines(plan,reset_progress_on_change,version),progress(progress,last_completed_at)'
 				)
 				.eq('id', clientId)
 				.eq('trainer_id', trainerId)
@@ -94,6 +95,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 					created_at: clientRow.created_at
 				},
 				plan: normalizePlan(routineRow?.plan as RoutinePlan | null),
+				routineVersion: routineRow?.version ?? 1,
 				progress: normalizedProgress,
 				dayFeedback,
 				last_completed_at: progressRow?.last_completed_at ?? null,
@@ -116,7 +118,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 
 		const { data: routineRow, error: routineError } = await supabase
 			.from('routines')
-			.select('plan,reset_progress_on_change')
+			.select('plan,reset_progress_on_change,version')
 			.eq('client_id', clientId)
 			.maybeSingle();
 		if (routineError) {
@@ -146,6 +148,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 		return {
 			client,
 			plan: normalizePlan(routineRow?.plan as RoutinePlan | null),
+			routineVersion: routineRow?.version ?? 1,
 			progress: normalizedProgress,
 			dayFeedback,
 			last_completed_at: progressRow?.last_completed_at ?? null,
@@ -209,21 +212,23 @@ export const actions: Actions = {
 		}
 
 		const nowUtc = nowIsoUtc();
-		const { error: updateError } = await supabase.from('routines').upsert(
+		const { data: savedRoutine, error: updateError } = await supabase.from('routines').upsert(
 			{
 				client_id: params.id,
 				plan,
 				last_saved_at: nowUtc
 			},
 			{ onConflict: 'client_id' }
-		);
+		)
+			.select('version')
+			.single();
 
 		if (updateError) {
 			console.error(updateError);
 			return fail(500, { message: 'No pudimos guardar la rutina' });
 		}
 
-		return { success: true };
+		return { success: true, routineVersion: savedRoutine?.version ?? null };
 	},
 	resetProgress: async ({ params, locals }) => {
 		if (!locals.session) {

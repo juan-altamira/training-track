@@ -2,6 +2,7 @@
 	import { goto, preloadData } from '$app/navigation';
 	import { DAY_FEEDBACK_MOOD_LABEL, DAY_FEEDBACK_PAIN_LABEL, type DayFeedbackByDay, type DayFeedbackMood, type DayFeedbackPain } from '$lib/dayFeedback';
 	import { WEEK_DAYS, getTargetSets } from '$lib/routines';
+	import RoutineImportPanel from '$lib/components/RoutineImportPanel.svelte';
 	import type { OtherClientRow, ProgressState, RoutineExercise, RoutinePlan } from '$lib/types';
 	import { onMount } from 'svelte';
 	import { rememberLastClientRoute } from '$lib/client/sessionResumeWarmup';
@@ -10,6 +11,7 @@
 
 	let plan: RoutinePlan = $state(structuredClone(data.plan));
 	let progress: ProgressState = $state(structuredClone(data.progress));
+	let routineVersion = $state(data.routineVersion ?? 1);
 	let selectedDay = $state(WEEK_DAYS[0].key);
 	let saving = $state(false);
 	let feedback = $state('');
@@ -224,6 +226,11 @@
 			body: formData
 		});
 		if (res.ok) {
+			const payload = await res.json().catch(() => null);
+			const nextVersion = payload?.data?.routineVersion;
+			if (typeof nextVersion === 'number') {
+				routineVersion = nextVersion;
+			}
 			feedback = 'Rutina guardada';
 			feedbackType = 'success';
 			showValidationErrors = false;
@@ -464,6 +471,8 @@
 	{#if statusMessage}
 		<p class="rounded-lg bg-[#151827] px-3 py-2 text-sm text-emerald-200 border border-emerald-700/40">{statusMessage}</p>
 	{/if}
+
+	<RoutineImportPanel clientId={data.client.id} initialRoutineVersion={routineVersion} />
 
 	<section class="grid gap-6 lg:grid-cols-[2fr,1fr]">
 		<div class="order-3 lg:order-1 space-y-5 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 md:p-6 shadow-lg shadow-black/30">

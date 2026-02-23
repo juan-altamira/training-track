@@ -8,7 +8,7 @@
 		type ImportStats
 	} from '$lib/import/types';
 	import { importDraftSchema } from '$lib/import/schemas';
-	import type { RoutineUiMeta } from '$lib/types';
+	import type { RoutinePlan, RoutineUiMeta } from '$lib/types';
 
 	type ImportJobView = {
 		id: string;
@@ -65,11 +65,18 @@
 	} as const;
 	const DAY_LABEL_MODES = ['weekday', 'sequential', 'custom'] as const;
 	type DayLabelMode = (typeof DAY_LABEL_MODES)[number];
+	type RoutineAppliedPayload = {
+		action: 'commit' | 'rollback';
+		plan: RoutinePlan;
+		uiMeta: RoutineUiMeta | null;
+		routineVersion: number;
+	};
 
-	let { clientId, initialRoutineVersion, initialUiMeta = null } = $props<{
+	let { clientId, initialRoutineVersion, initialUiMeta = null, onRoutineApplied = null } = $props<{
 		clientId: string;
 		initialRoutineVersion: number;
 		initialUiMeta?: RoutineUiMeta | null;
+		onRoutineApplied?: ((payload: RoutineAppliedPayload) => void | Promise<void>) | null;
 	}>();
 
 	let sourceMode = $state<'file' | 'text'>('file');
@@ -198,6 +205,23 @@
 		draft = normalizeDraftForUi(payload.draft as ImportDraft | null);
 		issues = Array.isArray(payload.issues) ? payload.issues : [];
 		stats = payload.stats ?? null;
+	};
+
+	const applyRoutineUpdateToParent = async (
+		action: 'commit' | 'rollback',
+		payload: Record<string, any> | null | undefined
+	) => {
+		if (!onRoutineApplied || !payload) return;
+		const nextPlan = payload.plan;
+		const nextVersion = payload.routine_version_after;
+		if (!nextPlan || typeof nextPlan !== 'object') return;
+		if (typeof nextVersion !== 'number' || !Number.isFinite(nextVersion)) return;
+		await onRoutineApplied({
+			action,
+			plan: nextPlan as RoutinePlan,
+			uiMeta: (payload.ui_meta ?? null) as RoutineUiMeta | null,
+			routineVersion: nextVersion
+		});
 	};
 
 	const getDraftMode = (): DayLabelMode => normalizeDraftMode(draft?.presentation?.day_label_mode);
@@ -484,11 +508,12 @@
 				return;
 			}
 
-			lastBackupId = payload.backup_id ?? null;
-			routineVersionExpected = payload.routine_version_after ?? routineVersionExpected;
-			panelMessage = 'Importación aplicada correctamente.';
-			await fetchJobStatus();
-		} catch (e) {
+				lastBackupId = payload.backup_id ?? null;
+				routineVersionExpected = payload.routine_version_after ?? routineVersionExpected;
+				await applyRoutineUpdateToParent('commit', payload);
+				panelMessage = 'Importación aplicada correctamente.';
+				await fetchJobStatus();
+			} catch (e) {
 			console.error(e);
 			panelError = 'No pudimos confirmar el commit de importación.';
 		} finally {
@@ -512,9 +537,10 @@
 				return;
 			}
 				routineVersionExpected = payload.routine_version_after ?? routineVersionExpected;
+				await applyRoutineUpdateToParent('rollback', payload);
 				panelMessage = 'Reversión aplicada correctamente.';
 				await fetchJobStatus();
-		} catch (e) {
+			} catch (e) {
 			console.error(e);
 			panelError = 'No pudimos revertir la importación.';
 		} finally {

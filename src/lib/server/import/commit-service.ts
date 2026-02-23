@@ -189,6 +189,12 @@ export const commitImportJob = async (params: {
 		};
 	}
 
+	const { data: routineAfterCommit } = await supabaseAdmin
+		.from('routines')
+		.select('plan, ui_meta')
+		.eq('client_id', params.clientId)
+		.maybeSingle();
+
 	await logImportAudit({
 		jobId: job.id,
 		trainerId: params.trainerId,
@@ -211,7 +217,9 @@ export const commitImportJob = async (params: {
 		data: {
 			commit_id: row.commit_id as string,
 			routine_version_after: row.routine_version_after as number,
-			backup_id: row.backup_id as string
+			backup_id: row.backup_id as string,
+			plan: (routineAfterCommit?.plan as Record<string, unknown> | null) ?? draftRow.derived_routineplan_json,
+			ui_meta: (routineAfterCommit?.ui_meta as Record<string, unknown> | null) ?? resolvedUiMeta
 		}
 	};
 };
@@ -258,6 +266,12 @@ export const rollbackImportJob = async (params: {
 		};
 	}
 
+	const { data: routineAfterRollback } = await supabaseAdmin
+		.from('routines')
+		.select('plan, ui_meta')
+		.eq('client_id', params.clientId)
+		.maybeSingle();
+
 	await logImportAudit({
 		jobId: params.jobId,
 		trainerId: params.trainerId,
@@ -274,7 +288,9 @@ export const rollbackImportJob = async (params: {
 		status: 200,
 		data: {
 			backup_id: row.backup_id as string,
-			routine_version_after: row.routine_version_after as number
+			routine_version_after: row.routine_version_after as number,
+			plan: (routineAfterRollback?.plan as Record<string, unknown> | null) ?? null,
+			ui_meta: (routineAfterRollback?.ui_meta as Record<string, unknown> | null) ?? null
 		}
 	};
 };

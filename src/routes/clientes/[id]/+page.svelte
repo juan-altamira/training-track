@@ -190,6 +190,24 @@
 		setTimeout(() => (copiedLink = false), 2000);
 	};
 
+	const applyImportedRoutineUpdate = (payload: {
+		action: 'commit' | 'rollback';
+		plan: RoutinePlan;
+		uiMeta: RoutineUiMeta | null;
+		routineVersion: number;
+	}) => {
+		plan = structuredClone(payload.plan);
+		uiMeta = normalizeRoutineUiMeta(payload.uiMeta ?? null);
+		routineVersion = payload.routineVersion;
+		statusMessage =
+			payload.action === 'rollback'
+				? 'Importación revertida. Vista actualizada.'
+				: 'Importación aplicada. Vista actualizada.';
+		setTimeout(() => {
+			statusMessage = '';
+		}, 2500);
+	};
+
 	const copyRoutine = async () => {
 		if (!selectedSource) return;
 		const formData = new FormData();
@@ -531,7 +549,12 @@
 		<p class="rounded-lg bg-[#151827] px-3 py-2 text-sm text-emerald-200 border border-emerald-700/40">{statusMessage}</p>
 	{/if}
 
-	<RoutineImportPanel clientId={data.client.id} initialRoutineVersion={routineVersion} initialUiMeta={uiMeta} />
+	<RoutineImportPanel
+		clientId={data.client.id}
+		initialRoutineVersion={routineVersion}
+		initialUiMeta={uiMeta}
+		onRoutineApplied={applyImportedRoutineUpdate}
+	/>
 
 	<section class="grid gap-6 lg:grid-cols-[2fr,1fr]">
 		<div class="order-3 lg:order-1 space-y-5 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 md:p-6 shadow-lg shadow-black/30">

@@ -10,6 +10,19 @@ import type { RoutineUiMeta } from '$lib/types';
 const parseOptimisticConflict = (message: string | null | undefined) =>
 	(message ?? '').toLowerCase().includes('optimistic_lock_conflict');
 
+const isApplyImportCommitFunctionMissing = (message: string | null | undefined) => {
+	const normalized = (message ?? '').toLowerCase();
+	return (
+		normalized.includes('could not find the function public.apply_import_commit') ||
+		normalized.includes('function public.apply_import_commit')
+	);
+};
+
+const isApplyImportCommitUiMetaSignatureMismatch = (message: string | null | undefined) => {
+	const normalized = (message ?? '').toLowerCase();
+	return isApplyImportCommitFunctionMissing(normalized) && normalized.includes('p_next_ui_meta');
+};
+
 const parseOptimisticConflictDetail = (detail: string | null | undefined) => {
 	const value = detail ?? '';
 	const expectedMatch = value.match(/expected_version=(\d+)/i);
@@ -84,7 +97,7 @@ export const commitImportJob = async (params: {
 		}
 	);
 
-	const { data, error } = await supabaseAdmin.rpc('apply_import_commit', {
+	const commitPayload = {
 		p_job_id: job.id,
 		p_trainer_id: params.trainerId,
 		p_client_id: params.clientId,
@@ -92,12 +105,23 @@ export const commitImportJob = async (params: {
 		p_overwrite_days: params.policy === 'overwrite_days' ? params.overwriteDays ?? [] : null,
 		p_routine_version_expected: params.routineVersionExpected,
 		p_commit_idempotency_key: params.commitIdempotencyKey,
-		p_next_plan: draftRow.derived_routineplan_json,
+		p_next_plan: draftRow.derived_routineplan_json
+	};
+
+	let usedLegacyCommitSignature = false;
+	let { data, error } = await supabaseAdmin.rpc('apply_import_commit', {
+		...commitPayload,
 		p_next_ui_meta: resolvedUiMeta
 	});
 
+	if (error && isApplyImportCommitUiMetaSignatureMismatch(error.message)) {
+		usedLegacyCommitSignature = true;
+		({ data, error } = await supabaseAdmin.rpc('apply_import_commit', commitPayload));
+	}
+
 	if (error) {
 		const isConflict = parseOptimisticConflict(error.message);
+		const isMissingFunction = isApplyImportCommitFunctionMissing(error.message);
 		const detail = parseOptimisticConflictDetail((error as any)?.details ?? error.message);
 		let lastSavedAt: string | null = null;
 		if (isConflict) {
@@ -111,40 +135,44 @@ export const commitImportJob = async (params: {
 
 		await updateImportJobStatus({
 			jobId: job.id,
-			status: 'ready',
-			progressStage: 'ready',
-			progressPercent: 100,
-			errorCode: isConflict ? IMPORT_ERROR_CODES.OPTIMISTIC_LOCK_CONFLICT : IMPORT_ERROR_CODES.INTERNAL_ERROR,
-			errorMessage: error.message,
-			clearLease: true
-		});
+				status: 'ready',
+				progressStage: 'ready',
+				progressPercent: 100,
+				errorCode:
+					isConflict ? IMPORT_ERROR_CODES.OPTIMISTIC_LOCK_CONFLICT : IMPORT_ERROR_CODES.INTERNAL_ERROR,
+				errorMessage: error.message,
+				clearLease: true
+			});
 
 		await logImportAudit({
 			jobId: job.id,
 			trainerId: params.trainerId,
 			clientId: params.clientId,
-			event: 'commit_failed',
-			payload: {
+				event: 'commit_failed',
+				payload: {
+					code: isConflict
+						? IMPORT_ERROR_CODES.OPTIMISTIC_LOCK_CONFLICT
+						: IMPORT_ERROR_CODES.INTERNAL_ERROR,
+					error: error.message,
+					missing_function: isMissingFunction
+				}
+			});
+
+			return {
+				ok: false as const,
+				status: isConflict ? 409 : 500,
 				code: isConflict
 					? IMPORT_ERROR_CODES.OPTIMISTIC_LOCK_CONFLICT
 					: IMPORT_ERROR_CODES.INTERNAL_ERROR,
-				error: error.message
-			}
-		});
-
-		return {
-			ok: false as const,
-			status: isConflict ? 409 : 500,
-			code: isConflict
-				? IMPORT_ERROR_CODES.OPTIMISTIC_LOCK_CONFLICT
-				: IMPORT_ERROR_CODES.INTERNAL_ERROR,
-			message: isConflict
-				? 'La rutina cambió mientras revisabas el import. Recargá y validá de nuevo.'
-				: 'No pudimos confirmar el commit de importación.',
-			meta: isConflict
-				? {
-						expected_version: detail.expectedVersion,
-						current_version: detail.currentVersion,
+				message: isConflict
+					? 'La rutina cambió mientras revisabas el import. Recargá y validá de nuevo.'
+					: isMissingFunction
+						? 'La base remota no tiene la versión actual de funciones de importación. Aplicá la migración 202602220003_routine_ui_meta_day_labels.sql y reintentá.'
+					: 'No pudimos confirmar el commit de importación.',
+				meta: isConflict
+					? {
+							expected_version: detail.expectedVersion,
+							current_version: detail.currentVersion,
 						last_saved_at: lastSavedAt
 					}
 				: null
@@ -172,7 +200,8 @@ export const commitImportJob = async (params: {
 			backup_id: row.backup_id,
 			policy: params.policy,
 			overwrite_days: params.overwriteDays ?? [],
-			ui_meta: resolvedUiMeta
+			ui_meta: resolvedUiMeta,
+			legacy_signature_fallback: usedLegacyCommitSignature
 		}
 	});
 

@@ -965,7 +965,7 @@
 			<form
 				method="post"
 				action="?/create"
-				class="order-1 lg:order-3 lg:col-start-2 lg:row-span-2 space-y-5 rounded-xl border border-slate-800 bg-[#0f111b] p-7 shadow-lg shadow-black/30"
+				class="order-1 lg:order-3 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:self-start space-y-5 rounded-xl border border-slate-800 bg-[#0f111b] p-7 shadow-lg shadow-black/30"
 				use:enhance={() => {
 					creating = true;
 					formMessage = null;

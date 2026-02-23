@@ -700,16 +700,18 @@
 
 					<div class="pt-8 md:pt-0">
 						<div class="flex flex-wrap gap-2">
-							{#each displayDays(selectedDay) as day}
-								<button
-									type="button"
-									class={`whitespace-nowrap rounded-full px-4 py-2 text-base border ${
-										selectedDay === day.dayKey
-											? 'bg-[#16223d] text-white border-slate-600'
-											: 'bg-[#070c1d] text-slate-300 border-[#0f162b] hover:bg-[#0d152b]'
-									}`}
-								onclick={() => (selectedDay = day.dayKey)}
-							>
+								{#each displayDays(selectedDay) as day}
+									<button
+										type="button"
+										class={`whitespace-nowrap rounded-full px-4 py-2 text-base border ${
+											selectedDay === day.dayKey
+												? 'bg-[#16223d] text-white border-cyan-300/90 shadow-[0_0_0_1px_rgba(103,232,249,0.6)]'
+												: day.hasExercises
+													? 'bg-[#122139] text-slate-100 border-cyan-800/70 shadow-[0_0_0_1px_rgba(34,211,238,0.15)] hover:bg-[#173051]'
+													: 'bg-[#070c1d] text-slate-300 border-[#0f162b] hover:bg-[#0d152b]'
+										}`}
+									onclick={() => (selectedDay = day.dayKey)}
+								>
 								{day.displayLabel}
 							</button>
 						{/each}

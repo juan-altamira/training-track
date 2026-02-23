@@ -64,11 +64,11 @@
 								navigatingBackToPanel = true;
 							}}
 						>
-							<span class="btn-label flex items-center gap-2">
-								<span aria-hidden="true">↩︎</span>
-								<span>{navigatingBackToPanel ? 'Volviendo al panel...' : 'Volver al panel'}</span>
-							</span>
-						</a>
+								<span class="btn-label inline-flex items-center gap-2 whitespace-nowrap">
+									<span aria-hidden="true">↩︎</span>
+									<span>Volver al panel</span>
+								</span>
+							</a>
 							<div class="hidden min-w-0 px-2 md:block">
 								{#if clientDetailName}
 									<p class="truncate text-center text-3xl font-extrabold tracking-wide text-slate-50">

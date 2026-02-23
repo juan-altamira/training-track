@@ -204,25 +204,33 @@
 		if (!incoming) return null;
 		const fallbackMode = normalizeDraftMode(initialUiMeta?.day_label_mode);
 		const mode = normalizeDraftMode(incoming.presentation?.day_label_mode ?? fallbackMode);
+		const normalizedDays = incoming.days.map((day, index) => ({
+			...day,
+			mapped_day_key:
+				day.mapped_day_key &&
+				IMPORT_WEEK_DAY_KEYS.includes(
+					day.mapped_day_key as (typeof IMPORT_WEEK_DAY_KEYS)[number]
+				)
+					? (day.mapped_day_key as (typeof IMPORT_WEEK_DAY_KEYS)[number])
+					: IMPORT_WEEK_DAY_KEYS[index] ?? null,
+			display_label:
+				typeof day.display_label === 'string' && day.display_label.trim()
+					? day.display_label.trim()
+					: `Día ${index + 1}`
+		}));
+		const modeAdjustedDays =
+			mode === 'sequential'
+				? normalizedDays.map((day, index) => ({
+						...day,
+						mapped_day_key: IMPORT_WEEK_DAY_KEYS[index] ?? null
+					}))
+				: normalizedDays;
 		return {
 			...incoming,
 			presentation: {
 				day_label_mode: mode
 			},
-			days: incoming.days.map((day, index) => ({
-				...day,
-				mapped_day_key:
-					day.mapped_day_key &&
-					IMPORT_WEEK_DAY_KEYS.includes(
-						day.mapped_day_key as (typeof IMPORT_WEEK_DAY_KEYS)[number]
-					)
-						? (day.mapped_day_key as (typeof IMPORT_WEEK_DAY_KEYS)[number])
-						: IMPORT_WEEK_DAY_KEYS[index] ?? null,
-				display_label:
-					typeof day.display_label === 'string' && day.display_label.trim()
-						? day.display_label.trim()
-						: `Día ${index + 1}`
-			}))
+			days: modeAdjustedDays
 		};
 	};
 
@@ -254,11 +262,19 @@
 
 	const setDraftMode = (mode: DayLabelMode) => {
 		if (!draft) return;
+		const nextDays =
+			mode === 'sequential'
+				? draft.days.map((day, index) => ({
+						...day,
+						mapped_day_key: IMPORT_WEEK_DAY_KEYS[index] ?? null
+					}))
+				: draft.days;
 		draft = {
 			...draft,
 			presentation: {
 				day_label_mode: mode
-			}
+			},
+			days: nextDays
 		};
 	};
 
@@ -280,30 +296,6 @@
 					: day
 			)
 		};
-	};
-
-	const autoMapSequentialDays = () => {
-		if (!draft) return;
-		draft = {
-			...draft,
-			days: draft.days.map((day, index) => ({
-				...day,
-				mapped_day_key: IMPORT_WEEK_DAY_KEYS[index] ?? null
-			}))
-		};
-	};
-
-	const hasSequentialMappingWarning = () => {
-		if (!draft || getDraftMode() !== 'sequential') return false;
-		for (let index = 0; index < draft.days.length; index += 1) {
-			const mapped = draft.days[index]?.mapped_day_key;
-			if (!mapped) continue;
-			const mappedIndex = IMPORT_WEEK_DAY_KEYS.indexOf(mapped as (typeof IMPORT_WEEK_DAY_KEYS)[number]);
-			if (mappedIndex !== index) {
-				return true;
-			}
-		}
-		return false;
 	};
 
 	const fetchJobStatus = async () => {
@@ -373,12 +365,9 @@
 			}
 
 				jobId = payload.job_id as string;
-				panelMessage = payload.reused
-					? 'Usamos una carga reciente del mismo archivo para ahorrar tiempo.'
-					: 'Carga iniciada. Procesando...';
-			pollDelay = 1000;
-			pollAttempts = 0;
-			pollStartedAt = Date.now();
+				pollDelay = 1000;
+				pollAttempts = 0;
+				pollStartedAt = Date.now();
 			await fetchJobStatus();
 		} catch (e) {
 			console.error(e);
@@ -751,7 +740,7 @@
 					</button>
 				</div>
 
-			<div class="grid gap-3 rounded-xl border border-slate-700/70 bg-[#0f1420] p-3 sm:grid-cols-[1fr_auto] sm:items-end">
+			<div class="grid gap-3 rounded-xl border border-slate-700/70 bg-[#0f1420] p-3">
 				<label class="text-xs text-slate-300">
 					Cómo querés ver los días
 					<select
@@ -760,26 +749,12 @@
 						onchange={(event) =>
 							setDraftMode((event.currentTarget as HTMLSelectElement).value as DayLabelMode)}
 					>
-						{#each DAY_LABEL_MODES as mode}
-							<option value={mode}>{DAY_LABEL_MODE_LABELS[mode]}</option>
-						{/each}
-					</select>
-				</label>
-				{#if getDraftMode() === 'sequential'}
-					<button
-						type="button"
-						class="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-500 bg-[#1a2132] px-4 py-2 text-xs font-semibold text-slate-100 transition hover:bg-[#252f47]"
-						onclick={autoMapSequentialDays}
-					>
-						Ordenar Día 1, Día 2, Día 3...
-					</button>
-				{/if}
+							{#each DAY_LABEL_MODES as mode}
+								<option value={mode}>{DAY_LABEL_MODE_LABELS[mode]}</option>
+							{/each}
+						</select>
+					</label>
 			</div>
-			{#if getDraftMode() === 'sequential' && hasSequentialMappingWarning()}
-				<p class="rounded-xl border border-amber-700/60 bg-amber-950/25 px-3 py-2 text-xs text-amber-100">
-					El orden actual de los días puede verse confuso para el alumno.
-				</p>
-			{/if}
 
 			<div class="space-y-3">
 				{#each draft.days as day (day.id)}
@@ -808,70 +783,82 @@
 
 						{#each day.blocks as block (block.id)}
 							{#each block.nodes as node (node.id)}
-								<div class="space-y-2 rounded-lg border border-slate-700/70 bg-[#111827] p-3">
-									<div class="grid gap-2 md:grid-cols-7">
+									<div class="space-y-2 rounded-lg border border-slate-700/70 bg-[#111827] p-3">
+										<div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_8rem_13rem] md:items-end">
+											<label class="block text-[11px] font-medium text-slate-300">
+												Ejercicio
+												<input
+													class="mt-1 w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
+													placeholder="Nombre del ejercicio"
+													value={node.raw_exercise_name}
+													oninput={(event) =>
+														updateNodeField(
+															day.id,
+															block.id,
+															node.id,
+															'raw_exercise_name',
+															(event.currentTarget as HTMLInputElement).value
+														)}
+												/>
+											</label>
+											<label class="block text-[11px] font-medium text-slate-300">
+												Series
+												<input
+													class="input-no-spin mt-1 w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
+													type="number"
+													min="1"
+													placeholder="Ej: 3"
+													value={node.sets ?? ''}
+													oninput={(event) =>
+														updateNodeField(
+															day.id,
+															block.id,
+															node.id,
+															'sets',
+															(event.currentTarget as HTMLInputElement).value
+														)}
+												/>
+											</label>
+											<div class="space-y-1">
+												<p class="text-[11px] font-medium text-slate-300">Repeticiones</p>
+												<div class="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+													<input
+														class="input-no-spin w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
+														type="number"
+														min="1"
+														placeholder="Mín."
+														value={node.reps_min ?? ''}
+														oninput={(event) =>
+															updateNodeField(
+																day.id,
+																block.id,
+																node.id,
+																'reps_min',
+																(event.currentTarget as HTMLInputElement).value
+															)}
+													/>
+													<span class="text-xs font-semibold text-slate-400">a</span>
+													<input
+														class="input-no-spin w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
+														type="number"
+														min="1"
+														placeholder="Máx."
+														value={node.reps_max ?? ''}
+														oninput={(event) =>
+															updateNodeField(
+																day.id,
+																block.id,
+																node.id,
+																'reps_max',
+																(event.currentTarget as HTMLInputElement).value
+															)}
+													/>
+												</div>
+											</div>
+										</div>
 										<input
-											class="md:col-span-4 rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
-											placeholder="Nombre del ejercicio"
-											value={node.raw_exercise_name}
-											oninput={(event) =>
-												updateNodeField(
-													day.id,
-													block.id,
-													node.id,
-													'raw_exercise_name',
-													(event.currentTarget as HTMLInputElement).value
-												)}
-										/>
-										<input
-											class="rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
-											type="number"
-											min="1"
-											placeholder="Series"
-											value={node.sets ?? ''}
-											oninput={(event) =>
-												updateNodeField(
-													day.id,
-													block.id,
-													node.id,
-													'sets',
-													(event.currentTarget as HTMLInputElement).value
-												)}
-										/>
-										<input
-											class="rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
-											type="number"
-											min="1"
-											placeholder="Reps mín."
-											value={node.reps_min ?? ''}
-											oninput={(event) =>
-												updateNodeField(
-													day.id,
-													block.id,
-													node.id,
-													'reps_min',
-													(event.currentTarget as HTMLInputElement).value
-												)}
-										/>
-										<input
-											class="rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
-											type="number"
-											min="1"
-											placeholder="Reps máx."
-											value={node.reps_max ?? ''}
-											oninput={(event) =>
-												updateNodeField(
-													day.id,
-													block.id,
-													node.id,
-													'reps_max',
-													(event.currentTarget as HTMLInputElement).value
-												)}
-										/>
-									</div>
-									<input
-										class="w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
-										placeholder="Nota opcional"
+											class="w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
+											placeholder="Nota opcional"
 										value={node.note ?? ''}
 										oninput={(event) =>
 												updateNodeField(
@@ -958,3 +945,15 @@
 		</div>
 	{/if}
 </section>
+
+<style>
+	.input-no-spin::-webkit-outer-spin-button,
+	.input-no-spin::-webkit-inner-spin-button {
+		-webkit-appearance: none;
+		margin: 0;
+	}
+	.input-no-spin[type='number'] {
+		-moz-appearance: textfield;
+		appearance: textfield;
+	}
+</style>

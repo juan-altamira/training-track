@@ -612,15 +612,15 @@
 					</label>
 				{/if}
 
-				<div class="flex flex-wrap gap-2">
-					{#each displayDays(selectedDay) as day}
-						<button
-							type="button"
-							class={`rounded-full px-4 py-2 text-base border ${
-								selectedDay === day.dayKey
-									? 'bg-[#16223d] text-white border-slate-600'
-									: 'bg-[#070c1d] text-slate-300 border-[#0f162b] hover:bg-[#0d152b]'
-							}`}
+					<div class="flex gap-2 overflow-x-auto pb-1">
+						{#each displayDays(selectedDay) as day}
+							<button
+								type="button"
+								class={`flex-none whitespace-nowrap rounded-full px-4 py-2 text-base border ${
+									selectedDay === day.dayKey
+										? 'bg-[#16223d] text-white border-slate-600'
+										: 'bg-[#070c1d] text-slate-300 border-[#0f162b] hover:bg-[#0d152b]'
+								}`}
 							onclick={() => (selectedDay = day.dayKey)}
 						>
 							{day.displayLabel}

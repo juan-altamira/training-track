@@ -29,6 +29,13 @@ const firstRelation = <T>(relation: T | T[] | null | undefined): T | null => {
 	return Array.isArray(relation) ? (relation[0] ?? null) : relation;
 };
 
+const isMissingUiMetaColumnError = (err: unknown) => {
+	const message =
+		typeof err === 'object' && err && 'message' in err ? String((err as { message?: string }).message ?? '') : '';
+	const code = typeof err === 'object' && err && 'code' in err ? String((err as { code?: string }).code ?? '') : '';
+	return code === '42703' || /ui_meta/i.test(message);
+};
+
 const loadDayFeedback = async (clientId: string, cycleKey: string) => {
 	const { data, error: feedbackError } = await supabaseAdmin
 		.from('client_day_feedback')
@@ -67,7 +74,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 		const siteUrl = envSite && !envSite.includes('localhost') ? envSite : origin;
 
 		if (fastPanelLoads) {
-			const { data: clientRow, error: clientError } = await supabase
+			let fastQuery = await supabase
 				.from('clients')
 				.select(
 					'id,name,objective,status,client_code,created_at,routines(plan,ui_meta,reset_progress_on_change,version),progress(progress,last_completed_at)'
@@ -75,6 +82,20 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 				.eq('id', clientId)
 				.eq('trainer_id', trainerId)
 				.single();
+
+			if (fastQuery.error && isMissingUiMetaColumnError(fastQuery.error)) {
+				fastQuery = await supabase
+					.from('clients')
+					.select(
+						'id,name,objective,status,client_code,created_at,routines(plan,reset_progress_on_change,version),progress(progress,last_completed_at)'
+					)
+					.eq('id', clientId)
+					.eq('trainer_id', trainerId)
+					.single();
+			}
+
+			const clientRow = fastQuery.data;
+			const clientError = fastQuery.error;
 
 			if (clientError || !clientRow) {
 				throw error(404, { message: 'Alumno no encontrado' });
@@ -118,11 +139,20 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 			throw error(404, { message: 'Alumno no encontrado' });
 		}
 
-		const { data: routineRow, error: routineError } = await supabase
+		let routineQuery = await supabase
 			.from('routines')
 			.select('plan,ui_meta,reset_progress_on_change,version')
 			.eq('client_id', clientId)
 			.maybeSingle();
+		if (routineQuery.error && isMissingUiMetaColumnError(routineQuery.error)) {
+			routineQuery = await supabase
+				.from('routines')
+				.select('plan,reset_progress_on_change,version')
+				.eq('client_id', clientId)
+				.maybeSingle();
+		}
+		const routineRow = routineQuery.data;
+		const routineError = routineQuery.error;
 		if (routineError) {
 			console.error(routineError);
 		}
@@ -238,9 +268,27 @@ export const actions: Actions = {
 			routinePayload.ui_meta = normalizedUiMeta;
 		}
 
-		const { data: savedRoutine, error: updateError } = await supabase.from('routines').upsert(routinePayload, { onConflict: 'client_id' })
+		let upsertQuery = await supabase
+			.from('routines')
+			.upsert(routinePayload, { onConflict: 'client_id' })
 			.select('version')
 			.single();
+
+		if (upsertQuery.error && hasUiMetaPatch && isMissingUiMetaColumnError(upsertQuery.error)) {
+			const fallbackPayload = {
+				client_id: params.id,
+				plan,
+				last_saved_at: nowUtc
+			};
+			upsertQuery = await supabase
+				.from('routines')
+				.upsert(fallbackPayload, { onConflict: 'client_id' })
+				.select('version')
+				.single();
+		}
+
+		const savedRoutine = upsertQuery.data;
+		const updateError = upsertQuery.error;
 
 		if (updateError) {
 			console.error(updateError);
@@ -391,11 +439,20 @@ export const actions: Actions = {
 			return fail(403, { message: 'No autorizado' });
 		}
 
-		const { data: sourceRoutine, error: sourceError } = await supabase
+		let sourceRoutineQuery = await supabase
 			.from('routines')
 			.select('plan,ui_meta')
 			.eq('client_id', sourceClientId)
 			.maybeSingle();
+		if (sourceRoutineQuery.error && isMissingUiMetaColumnError(sourceRoutineQuery.error)) {
+			sourceRoutineQuery = await supabase
+				.from('routines')
+				.select('plan')
+				.eq('client_id', sourceClientId)
+				.maybeSingle();
+		}
+		const sourceRoutine = sourceRoutineQuery.data;
+		const sourceError = sourceRoutineQuery.error;
 
 		if (sourceError || !sourceRoutine) {
 			return fail(400, { message: 'No se encontró la rutina origen' });

@@ -17,6 +17,13 @@ import { error, fail } from '@sveltejs/kit';
 import { nowIsoUtc } from '$lib/time';
 import type { Actions, PageServerLoad } from './$types';
 
+const isMissingUiMetaColumnError = (err: unknown) => {
+	const message =
+		typeof err === 'object' && err && 'message' in err ? String((err as { message?: string }).message ?? '') : '';
+	const code = typeof err === 'object' && err && 'code' in err ? String((err as { code?: string }).code ?? '') : '';
+	return code === '42703' || /ui_meta/i.test(message);
+};
+
 const fetchClient = async (clientCode: string) => {
 	const { data, error: clientError } = await supabaseAdmin
 		.from('clients')
@@ -83,11 +90,19 @@ export const load: PageServerLoad = async ({ params }) => {
 		};
 	}
 
-	const { data: routineRow } = await supabaseAdmin
+	let routineQuery = await supabaseAdmin
 		.from('routines')
 		.select('plan,ui_meta')
 		.eq('client_id', client.id)
 		.maybeSingle();
+	if (routineQuery.error && isMissingUiMetaColumnError(routineQuery.error)) {
+		routineQuery = await supabaseAdmin
+			.from('routines')
+			.select('plan')
+			.eq('client_id', client.id)
+			.maybeSingle();
+	}
+	const routineRow = routineQuery.data;
 
 	let plan = normalizePlan(routineRow?.plan as RoutinePlan | null);
 	if (!routineRow) {

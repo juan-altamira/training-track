@@ -171,6 +171,25 @@
 		return 'border-emerald-700/60 bg-emerald-950/20 text-emerald-100';
 	};
 
+	const toUserFacingJobError = (message: string | null | undefined) => {
+		const raw = (message ?? '').trim();
+		if (!raw) return null;
+		const normalized = raw.toLowerCase();
+		if (normalized.includes('setting up fake worker failed') || normalized.includes('could not find module')) {
+			return 'No pudimos leer este PDF en este intento. Probá de nuevo o usá la opción de texto pegado.';
+		}
+		if (normalized.includes('optimistic_lock_conflict')) {
+			return 'La rutina cambió mientras revisabas el borrador. Actualizá y volvé a confirmar.';
+		}
+		return raw;
+	};
+
+	const shouldShowRawJobError = (message: string | null | undefined) => {
+		const raw = (message ?? '').trim();
+		if (!raw) return false;
+		return toUserFacingJobError(raw) !== raw;
+	};
+
 	const resetTransientState = () => {
 		panelError = null;
 		panelMessage = null;
@@ -646,10 +665,10 @@
 					}}
 					disabled={processingBusy}
 				>
-					{processingBusy ? 'Actualizando...' : 'Actualizar estado'}
+					{processingBusy ? 'Actualizando...' : 'Ver progreso'}
 				</button>
 				<span class={`rounded-full border px-3 py-1.5 text-xs font-semibold ${parseJobStatusTone(job.status)}`}>
-					{formatJobStatus(job.status)} · {formatJobStage(job.progress_stage)} ({job.progress_percent}%)
+					{formatJobStage(job.progress_stage)} ({job.progress_percent}%)
 				</span>
 			{/if}
 		</div>
@@ -662,11 +681,19 @@
 		<p class="rounded-xl border border-emerald-700/60 bg-emerald-950/25 px-3 py-2.5 text-sm text-emerald-100">{panelMessage}</p>
 	{/if}
 	{#if job?.error_message}
-		<p class="rounded-xl border border-amber-700/60 bg-amber-950/25 px-3 py-2.5 text-sm text-amber-100">{job.error_message}</p>
+		<div class="rounded-xl border border-amber-700/60 bg-amber-950/25 px-3 py-2.5 text-sm text-amber-100">
+			<p>{toUserFacingJobError(job.error_message)}</p>
+			{#if shouldShowRawJobError(job.error_message)}
+				<details class="mt-2 text-[10px] text-amber-200/80">
+					<summary class="cursor-pointer">Ver detalle técnico</summary>
+					<p class="mt-1 break-all">{job.error_message}</p>
+				</details>
+			{/if}
+		</div>
 	{/if}
 
 	{#if stats}
-		<div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+		<div class="grid gap-3 sm:grid-cols-3">
 			<article class="rounded-xl border border-slate-700/70 bg-[#101523] p-3">
 				<p class="text-[11px] uppercase tracking-wide text-slate-400">Días detectados</p>
 				<p class="mt-1 text-xl font-semibold text-slate-100">{stats.days_detected}</p>
@@ -676,34 +703,41 @@
 				<p class="mt-1 text-xl font-semibold text-slate-100">{stats.exercises_parsed}</p>
 			</article>
 			<article class="rounded-xl border border-slate-700/70 bg-[#101523] p-3">
-				<p class="text-[11px] uppercase tracking-wide text-slate-400">Campos completos</p>
-				<p class="mt-1 text-xl font-semibold text-slate-100">{Math.round(stats.required_fields_ratio * 100)}%</p>
-			</article>
-			<article class="rounded-xl border border-slate-700/70 bg-[#101523] p-3">
-				<p class="text-[11px] uppercase tracking-wide text-slate-400">Problemas bloqueantes</p>
-				<p class="mt-1 text-xl font-semibold text-slate-100">{stats.blocking_issues}</p>
+				<p class="text-[11px] uppercase tracking-wide text-slate-400">Pendientes de revisión</p>
+				<p class="mt-1 text-xl font-semibold text-slate-100">{blockingIssues().length}</p>
 			</article>
 		</div>
 	{/if}
 
 	{#if issues.length > 0}
-		<div class="space-y-3 rounded-xl border border-slate-700/70 bg-[#101523] p-4">
-			<h4 class="text-sm font-semibold text-slate-100">
-				Revisión del borrador · {issues.length} observaciones ({blockingIssues().length} bloqueantes)
-			</h4>
+			<div class="space-y-3 rounded-xl border border-slate-700/70 bg-[#101523] p-4">
+				<h4 class="text-sm font-semibold text-slate-100">
+					Revisión del borrador · {issues.length} observaciones
+				</h4>
 
-			{#if blockingIssues().length > 0}
-				<div class="max-h-56 space-y-2 overflow-auto pr-1">
-					{#each blockingIssues() as issue, index (`blocking-${issue.path}-${index}`)}
-						<article class={`rounded-lg border px-3 py-2 text-xs ${parseSeverityTone(issue.severity)}`}>
-							<p class="font-semibold">{formatIssueSeverity(issue.severity)} · {issue.code}</p>
-							<p class="mt-1">{issue.message}</p>
-							{#if issue.path}
-								<p class="mt-1 text-[11px] opacity-80">{issue.path}</p>
-							{/if}
-						</article>
-					{/each}
-				</div>
+				{#if blockingIssues().length > 0}
+					<div class="max-h-56 space-y-2 overflow-auto pr-1">
+						{#each blockingIssues() as issue, index (`blocking-${issue.path}-${index}`)}
+							<article class={`rounded-lg border px-3 py-2 text-xs ${parseSeverityTone(issue.severity)}`}>
+								<p class="font-semibold">{formatIssueSeverity(issue.severity)}</p>
+								<p class="mt-1">{issue.message}</p>
+								{#if issue.suggested_fix}
+									<p class="mt-1 text-[11px] opacity-90">Sugerencia: {issue.suggested_fix}</p>
+								{/if}
+								{#if issue.code || issue.path}
+									<details class="mt-1 text-[10px] opacity-75">
+										<summary class="cursor-pointer">Detalle técnico</summary>
+										{#if issue.code}
+											<p class="mt-1">Código: {issue.code}</p>
+										{/if}
+										{#if issue.path}
+											<p class="mt-1 break-all">Ruta: {issue.path}</p>
+										{/if}
+									</details>
+								{/if}
+							</article>
+						{/each}
+					</div>
 			{/if}
 
 			{#if nonBlockingIssues().length > 0}
@@ -711,18 +745,29 @@
 					<summary class="cursor-pointer text-xs font-semibold text-slate-200">
 						Ver advertencias y sugerencias ({nonBlockingIssues().length})
 					</summary>
-					<div class="mt-3 max-h-48 space-y-2 overflow-auto pr-1">
-						{#each nonBlockingIssues() as issue, index (`non-blocking-${issue.path}-${index}`)}
-							<article class={`rounded-lg border px-3 py-2 text-xs ${parseSeverityTone(issue.severity)}`}>
-								<p class="font-semibold">{formatIssueSeverity(issue.severity)} · {issue.code}</p>
-								<p class="mt-1">{issue.message}</p>
-								{#if issue.path}
-									<p class="mt-1 text-[11px] opacity-80">{issue.path}</p>
-								{/if}
-							</article>
-						{/each}
-					</div>
-				</details>
+						<div class="mt-3 max-h-48 space-y-2 overflow-auto pr-1">
+							{#each nonBlockingIssues() as issue, index (`non-blocking-${issue.path}-${index}`)}
+								<article class={`rounded-lg border px-3 py-2 text-xs ${parseSeverityTone(issue.severity)}`}>
+									<p class="font-semibold">{formatIssueSeverity(issue.severity)}</p>
+									<p class="mt-1">{issue.message}</p>
+									{#if issue.suggested_fix}
+										<p class="mt-1 text-[11px] opacity-90">Sugerencia: {issue.suggested_fix}</p>
+									{/if}
+									{#if issue.code || issue.path}
+										<details class="mt-1 text-[10px] opacity-75">
+											<summary class="cursor-pointer">Detalle técnico</summary>
+											{#if issue.code}
+												<p class="mt-1">Código: {issue.code}</p>
+											{/if}
+											{#if issue.path}
+												<p class="mt-1 break-all">Ruta: {issue.path}</p>
+											{/if}
+										</details>
+									{/if}
+								</article>
+							{/each}
+						</div>
+					</details>
 			{/if}
 		</div>
 	{/if}
@@ -734,15 +779,15 @@
 					<h4 class="text-base font-semibold text-slate-100">Paso 1 · Revisar mapeo y ejercicios</h4>
 					<p class="text-xs text-slate-400">Editá lo necesario antes de confirmar la importación.</p>
 				</div>
-				<button
-					type="button"
-					class="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-500 bg-[#1a2132] px-4 py-2 text-xs font-semibold text-slate-100 transition hover:bg-[#252f47] disabled:cursor-not-allowed disabled:opacity-60"
-					onclick={saveDraft}
-					disabled={saveDraftBusy}
-				>
-					{saveDraftBusy ? 'Guardando cambios...' : 'Guardar cambios del borrador'}
-				</button>
-			</div>
+					<button
+						type="button"
+						class="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-500 bg-[#1a2132] px-4 py-2 text-xs font-semibold text-slate-100 transition hover:bg-[#252f47] disabled:cursor-not-allowed disabled:opacity-60"
+						onclick={saveDraft}
+						disabled={saveDraftBusy}
+					>
+						{saveDraftBusy ? 'Guardando cambios...' : 'Guardar borrador'}
+					</button>
+				</div>
 
 			<div class="grid gap-3 rounded-xl border border-slate-700/70 bg-[#0f1420] p-3 sm:grid-cols-[1fr_auto] sm:items-end">
 				<label class="text-xs text-slate-300">
@@ -905,11 +950,11 @@
 	{/if}
 
 	{#if stats}
-		<details class="rounded-xl border border-slate-700/70 bg-[#101523] p-4">
-			<summary class="cursor-pointer text-xs font-semibold text-slate-200">
-				Ver detalle técnico de importación
+		<details class="rounded-xl border border-slate-800/80 bg-[#101523] p-3">
+			<summary class="cursor-pointer text-[11px] font-medium text-slate-400 hover:text-slate-300">
+				Ver datos técnicos (opcional)
 			</summary>
-			<div class="mt-3 grid gap-2 text-xs text-slate-300 sm:grid-cols-2 lg:grid-cols-3">
+			<div class="mt-3 grid gap-2 text-[11px] text-slate-400 sm:grid-cols-2 lg:grid-cols-3">
 				<p>Ratio de parseo: <span class="font-semibold text-slate-100">{Math.round(stats.parseable_ratio * 100)}%</span></p>
 				<p>Confianza baja: <span class="font-semibold text-slate-100">{stats.low_confidence_fields}</span></p>
 				<p>Campos obligatorios: <span class="font-semibold text-slate-100">{Math.round(stats.required_fields_ratio * 100)}%</span></p>
@@ -966,18 +1011,23 @@
 				</div>
 			{/if}
 
-			<label class="block text-xs text-slate-300">
-				Versión esperada de rutina
-				<input
-					type="number"
-					min="1"
-					class="mt-1 w-full rounded-lg border border-slate-600 bg-[#151b2a] px-3 py-2 text-sm text-slate-100"
-					bind:value={routineVersionExpected}
-				/>
-				<span class="mt-1 block text-[11px] text-slate-500">
-					Este control evita pisar cambios hechos en paralelo.
-				</span>
-			</label>
+			<details class="rounded-lg border border-slate-800/80 bg-[#0f1420] p-3">
+				<summary class="cursor-pointer text-[11px] font-medium text-slate-400 hover:text-slate-300">
+					Opciones avanzadas
+				</summary>
+				<label class="mt-3 block text-xs text-slate-300">
+					Versión esperada de rutina
+					<input
+						type="number"
+						min="1"
+						class="mt-1 w-full rounded-lg border border-slate-600 bg-[#151b2a] px-3 py-2 text-sm text-slate-100"
+						bind:value={routineVersionExpected}
+					/>
+					<span class="mt-1 block text-[11px] text-slate-500">
+						Se usa para evitar pisar cambios hechos en paralelo.
+					</span>
+				</label>
+			</details>
 
 			<div class="flex flex-wrap gap-2">
 				<button
@@ -986,7 +1036,7 @@
 					onclick={commitImport}
 					disabled={commitBusy}
 				>
-					{commitBusy ? 'Confirmando importación...' : 'Confirmar importación'}
+					{commitBusy ? 'Aplicando rutina...' : 'Aplicar rutina'}
 				</button>
 				<button
 					type="button"
@@ -994,7 +1044,7 @@
 					onclick={rollbackImport}
 					disabled={rollbackBusy || !lastBackupId}
 				>
-					{rollbackBusy ? 'Revirtiendo cambios...' : 'Revertir último import'}
+					{rollbackBusy ? 'Deshaciendo cambios...' : 'Deshacer último cambio'}
 				</button>
 			</div>
 		</div>

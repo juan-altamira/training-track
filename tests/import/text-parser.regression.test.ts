@@ -151,5 +151,6 @@ Remo en Maquina (4x12)`;
 	assert.equal(draft.days[0]?.mapped_day_key, 'monday');
 	assert.equal(draft.days[1]?.mapped_day_key, 'tuesday');
 	assert.equal(draft.days[2]?.mapped_day_key, 'wednesday');
+	assert.equal(draft.presentation.day_label_mode, 'sequential');
 	assert.equal(bundle.issues.some((issue) => issue.code === 'day_mapping_required'), false);
 });

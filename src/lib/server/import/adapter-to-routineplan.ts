@@ -42,7 +42,7 @@ export const deriveRoutinePlanFromDraft = (
 				code: 'day_mapping_required',
 				scope: 'day',
 				path: `days.${dayIndex}.mapped_day_key`,
-				message: `El día "${day.source_label}" no está mapeado a Monday..Sunday.`,
+				message: `El día "${day.source_label}" no está mapeado a un día destino.`,
 				provenance: null,
 				suggested_fix: 'Asigná el día en el wizard antes de confirmar.'
 			});

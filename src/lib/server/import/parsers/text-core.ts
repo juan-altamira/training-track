@@ -1031,6 +1031,8 @@ export const parseLinesToDraft = (lines: ParsedLine[], context: ParserContext): 
 	let linesWithPrescriptionDetected = 0;
 	let multiExerciseSplitsApplied = 0;
 	let unresolvedMultiExerciseLines = 0;
+	let indexedDayHeadingsDetected = 0;
+	let weekDayHeadingsDetected = 0;
 
 	for (const sourceLine of lines) {
 		const normalized = removeLineDecorators(normalizeLine(sourceLine.text));
@@ -1040,10 +1042,14 @@ export const parseLinesToDraft = (lines: ParsedLine[], context: ParserContext): 
 		if (heading) {
 			const headingLabel = normalized;
 			const headingToken = heading[1] ?? '';
-			const mapped =
-				mapSpanishWeekdayToKey(headingToken) ??
-				mapIndexedDayLabelToKey(headingToken) ??
-				(null as ImportDraftDay['mapped_day_key']);
+			const mappedWeekday = mapSpanishWeekdayToKey(headingToken);
+			const mappedIndexed = mappedWeekday ? null : mapIndexedDayLabelToKey(headingToken);
+			const mapped = mappedWeekday ?? mappedIndexed ?? (null as ImportDraftDay['mapped_day_key']);
+			if (mappedWeekday) {
+				weekDayHeadingsDetected += 1;
+			} else if (mappedIndexed) {
+				indexedDayHeadingsDetected += 1;
+			}
 			const nextDay = createDay(headingLabel, mapped);
 			days.push(nextDay);
 			currentDay = nextDay;
@@ -1116,6 +1122,8 @@ export const parseLinesToDraft = (lines: ParsedLine[], context: ParserContext): 
 	);
 	const parseableRatio = candidateLines > 0 ? parsedLines / candidateLines : 0;
 	const requiredFieldsRatio = parsedLines > 0 ? requiredFieldsCompleted / parsedLines : 0;
+	const inferredPresentationMode =
+		indexedDayHeadingsDetected > 0 && weekDayHeadingsDetected === 0 ? 'sequential' : 'weekday';
 
 	return {
 		version: IMPORT_DRAFT_VERSION,
@@ -1138,7 +1146,7 @@ export const parseLinesToDraft = (lines: ParsedLine[], context: ParserContext): 
 			unresolved_multi_exercise_lines: unresolvedMultiExerciseLines
 		},
 		presentation: {
-			day_label_mode: 'weekday'
+			day_label_mode: inferredPresentationMode
 		},
 		days: effectiveDays
 	};

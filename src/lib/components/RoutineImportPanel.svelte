@@ -119,6 +119,19 @@
 	const shouldKeepPolling = (status: string) => ['queued', 'processing', 'committing'].includes(status);
 
 	const formatWeekDay = (key: string) => WEEK_DAY_LABELS[key] ?? key;
+	const getWeekDaySlotIndex = (key: string) =>
+		IMPORT_WEEK_DAY_KEYS.indexOf(key as (typeof IMPORT_WEEK_DAY_KEYS)[number]);
+	const formatDestinationDay = (key: string) => {
+		const mode = getDraftMode();
+		const index = getWeekDaySlotIndex(key);
+		if (mode === 'weekday') {
+			return formatWeekDay(key);
+		}
+		if (index >= 0) {
+			return `Día ${index + 1}`;
+		}
+		return key;
+	};
 	const formatJobStatus = (status: string) => JOB_STATUS_LABELS[status] ?? status;
 	const formatJobStage = (stage: string) => JOB_STAGE_LABELS[stage] ?? stage;
 	const formatIssueSeverity = (severity: string) => {
@@ -744,7 +757,7 @@
 								<p class="text-[11px] uppercase tracking-wide text-slate-500">Bloques: {day.blocks.length}</p>
 							</div>
 							<label class="text-xs text-slate-300">
-								Día destino
+								{getDraftMode() === 'weekday' ? 'Día destino (semanal)' : 'Día destino'}
 								<select
 									class="mt-1 block min-w-40 rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs font-semibold text-slate-100"
 									value={day.mapped_day_key ?? ''}
@@ -753,7 +766,7 @@
 								>
 									<option value="">Sin asignar</option>
 									{#each IMPORT_WEEK_DAY_KEYS as weekDay}
-										<option value={weekDay}>{formatWeekDay(weekDay)}</option>
+										<option value={weekDay}>{formatDestinationDay(weekDay)}</option>
 									{/each}
 								</select>
 							</label>
@@ -920,7 +933,7 @@
 									overwriteDays = { ...overwriteDays, [day]: !overwriteDays[day] };
 								}}
 							>
-								{formatWeekDay(day)}
+								{formatDestinationDay(day)}
 							</button>
 						{/each}
 					</div>

@@ -609,7 +609,7 @@
 	{/if}
 
 			<section class="mt-16 md:mt-[5.5rem] grid gap-6 lg:grid-cols-[2fr,1fr]">
-				<div class="order-3 lg:order-1 space-y-6 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 md:p-6 shadow-lg shadow-black/30">
+				<div class="order-3 min-w-0 lg:order-1 space-y-6 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 md:p-6 shadow-lg shadow-black/30">
 				<div class="flex justify-center pt-5 pb-6 md:pt-6 md:pb-7">
 					<h2 class="text-center text-4xl font-serif font-semibold uppercase tracking-[0.18em] text-slate-50">RUTINA</h2>
 				</div>
@@ -916,7 +916,7 @@
 		</div>
 
 		<div class="contents lg:order-2 lg:flex lg:flex-col lg:gap-3">
-		<div class="order-1 lg:order-2 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 md:p-6 shadow-lg shadow-black/30">
+		<div class="order-1 min-w-0 lg:order-2 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 md:p-6 shadow-lg shadow-black/30">
 			<div class="flex items-center justify-between">
 				<div class="flex flex-col gap-1">
 					<h3 class="text-xl font-semibold uppercase tracking-wide text-slate-50">
@@ -1053,7 +1053,7 @@
 			{/if}
 		</div>
 
-		<div class="order-2 lg:order-3 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 shadow-lg shadow-black/30 text-sm text-slate-300">
+		<div class="order-2 min-w-0 lg:order-3 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 shadow-lg shadow-black/30 text-sm text-slate-300">
 			<p class="font-semibold text-slate-100">Última actualización</p>
 			<p class="mt-1 text-slate-400">
 				{#if data.last_completed_at}
@@ -1064,7 +1064,7 @@
 			</p>
 		</div>
 
-			<div class="order-4 lg:order-1 self-start rounded-2xl border border-slate-800 bg-gradient-to-br from-[#0f172a] to-[#0b1224] p-4 md:p-6 shadow-lg shadow-black/30 space-y-2">
+			<div class="order-4 min-w-0 lg:order-1 self-start rounded-2xl border border-slate-800 bg-gradient-to-br from-[#0f172a] to-[#0b1224] p-4 md:p-6 shadow-lg shadow-black/30 space-y-2">
 				<div class="flex items-center justify-between">
 					<div>
 						<p class="text-sm font-semibold uppercase tracking-[0.12em] text-slate-400">Link de la rutina</p>

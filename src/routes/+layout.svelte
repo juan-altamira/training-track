@@ -53,10 +53,10 @@
 		{#if !hideHeader}
 			<header class="sticky top-0 z-40 border-b border-slate-800 bg-[#0f111b]/90 backdrop-blur">
 				{#if isClientDetailView}
-						<div class="mx-auto grid max-w-7xl grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3">
+						<div class="mx-auto grid max-w-7xl grid-cols-2 items-center gap-2 px-3 py-3 md:grid-cols-[auto_1fr_auto] md:gap-3 md:px-4">
 							<a
 								href="/clientes"
-								class={`back-to-panel inline-flex w-[12rem] items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-700 bg-[#151827] px-4 py-3 text-base font-semibold text-slate-100 transition hover:bg-[#1b1f30] ${
+								class={`back-to-panel inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-slate-700 bg-[#151827] px-3 py-2.5 text-sm font-semibold text-slate-100 transition hover:bg-[#1b1f30] md:w-[12rem] md:px-4 md:py-3 md:text-base ${
 									navigatingBackToPanel ? 'loading pointer-events-none' : ''
 								}`}
 							aria-busy={navigatingBackToPanel}
@@ -69,31 +69,31 @@
 								<span>{navigatingBackToPanel ? 'Volviendo al panel...' : 'Volver al panel'}</span>
 							</span>
 						</a>
-						<div class="min-w-0 px-2">
-							{#if clientDetailName}
-								<p class="hidden truncate text-center text-3xl font-extrabold tracking-wide text-slate-50 md:block">
-									{clientDetailName}
-								</p>
-							{/if}
-						</div>
-							<div class="justify-self-end">
+							<div class="hidden min-w-0 px-2 md:block">
+								{#if clientDetailName}
+									<p class="truncate text-center text-3xl font-extrabold tracking-wide text-slate-50">
+										{clientDetailName}
+									</p>
+								{/if}
+							</div>
+							<div class="w-full md:justify-self-end">
 								{#if !hideAuthActions}
 									{#if session}
-										<form method="POST" action="/logout" class="inline" bind:this={logoutFormEl}>
+										<form method="POST" action="/logout" class="block w-full md:inline" bind:this={logoutFormEl}>
 											<button
 												type="button"
-												class="inline-flex w-[12rem] items-center justify-center whitespace-nowrap rounded-xl border border-slate-700 bg-[#151827] px-4 py-3 text-base font-semibold text-slate-100 transition hover:bg-[#1b1f30]"
+												class="inline-flex w-full items-center justify-center rounded-xl border border-slate-700 bg-[#151827] px-3 py-2.5 text-sm font-semibold text-slate-100 transition hover:bg-[#1b1f30] md:w-[12rem] md:px-4 md:py-3 md:text-base"
 												onclick={openLogoutConfirm}
 											>
 												Cerrar sesión
 											</button>
 									</form>
-								{:else}
-									<a
-										class="rounded-lg border border-slate-700 bg-[#151827] px-3 py-1.5 text-sm text-slate-100 transition hover:bg-[#1b1f30]"
-										href="/login"
-									>
-										Entrar
+									{:else}
+										<a
+											class="inline-flex w-full items-center justify-center rounded-lg border border-slate-700 bg-[#151827] px-3 py-2.5 text-sm text-slate-100 transition hover:bg-[#1b1f30] md:w-auto md:py-1.5"
+											href="/login"
+										>
+											Entrar
 									</a>
 								{/if}
 							{/if}

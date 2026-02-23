@@ -11,17 +11,17 @@ export const POST: RequestHandler = async (event) => {
 	const parsed = importRollbackPayloadSchema.safeParse(payload ?? {});
 	if (!parsed.success) {
 		return json(
-			{ message: parsed.error.issues[0]?.message ?? 'Payload inválido para rollback.' },
+			{ message: 'No pudimos leer los datos para deshacer los cambios.' },
 			{ status: 400 }
 		);
 	}
 
 	const job = await getImportJobForTrainer(event.params.jobId, session.user.id);
 	if (!job) {
-		return json({ message: 'Job no encontrado.' }, { status: 404 });
+		return json({ message: 'No encontramos esta carga.' }, { status: 404 });
 	}
 	if (!job.client_id) {
-		return json({ message: 'El job no está asociado a un cliente.' }, { status: 422 });
+		return json({ message: 'Esta carga no está vinculada a un alumno.' }, { status: 422 });
 	}
 
 	const result = await rollbackImportJob({
@@ -40,4 +40,3 @@ export const POST: RequestHandler = async (event) => {
 		...result.data
 	});
 };
-

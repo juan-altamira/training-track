@@ -132,7 +132,7 @@ export const createImportJobPayloadSchema = z
 		if (value.scope === 'client' && !value.client_id) {
 			ctx.addIssue({
 				code: z.ZodIssueCode.custom,
-				message: 'client_id is required for client scope',
+				message: 'Falta seleccionar el alumno.',
 				path: ['client_id']
 			});
 		}

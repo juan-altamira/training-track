@@ -522,10 +522,10 @@
 
 <section class="text-slate-100">
 		<div>
-			<div class="flex justify-center md:hidden">
+			<div class="mt-6 mb-12 flex justify-center md:hidden">
 				<h1 class="text-center text-3xl font-extrabold tracking-wide text-slate-50">{data.client.name}</h1>
 			</div>
-				<div class="mt-12 flex w-full flex-col gap-4 md:mt-14">
+				<div class="mt-0 flex w-full flex-col gap-4 md:mt-14">
 				<div class="flex flex-col md:flex-row items-stretch md:items-center gap-3 justify-between">
 				<button
 					class="w-full md:w-1/2 rounded-2xl border border-emerald-700/40 bg-gradient-to-r from-emerald-700 to-teal-600 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-emerald-900/30 transition hover:-translate-y-0.5 hover:shadow-emerald-900/50 hover:brightness-110"
@@ -630,7 +630,7 @@
 			{/if}
 
 					<div class="space-y-5 rounded-xl border border-slate-800 bg-[#0b0d14] p-4">
-						<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+						<div class="flex items-center justify-between gap-3">
 							<div class="relative" bind:this={dayModeMenuEl}>
 								<button
 									type="button"
@@ -652,7 +652,7 @@
 								{#if showDayModeMenu}
 									<div
 										role="menu"
-										class="absolute left-0 z-30 mt-2 w-[22rem] overflow-hidden rounded-xl border border-slate-700 bg-[#111827] shadow-xl shadow-black/45"
+										class="absolute left-0 z-30 mt-2 w-[22rem] max-w-[calc(100vw-4rem)] overflow-hidden rounded-xl border border-slate-700 bg-[#111827] shadow-xl shadow-black/45"
 									>
 										{#each DAY_MODE_OPTIONS as option}
 											<button
@@ -675,7 +675,7 @@
 							</div>
 							{#if hasAnyExercise()}
 								<button
-									class="save-cta w-full rounded-lg bg-[#1c2338] px-4 py-2.5 text-base font-medium text-slate-100 hover:bg-[#222b43] disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+									class="save-cta shrink-0 rounded-lg bg-[#1c2338] px-4 py-2.5 text-sm font-semibold text-slate-100 hover:bg-[#222b43] disabled:cursor-not-allowed disabled:opacity-70 sm:text-base sm:font-medium"
 									onclick={saveRoutine}
 									disabled={saving}
 								>
@@ -698,21 +698,23 @@
 					</label>
 				{/if}
 
-					<div class="flex gap-2 overflow-x-auto pb-1 pt-1">
-						{#each displayDays(selectedDay) as day}
-							<button
-								type="button"
-								class={`flex-none whitespace-nowrap rounded-full px-4 py-2 text-base border ${
-									selectedDay === day.dayKey
-										? 'bg-[#16223d] text-white border-slate-600'
-										: 'bg-[#070c1d] text-slate-300 border-[#0f162b] hover:bg-[#0d152b]'
-								}`}
-							onclick={() => (selectedDay = day.dayKey)}
-						>
-							{day.displayLabel}
-						</button>
-					{/each}
-				</div>
+					<div class="pt-8 md:pt-0">
+						<div class="flex flex-wrap gap-2">
+							{#each displayDays(selectedDay) as day}
+								<button
+									type="button"
+									class={`whitespace-nowrap rounded-full px-4 py-2 text-base border ${
+										selectedDay === day.dayKey
+											? 'bg-[#16223d] text-white border-slate-600'
+											: 'bg-[#070c1d] text-slate-300 border-[#0f162b] hover:bg-[#0d152b]'
+									}`}
+								onclick={() => (selectedDay = day.dayKey)}
+							>
+								{day.displayLabel}
+							</button>
+						{/each}
+						</div>
+					</div>
 
 				{#if uiMeta.day_label_mode === 'custom'}
 					<label class="block text-sm font-medium text-slate-300">

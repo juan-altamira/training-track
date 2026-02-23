@@ -28,9 +28,9 @@ export const deriveRoutinePlanFromDraft = (
 			code: 'too_many_days_for_v1',
 			scope: 'job',
 			path: 'days',
-			message: `Se detectaron ${draft.days.length} días y V1 soporta hasta 7.`,
+			message: `Se detectaron ${draft.days.length} días y una rutina admite hasta 7 días.`,
 			provenance: null,
-			suggested_fix: 'Mapeá manualmente días o dividí la rutina en dos importaciones.'
+			suggested_fix: 'Asigná un día por bloque o dividí el plan en dos rutinas.'
 		});
 	}
 
@@ -44,7 +44,7 @@ export const deriveRoutinePlanFromDraft = (
 				path: `days.${dayIndex}.mapped_day_key`,
 				message: `El día "${day.source_label}" no está mapeado a un día destino.`,
 				provenance: null,
-				suggested_fix: 'Asigná el día en el wizard antes de confirmar.'
+				suggested_fix: 'Elegí el día de destino antes de confirmar.'
 			});
 			return;
 		}
@@ -55,7 +55,7 @@ export const deriveRoutinePlanFromDraft = (
 				code: 'day_mapping_collision',
 				scope: 'day',
 				path: `days.${dayIndex}.mapped_day_key`,
-				message: `El día destino "${mappedDay}" está repetido en el mapeo.`,
+				message: 'Hay dos días apuntando al mismo destino.',
 				provenance: null,
 				suggested_fix: 'Usá un destino distinto por día detectado.'
 			});

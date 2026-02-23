@@ -33,24 +33,14 @@
 		saturday: 'Sábado',
 		sunday: 'Domingo'
 	};
-	const JOB_STATUS_LABELS: Record<string, string> = {
-		queued: 'En cola',
-		processing: 'Procesando',
-		ready: 'Listo para revisar',
-		failed: 'Falló',
-		committing: 'Aplicando cambios',
-		committed: 'Aplicado',
-		rolled_back: 'Revertido',
-		expired: 'Expirado'
-	};
 	const JOB_STAGE_LABELS: Record<string, string> = {
 		queued: 'Esperando',
 		processing: 'Procesando',
-		ready: 'Borrador listo',
-		committing: 'Confirmando importación',
-		committed: 'Importación confirmada',
-		rolled_back: 'Cambios revertidos',
-		failed: 'Con errores',
+		ready: 'Listo para revisar',
+		committing: 'Aplicando cambios',
+		committed: 'Cambios aplicados',
+		rolled_back: 'Cambios deshechos',
+		failed: 'No se pudo completar',
 		expired: 'Expirado'
 	};
 	const COMMIT_POLICY_LABELS: Record<ImportCommitPolicy, string> = {
@@ -139,7 +129,6 @@
 		}
 		return key;
 	};
-	const formatJobStatus = (status: string) => JOB_STATUS_LABELS[status] ?? status;
 	const formatJobStage = (stage: string) => JOB_STAGE_LABELS[stage] ?? stage;
 	const formatIssueSeverity = (severity: string) => {
 		if (severity === 'hard_error') return 'Error crítico';
@@ -181,13 +170,21 @@
 		if (normalized.includes('optimistic_lock_conflict')) {
 			return 'La rutina cambió mientras revisabas el borrador. Actualizá y volvé a confirmar.';
 		}
-		return raw;
-	};
-
-	const shouldShowRawJobError = (message: string | null | undefined) => {
-		const raw = (message ?? '').trim();
-		if (!raw) return false;
-		return toUserFacingJobError(raw) !== raw;
+		if (
+			normalized.includes('payload') ||
+			normalized.includes('json') ||
+			normalized.includes('schema') ||
+			normalized.includes('module') ||
+			normalized.includes('function') ||
+			normalized.includes('rpc') ||
+			normalized.includes('worker') ||
+			normalized.includes('undefined') ||
+			normalized.includes('not found') ||
+			normalized.includes('internal')
+		) {
+			return 'No pudimos completar la carga con ese archivo. Probá de nuevo o usá la opción de texto pegado.';
+		}
+		return 'No pudimos completar la importación en este intento. Probá de nuevo en unos segundos.';
 	};
 
 	const resetTransientState = () => {
@@ -214,6 +211,13 @@
 			},
 			days: incoming.days.map((day, index) => ({
 				...day,
+				mapped_day_key:
+					day.mapped_day_key &&
+					IMPORT_WEEK_DAY_KEYS.includes(
+						day.mapped_day_key as (typeof IMPORT_WEEK_DAY_KEYS)[number]
+					)
+						? (day.mapped_day_key as (typeof IMPORT_WEEK_DAY_KEYS)[number])
+						: IMPORT_WEEK_DAY_KEYS[index] ?? null,
 				display_label:
 					typeof day.display_label === 'string' && day.display_label.trim()
 						? day.display_label.trim()
@@ -309,7 +313,7 @@
 			const res = await fetch(`/api/import/jobs/${jobId}`);
 			const payload = await res.json().catch(() => ({}));
 			if (!res.ok) {
-				panelError = payload?.message ?? 'No pudimos consultar el estado del import.';
+					panelError = payload?.message ?? 'No pudimos actualizar el estado de la carga.';
 				stopPolling();
 				return;
 			}
@@ -320,7 +324,7 @@
 				if (elapsedMs >= MAX_POLL_TIME_MS) {
 					stopPolling();
 					panelMessage =
-						'El import sigue en proceso. Podés continuar trabajando y volver más tarde para revisar el resultado.';
+							'La carga sigue en proceso. Podés seguir trabajando y volver más tarde.';
 					return;
 				}
 				pollAttempts += 1;
@@ -331,7 +335,7 @@
 			}
 		} catch (e) {
 			console.error(e);
-			panelError = 'No pudimos consultar el estado del import.';
+			panelError = 'No pudimos actualizar el estado de la carga.';
 			stopPolling();
 		} finally {
 			processingBusy = false;
@@ -364,39 +368,24 @@
 			const res = await fetch('/api/import/jobs', { method: 'POST', body: formData });
 			const payload = await res.json().catch(() => ({}));
 			if (!res.ok) {
-				panelError = payload?.message ?? 'No pudimos crear el job de importación.';
+					panelError = payload?.message ?? 'No pudimos iniciar la carga.';
 				return;
 			}
 
 				jobId = payload.job_id as string;
 				panelMessage = payload.reused
-					? 'Reutilizamos un job existente con el mismo archivo.'
-					: 'Importación iniciada. Procesando...';
+					? 'Usamos una carga reciente del mismo archivo para ahorrar tiempo.'
+					: 'Carga iniciada. Procesando...';
 			pollDelay = 1000;
 			pollAttempts = 0;
 			pollStartedAt = Date.now();
 			await fetchJobStatus();
 		} catch (e) {
 			console.error(e);
-			panelError = 'No pudimos crear el job de importación.';
+			panelError = 'No pudimos iniciar la carga.';
 		} finally {
 			createBusy = false;
 		}
-	};
-
-	const updateDayMapping = (dayId: string, mappedDayKey: string) => {
-		if (!draft) return;
-		draft = {
-			...draft,
-			days: draft.days.map((day) =>
-				day.id === dayId
-					? {
-							...day,
-							mapped_day_key: mappedDayKey || null
-						}
-					: day
-			)
-		};
 	};
 
 	const updateNodeField = (
@@ -440,7 +429,7 @@
 		resetTransientState();
 		const valid = importDraftSchema.safeParse(draft);
 		if (!valid.success) {
-			panelError = valid.error.issues[0]?.message ?? 'Borrador inválido.';
+			panelError = 'No pudimos guardar los cambios.';
 			return;
 		}
 
@@ -453,16 +442,16 @@
 			});
 			const payload = await res.json().catch(() => ({}));
 			if (!res.ok) {
-				panelError = payload?.message ?? 'No pudimos guardar correcciones del draft.';
+					panelError = payload?.message ?? 'No pudimos guardar los cambios.';
 				return;
 			}
 				draft = payload.draft;
 				issues = payload.issues ?? [];
 				stats = payload.stats ?? null;
-				panelMessage = 'Borrador actualizado.';
+				panelMessage = 'Cambios guardados.';
 			} catch (e) {
 			console.error(e);
-			panelError = 'No pudimos guardar correcciones del draft.';
+				panelError = 'No pudimos guardar los cambios.';
 		} finally {
 			saveDraftBusy = false;
 		}
@@ -485,7 +474,7 @@
 		if (!jobId || !job) return;
 		resetTransientState();
 		if (blockingIssues().length > 0) {
-			panelError = 'No se puede confirmar mientras existan issues bloqueantes.';
+			panelError = 'Todavía hay correcciones obligatorias antes de confirmar.';
 			return;
 		}
 		if (commitPolicy === 'overwrite_days' && selectedOverwriteDays().length === 0) {
@@ -509,35 +498,34 @@
 					commit_idempotency_key: crypto.randomUUID()
 				})
 			});
-			const payload = await res.json().catch(() => ({}));
-			if (!res.ok) {
-				if (res.status === 409) {
-					const expected = payload?.expected_version ?? routineVersionExpected;
-					const current = payload?.current_version;
-					const lastSaved =
-						typeof payload?.last_saved_at === 'string'
-							? new Date(payload.last_saved_at).toLocaleString()
-							: null;
+				const payload = await res.json().catch(() => ({}));
+				if (!res.ok) {
+					if (res.status === 409) {
+						const current = payload?.current_version;
+						const lastSaved =
+							typeof payload?.last_saved_at === 'string'
+								? new Date(payload.last_saved_at).toLocaleString()
+								: null;
 					routineVersionExpected = typeof current === 'number' ? current : routineVersionExpected;
 					panelError = current
-						? `Conflicto de versión (esperada ${expected}, actual ${current})${
-								lastSaved ? ` · último guardado: ${lastSaved}` : ''
-							}. Revalidá el preview y volvé a confirmar.`
-						: payload?.message ?? 'Conflicto de versión. Revalidá y volvé a confirmar.';
-				} else {
-					panelError = payload?.message ?? 'No pudimos confirmar el commit de importación.';
-				}
+							? `La rutina cambió mientras revisabas. Actualizá y confirmá de nuevo${
+									lastSaved ? ` (último guardado: ${lastSaved})` : ''
+								}.`
+							: payload?.message ?? 'La rutina cambió mientras revisabas. Actualizá y confirmá de nuevo.';
+					} else {
+						panelError = payload?.message ?? 'No pudimos confirmar los cambios.';
+					}
 				return;
 			}
 
 				lastBackupId = payload.backup_id ?? null;
 				routineVersionExpected = payload.routine_version_after ?? routineVersionExpected;
 				await applyRoutineUpdateToParent('commit', payload);
-				panelMessage = 'Importación aplicada correctamente.';
+				panelMessage = 'Cambios aplicados correctamente.';
 				await fetchJobStatus();
 			} catch (e) {
 			console.error(e);
-			panelError = 'No pudimos confirmar el commit de importación.';
+			panelError = 'No pudimos confirmar los cambios.';
 		} finally {
 			commitBusy = false;
 		}
@@ -555,16 +543,16 @@
 			});
 			const payload = await res.json().catch(() => ({}));
 			if (!res.ok) {
-				panelError = payload?.message ?? 'No pudimos revertir la importación.';
+				panelError = payload?.message ?? 'No pudimos deshacer los cambios.';
 				return;
 			}
 				routineVersionExpected = payload.routine_version_after ?? routineVersionExpected;
 				await applyRoutineUpdateToParent('rollback', payload);
-				panelMessage = 'Reversión aplicada correctamente.';
+				panelMessage = 'Se deshicieron los cambios correctamente.';
 				await fetchJobStatus();
 			} catch (e) {
 			console.error(e);
-			panelError = 'No pudimos revertir la importación.';
+			panelError = 'No pudimos deshacer los cambios.';
 		} finally {
 			rollbackBusy = false;
 		}
@@ -579,18 +567,15 @@
 	<header class="space-y-2">
 		<div class="flex flex-wrap items-center justify-between gap-2">
 			<h3 class="text-xl font-semibold tracking-tight text-slate-100">Importar rutina</h3>
-			<span class="rounded-full border border-cyan-500/35 bg-cyan-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-cyan-200">
-				Flujo guiado
-			</span>
 		</div>
 		<p class="text-sm leading-relaxed text-slate-300">
-			Cargá un archivo o pegá texto. Revisás el borrador, corregís lo necesario y recién después lo confirmás.
+			Cargá un archivo o pegá texto, revisá lo detectado y confirmá cuando esté todo bien.
 		</p>
 	</header>
 
 		<div class="space-y-4 rounded-xl border border-slate-700/70 bg-[#101523]/90 p-4 sm:p-5">
 			<div class="space-y-2">
-				<p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Paso 1 · Elegí la fuente</p>
+				<p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Paso 1 · Elegí cómo cargar</p>
 				<div class="grid gap-2 rounded-xl border border-slate-700/70 bg-[#0f1420] p-1 sm:grid-cols-2">
 				<button
 					type="button"
@@ -615,9 +600,6 @@
 					Desde texto pegado
 				</button>
 			</div>
-				<p class="text-xs text-slate-400">
-					Este selector solo cambia la fuente. Para procesar, usá el botón verde de abajo.
-				</p>
 			</div>
 
 		{#if sourceMode === 'file'}
@@ -634,11 +616,6 @@
 							}}
 						/>
 				<p class="text-xs text-slate-400">Formatos admitidos: TXT, CSV, XLSX, DOCX y PDF digital.</p>
-				{#if selectedFile}
-					<p class="text-xs text-cyan-200">
-						Archivo seleccionado: {selectedFile.name} ({Math.round(selectedFile.size / 1024)} KB)
-					</p>
-				{/if}
 			</div>
 		{:else}
 			<div class="space-y-2">
@@ -678,7 +655,7 @@
 					}}
 					disabled={processingBusy}
 				>
-					{processingBusy ? 'Actualizando...' : 'Ver progreso'}
+					{processingBusy ? 'Actualizando...' : 'Actualizar estado'}
 				</button>
 				<span class={`rounded-full border px-3 py-1.5 text-xs font-semibold ${parseJobStatusTone(job.status)}`}>
 					{formatJobStage(job.progress_stage)} ({job.progress_percent}%)
@@ -696,12 +673,6 @@
 	{#if job?.error_message}
 		<div class="rounded-xl border border-amber-700/60 bg-amber-950/25 px-3 py-2.5 text-sm text-amber-100">
 			<p>{toUserFacingJobError(job.error_message)}</p>
-			{#if shouldShowRawJobError(job.error_message)}
-				<details class="mt-2 text-[10px] text-amber-200/80">
-					<summary class="cursor-pointer">Ver detalle técnico</summary>
-					<p class="mt-1 break-all">{job.error_message}</p>
-				</details>
-			{/if}
 		</div>
 	{/if}
 
@@ -712,7 +683,7 @@
 				<p class="mt-1 text-xl font-semibold text-slate-100">{stats.days_detected}</p>
 			</article>
 			<article class="rounded-xl border border-slate-700/70 bg-[#101523] p-3">
-				<p class="text-[11px] uppercase tracking-wide text-slate-400">Ejercicios parseados</p>
+				<p class="text-[11px] uppercase tracking-wide text-slate-400">Ejercicios detectados</p>
 				<p class="mt-1 text-xl font-semibold text-slate-100">{stats.exercises_parsed}</p>
 			</article>
 			<article class="rounded-xl border border-slate-700/70 bg-[#101523] p-3">
@@ -725,7 +696,7 @@
 	{#if issues.length > 0}
 			<div class="space-y-3 rounded-xl border border-slate-700/70 bg-[#101523] p-4">
 				<h4 class="text-sm font-semibold text-slate-100">
-					Revisión del borrador · {issues.length} observaciones
+					Revisión de la rutina · {issues.length} punto(s) para revisar
 				</h4>
 
 				{#if blockingIssues().length > 0}
@@ -737,48 +708,26 @@
 								{#if issue.suggested_fix}
 									<p class="mt-1 text-[11px] opacity-90">Sugerencia: {issue.suggested_fix}</p>
 								{/if}
-								{#if issue.code || issue.path}
-									<details class="mt-1 text-[10px] opacity-75">
-										<summary class="cursor-pointer">Detalle técnico</summary>
-										{#if issue.code}
-											<p class="mt-1">Código: {issue.code}</p>
-										{/if}
-										{#if issue.path}
-											<p class="mt-1 break-all">Ruta: {issue.path}</p>
-										{/if}
-									</details>
-								{/if}
 							</article>
 						{/each}
 					</div>
 			{/if}
 
-			{#if nonBlockingIssues().length > 0}
-				<details class="rounded-lg border border-slate-700/70 bg-[#0f1420] p-3">
-					<summary class="cursor-pointer text-xs font-semibold text-slate-200">
-						Ver advertencias y sugerencias ({nonBlockingIssues().length})
-					</summary>
+				{#if nonBlockingIssues().length > 0}
+					<details class="rounded-lg border border-slate-700/70 bg-[#0f1420] p-3">
+						<summary class="cursor-pointer text-xs font-semibold text-slate-200">
+							Ver recomendaciones ({nonBlockingIssues().length})
+						</summary>
 						<div class="mt-3 max-h-48 space-y-2 overflow-auto pr-1">
 							{#each nonBlockingIssues() as issue, index (`non-blocking-${issue.path}-${index}`)}
 								<article class={`rounded-lg border px-3 py-2 text-xs ${parseSeverityTone(issue.severity)}`}>
 									<p class="font-semibold">{formatIssueSeverity(issue.severity)}</p>
 									<p class="mt-1">{issue.message}</p>
-									{#if issue.suggested_fix}
-										<p class="mt-1 text-[11px] opacity-90">Sugerencia: {issue.suggested_fix}</p>
-									{/if}
-									{#if issue.code || issue.path}
-										<details class="mt-1 text-[10px] opacity-75">
-											<summary class="cursor-pointer">Detalle técnico</summary>
-											{#if issue.code}
-												<p class="mt-1">Código: {issue.code}</p>
-											{/if}
-											{#if issue.path}
-												<p class="mt-1 break-all">Ruta: {issue.path}</p>
-											{/if}
-										</details>
-									{/if}
-								</article>
-							{/each}
+										{#if issue.suggested_fix}
+											<p class="mt-1 text-[11px] opacity-90">Sugerencia: {issue.suggested_fix}</p>
+										{/if}
+									</article>
+								{/each}
 						</div>
 					</details>
 			{/if}
@@ -789,8 +738,8 @@
 		<div class="space-y-4 rounded-xl border border-slate-700/70 bg-[#101523] p-4 sm:p-5">
 			<div class="flex flex-wrap items-center justify-between gap-3">
 				<div>
-					<h4 class="text-base font-semibold text-slate-100">Paso 1 · Revisar mapeo y ejercicios</h4>
-					<p class="text-xs text-slate-400">Editá lo necesario antes de confirmar la importación.</p>
+					<h4 class="text-base font-semibold text-slate-100">Paso 2 · Revisá y corregí</h4>
+					<p class="text-xs text-slate-400">Corregí lo que haga falta antes de confirmar.</p>
 				</div>
 					<button
 						type="button"
@@ -798,13 +747,13 @@
 						onclick={saveDraft}
 						disabled={saveDraftBusy}
 					>
-						{saveDraftBusy ? 'Guardando cambios...' : 'Guardar borrador'}
+						{saveDraftBusy ? 'Guardando cambios...' : 'Guardar cambios'}
 					</button>
 				</div>
 
 			<div class="grid gap-3 rounded-xl border border-slate-700/70 bg-[#0f1420] p-3 sm:grid-cols-[1fr_auto] sm:items-end">
 				<label class="text-xs text-slate-300">
-					Modo de visualización
+					Cómo querés ver los días
 					<select
 						class="mt-1 block w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs font-semibold text-slate-100"
 						value={getDraftMode()}
@@ -822,13 +771,13 @@
 						class="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-500 bg-[#1a2132] px-4 py-2 text-xs font-semibold text-slate-100 transition hover:bg-[#252f47]"
 						onclick={autoMapSequentialDays}
 					>
-						Auto-map secuencial
+						Ordenar Día 1, Día 2, Día 3...
 					</button>
 				{/if}
 			</div>
 			{#if getDraftMode() === 'sequential' && hasSequentialMappingWarning()}
 				<p class="rounded-xl border border-amber-700/60 bg-amber-950/25 px-3 py-2 text-xs text-amber-100">
-					El mapeo actual no respeta la secuencia Día 1..N. Se puede confirmar igual, pero puede resultar confuso.
+					El orden actual de los días puede verse confuso para el alumno.
 				</p>
 			{/if}
 
@@ -838,22 +787,7 @@
 						<div class="flex flex-wrap items-center justify-between gap-3">
 							<div>
 								<p class="text-sm font-semibold text-slate-100">{day.source_label}</p>
-								<p class="text-[11px] uppercase tracking-wide text-slate-500">Bloques: {day.blocks.length}</p>
 							</div>
-							<label class="text-xs text-slate-300">
-								{getDraftMode() === 'weekday' ? 'Día destino (semanal)' : 'Día destino'}
-								<select
-									class="mt-1 block min-w-40 rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs font-semibold text-slate-100"
-									value={day.mapped_day_key ?? ''}
-									onchange={(event) =>
-										updateDayMapping(day.id, (event.currentTarget as HTMLSelectElement).value)}
-								>
-									<option value="">Sin asignar</option>
-									{#each IMPORT_WEEK_DAY_KEYS as weekDay}
-										<option value={weekDay}>{formatDestinationDay(weekDay)}</option>
-									{/each}
-								</select>
-							</label>
 						</div>
 						{#if getDraftMode() === 'custom'}
 							<label class="block text-xs text-slate-300">
@@ -873,77 +807,73 @@
 						{/if}
 
 						{#each day.blocks as block (block.id)}
-							<div class="space-y-2 rounded-lg border border-slate-800 bg-[#0d1220] p-3">
-								<p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-									Bloque {block.block_type === 'single' ? 'simple' : block.block_type}
-								</p>
-								{#each block.nodes as node (node.id)}
-									<div class="space-y-2 rounded-lg border border-slate-700/70 bg-[#111827] p-3">
-										<div class="grid gap-2 md:grid-cols-7">
-											<input
-												class="md:col-span-4 rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
-												placeholder="Nombre del ejercicio"
-												value={node.raw_exercise_name}
-												oninput={(event) =>
-													updateNodeField(
-														day.id,
-														block.id,
-														node.id,
-														'raw_exercise_name',
-														(event.currentTarget as HTMLInputElement).value
-													)}
-											/>
-											<input
-												class="rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
-												type="number"
-												min="1"
-												placeholder="Series"
-												value={node.sets ?? ''}
-												oninput={(event) =>
-													updateNodeField(
-														day.id,
-														block.id,
-														node.id,
-														'sets',
-														(event.currentTarget as HTMLInputElement).value
-													)}
-											/>
-											<input
-												class="rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
-												type="number"
-												min="1"
-												placeholder="Reps mín."
-												value={node.reps_min ?? ''}
-												oninput={(event) =>
-													updateNodeField(
-														day.id,
-														block.id,
-														node.id,
-														'reps_min',
-														(event.currentTarget as HTMLInputElement).value
-													)}
-											/>
-											<input
-												class="rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
-												type="number"
-												min="1"
-												placeholder="Reps máx."
-												value={node.reps_max ?? ''}
-												oninput={(event) =>
-													updateNodeField(
-														day.id,
-														block.id,
-														node.id,
-														'reps_max',
-														(event.currentTarget as HTMLInputElement).value
-													)}
-											/>
-										</div>
+							{#each block.nodes as node (node.id)}
+								<div class="space-y-2 rounded-lg border border-slate-700/70 bg-[#111827] p-3">
+									<div class="grid gap-2 md:grid-cols-7">
 										<input
-											class="w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
-											placeholder="Nota opcional"
-											value={node.note ?? ''}
+											class="md:col-span-4 rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
+											placeholder="Nombre del ejercicio"
+											value={node.raw_exercise_name}
 											oninput={(event) =>
+												updateNodeField(
+													day.id,
+													block.id,
+													node.id,
+													'raw_exercise_name',
+													(event.currentTarget as HTMLInputElement).value
+												)}
+										/>
+										<input
+											class="rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
+											type="number"
+											min="1"
+											placeholder="Series"
+											value={node.sets ?? ''}
+											oninput={(event) =>
+												updateNodeField(
+													day.id,
+													block.id,
+													node.id,
+													'sets',
+													(event.currentTarget as HTMLInputElement).value
+												)}
+										/>
+										<input
+											class="rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
+											type="number"
+											min="1"
+											placeholder="Reps mín."
+											value={node.reps_min ?? ''}
+											oninput={(event) =>
+												updateNodeField(
+													day.id,
+													block.id,
+													node.id,
+													'reps_min',
+													(event.currentTarget as HTMLInputElement).value
+												)}
+										/>
+										<input
+											class="rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
+											type="number"
+											min="1"
+											placeholder="Reps máx."
+											value={node.reps_max ?? ''}
+											oninput={(event) =>
+												updateNodeField(
+													day.id,
+													block.id,
+													node.id,
+													'reps_max',
+													(event.currentTarget as HTMLInputElement).value
+												)}
+										/>
+									</div>
+									<input
+										class="w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
+										placeholder="Nota opcional"
+										value={node.note ?? ''}
+										oninput={(event) =>
 												updateNodeField(
 													day.id,
 													block.id,
@@ -951,10 +881,9 @@
 													'note',
 													(event.currentTarget as HTMLInputElement).value
 												)}
-										/>
-									</div>
-								{/each}
-							</div>
+									/>
+								</div>
+							{/each}
 						{/each}
 					</article>
 				{/each}
@@ -962,27 +891,11 @@
 		</div>
 	{/if}
 
-	{#if stats}
-		<details class="rounded-xl border border-slate-800/80 bg-[#101523] p-3">
-			<summary class="cursor-pointer text-[11px] font-medium text-slate-400 hover:text-slate-300">
-				Ver datos técnicos (opcional)
-			</summary>
-			<div class="mt-3 grid gap-2 text-[11px] text-slate-400 sm:grid-cols-2 lg:grid-cols-3">
-				<p>Ratio de parseo: <span class="font-semibold text-slate-100">{Math.round(stats.parseable_ratio * 100)}%</span></p>
-				<p>Confianza baja: <span class="font-semibold text-slate-100">{stats.low_confidence_fields}</span></p>
-				<p>Campos obligatorios: <span class="font-semibold text-slate-100">{Math.round(stats.required_fields_ratio * 100)}%</span></p>
-				<p>Líneas originales: <span class="font-semibold text-slate-100">{draft?.coverage?.lines_in ?? 0}</span></p>
-				<p>Líneas procesadas: <span class="font-semibold text-slate-100">{draft?.coverage?.lines_after_split ?? 0}</span></p>
-				<p>Nodos generados: <span class="font-semibold text-slate-100">{draft?.coverage?.exercise_nodes_out ?? 0}</span></p>
-			</div>
-		</details>
-	{/if}
-
 	{#if job && ['ready', 'committed', 'rolled_back'].includes(job.status)}
 		<div class="space-y-4 rounded-xl border border-slate-700/70 bg-[#101523] p-4 sm:p-5">
 			<div class="space-y-1">
-				<h4 class="text-base font-semibold text-slate-100">Paso 2 · Confirmar importación</h4>
-				<p class="text-xs text-slate-400">Elegí cómo aplicar el borrador sobre la rutina actual.</p>
+				<h4 class="text-base font-semibold text-slate-100">Paso 3 · Confirmar cambios</h4>
+				<p class="text-xs text-slate-400">Elegí cómo aplicar estos cambios en la rutina actual.</p>
 			</div>
 
 			<div class="grid gap-2 sm:grid-cols-2">
@@ -1024,24 +937,6 @@
 				</div>
 			{/if}
 
-			<details class="rounded-lg border border-slate-800/80 bg-[#0f1420] p-3">
-				<summary class="cursor-pointer text-[11px] font-medium text-slate-400 hover:text-slate-300">
-					Opciones avanzadas
-				</summary>
-				<label class="mt-3 block text-xs text-slate-300">
-					Versión esperada de rutina
-					<input
-						type="number"
-						min="1"
-						class="mt-1 w-full rounded-lg border border-slate-600 bg-[#151b2a] px-3 py-2 text-sm text-slate-100"
-						bind:value={routineVersionExpected}
-					/>
-					<span class="mt-1 block text-[11px] text-slate-500">
-						Se usa para evitar pisar cambios hechos en paralelo.
-					</span>
-				</label>
-			</details>
-
 			<div class="flex flex-wrap gap-2">
 				<button
 					type="button"
@@ -1049,7 +944,7 @@
 					onclick={commitImport}
 					disabled={commitBusy}
 				>
-					{commitBusy ? 'Aplicando rutina...' : 'Aplicar rutina'}
+					{commitBusy ? 'Aplicando cambios...' : 'Aplicar cambios'}
 				</button>
 				<button
 					type="button"
@@ -1057,7 +952,7 @@
 					onclick={rollbackImport}
 					disabled={rollbackBusy || !lastBackupId}
 				>
-					{rollbackBusy ? 'Deshaciendo cambios...' : 'Deshacer último cambio'}
+					{rollbackBusy ? 'Deshaciendo cambios...' : 'Deshacer último cambio aplicado'}
 				</button>
 			</div>
 		</div>

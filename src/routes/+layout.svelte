@@ -53,10 +53,10 @@
 		{#if !hideHeader}
 			<header class="sticky top-0 z-40 border-b border-slate-800 bg-[#0f111b]/90 backdrop-blur">
 				{#if isClientDetailView}
-						<div class="mx-auto grid max-w-7xl grid-cols-2 items-center gap-2 px-3 py-3 md:grid-cols-[auto_1fr_auto] md:gap-3 md:px-4">
+						<div class="mx-auto grid max-w-7xl grid-cols-2 items-center gap-2 px-3 py-4 md:grid-cols-[auto_1fr_auto] md:gap-3 md:px-4 md:py-3">
 							<a
 								href="/clientes"
-								class={`back-to-panel inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-slate-700 bg-[#151827] px-3 py-2.5 text-sm font-semibold text-slate-100 transition hover:bg-[#1b1f30] md:w-[12rem] md:px-4 md:py-3 md:text-base ${
+								class={`back-to-panel inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-slate-700 bg-[#151827] px-3.5 py-3.5 text-sm font-semibold text-slate-100 transition hover:bg-[#1b1f30] md:w-[12rem] md:px-4 md:py-3 md:text-base ${
 									navigatingBackToPanel ? 'loading pointer-events-none' : ''
 								}`}
 							aria-busy={navigatingBackToPanel}
@@ -82,7 +82,7 @@
 										<form method="POST" action="/logout" class="block w-full md:inline" bind:this={logoutFormEl}>
 											<button
 												type="button"
-												class="inline-flex w-full items-center justify-center rounded-xl border border-slate-700 bg-[#151827] px-3 py-2.5 text-sm font-semibold text-slate-100 transition hover:bg-[#1b1f30] md:w-[12rem] md:px-4 md:py-3 md:text-base"
+												class="inline-flex w-full items-center justify-center rounded-xl border border-slate-700 bg-[#151827] px-3.5 py-3.5 text-sm font-semibold text-slate-100 transition hover:bg-[#1b1f30] md:w-[12rem] md:px-4 md:py-3 md:text-base"
 												onclick={openLogoutConfirm}
 											>
 												Cerrar sesión
@@ -90,7 +90,7 @@
 									</form>
 									{:else}
 										<a
-											class="inline-flex w-full items-center justify-center rounded-lg border border-slate-700 bg-[#151827] px-3 py-2.5 text-sm text-slate-100 transition hover:bg-[#1b1f30] md:w-auto md:py-1.5"
+											class="inline-flex w-full items-center justify-center rounded-lg border border-slate-700 bg-[#151827] px-3.5 py-3.5 text-sm text-slate-100 transition hover:bg-[#1b1f30] md:w-auto md:py-1.5"
 											href="/login"
 										>
 											Entrar

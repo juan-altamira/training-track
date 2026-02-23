@@ -108,7 +108,7 @@ const buildPayload = (input: BuildPayloadInput): BuildPayloadResult => {
 			ok: false,
 			status: 413,
 			code: IMPORT_ERROR_CODES.FILE_TOO_LARGE,
-			message: 'El archivo supera el límite de 12 MB.'
+			message: 'El archivo es demasiado pesado. El máximo permitido es 12 MB.'
 		};
 	}
 
@@ -119,7 +119,7 @@ const buildPayload = (input: BuildPayloadInput): BuildPayloadResult => {
 			ok: false,
 			status: 400,
 			code: IMPORT_ERROR_CODES.INVALID_FILE_TYPE,
-			message: 'No pudimos inferir el tipo de archivo. Usá txt/csv/xlsx/docx/pdf.'
+			message: 'El formato del archivo no está soportado. Probá con TXT, CSV, XLSX, DOCX o PDF.'
 		};
 	}
 
@@ -140,7 +140,7 @@ const buildPayload = (input: BuildPayloadInput): BuildPayloadResult => {
 			ok: false,
 			status: 400,
 			code: IMPORT_ERROR_CODES.INVALID_FILE_TYPE,
-			message: `El MIME ${input.mimeType ?? 'desconocido'} no coincide con ${sourceType}.`
+			message: 'El archivo parece tener un formato distinto al esperado.'
 		};
 	}
 
@@ -174,7 +174,7 @@ export const createImportJobFromInput = async (input: BuildPayloadInput) => {
 			ok: false as const,
 			status: 403,
 			code: IMPORT_ERROR_CODES.KILL_SWITCH_ENABLED,
-			message: 'Importaciones deshabilitadas para este entrenador.'
+			message: 'La carga de rutinas está desactivada para esta cuenta.'
 		};
 	}
 

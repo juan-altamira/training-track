@@ -54,7 +54,7 @@ const processSingleJob = async (job: ImportJobRow) => {
 			progressStage: 'failed',
 			progressPercent: 100,
 			errorCode: IMPORT_ERROR_CODES.PROCESSING_FAILED,
-			errorMessage: 'No encontramos el artefacto del job para procesar.',
+			errorMessage: 'No encontramos el archivo cargado para procesar.',
 			clearLease: true
 		});
 		await logImportAudit({
@@ -123,7 +123,7 @@ const processSingleJob = async (job: ImportJobRow) => {
 			progressStage: 'failed',
 			progressPercent: 100,
 			errorCode: IMPORT_ERROR_CODES.PDF_LAYOUT_UNRESOLVED,
-			errorMessage: 'No alcanzó cobertura mínima para PDF digital en V1.',
+			errorMessage: 'No pudimos leer el PDF con suficiente claridad para armar la rutina.',
 			clearLease: true
 		});
 		await logImportAudit({
@@ -176,15 +176,15 @@ export const processImportJobs = async (params?: {
 	for (const job of claimedJobs) {
 		try {
 			if (await isTenantKillSwitched(job.trainer_id)) {
-				await updateImportJobStatus({
-					jobId: job.id,
-					status: 'failed',
-					progressStage: 'failed',
-					progressPercent: 100,
-					errorCode: IMPORT_ERROR_CODES.KILL_SWITCH_ENABLED,
-					errorMessage: 'Importaciones desactivadas para este entrenador.',
-					clearLease: true
-				});
+			await updateImportJobStatus({
+				jobId: job.id,
+				status: 'failed',
+				progressStage: 'failed',
+				progressPercent: 100,
+				errorCode: IMPORT_ERROR_CODES.KILL_SWITCH_ENABLED,
+				errorMessage: 'La carga de rutinas está desactivada para esta cuenta.',
+				clearLease: true
+			});
 				await logImportAudit({
 					jobId: job.id,
 					trainerId: job.trainer_id,
@@ -206,7 +206,7 @@ export const processImportJobs = async (params?: {
 				progressStage: 'failed',
 				progressPercent: 100,
 				errorCode: IMPORT_ERROR_CODES.PROCESSING_FAILED,
-				errorMessage: e instanceof Error ? e.message : 'processing failed',
+				errorMessage: 'No pudimos completar la carga en este intento.',
 				clearLease: true
 			});
 			await logImportAudit({

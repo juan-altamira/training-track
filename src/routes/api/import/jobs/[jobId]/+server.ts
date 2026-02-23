@@ -8,7 +8,7 @@ export const GET: RequestHandler = async (event) => {
 	const jobId = event.params.jobId;
 	const job = await getImportJobForTrainer(jobId, session.user.id);
 	if (!job) {
-		return json({ message: 'Job no encontrado.' }, { status: 404 });
+		return json({ message: 'No encontramos esta carga.' }, { status: 404 });
 	}
 
 	const draftRow = await getImportDraftForJob(job.id);

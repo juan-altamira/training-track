@@ -27,7 +27,7 @@ const parseCreatePayload = async (request: Request) => {
 			return {
 				ok: false as const,
 				status: 400,
-				message: parsed.error.issues[0]?.message ?? 'Payload inválido'
+				message: 'No pudimos leer la información enviada.'
 			};
 		}
 
@@ -68,14 +68,14 @@ const parseCreatePayload = async (request: Request) => {
 		return {
 			ok: false as const,
 			status: 400,
-			message: parsed.error.issues[0]?.message ?? 'Payload inválido'
+			message: 'No pudimos leer la información enviada.'
 		};
 	}
 	if (!parsed.data.raw_text) {
 		return {
 			ok: false as const,
 			status: 400,
-			message: 'Para JSON debés enviar raw_text.'
+			message: 'Falta el texto de la rutina.'
 		};
 	}
 	return {

@@ -28,9 +28,9 @@ export const validateCoverageForPdf = (draft: ImportDraft): ImportIssue[] => {
 			code: 'pdf_days_below_threshold',
 			scope: 'job',
 			path: 'coverage.days_detected',
-			message: 'No se detectaron días suficientes para un import confiable.',
+			message: 'No pudimos reconocer suficientes días en el PDF.',
 			provenance: null,
-			suggested_fix: 'Convertí a texto o corregí el PDF original.'
+			suggested_fix: 'Probá copiando y pegando el texto de la rutina.'
 		});
 	}
 
@@ -40,9 +40,9 @@ export const validateCoverageForPdf = (draft: ImportDraft): ImportIssue[] => {
 			code: 'pdf_exercises_below_threshold',
 			scope: 'job',
 			path: 'coverage.exercises_parsed',
-			message: 'Se detectaron menos de 5 ejercicios en PDF.',
+			message: 'Se reconocieron muy pocos ejercicios en el PDF.',
 			provenance: null,
-			suggested_fix: 'Usá la importación por texto/tabla como fallback.'
+			suggested_fix: 'Probá copiando y pegando el texto en lugar del archivo.'
 		});
 	}
 
@@ -52,9 +52,9 @@ export const validateCoverageForPdf = (draft: ImportDraft): ImportIssue[] => {
 			code: 'pdf_parseable_ratio_below_threshold',
 			scope: 'job',
 			path: 'coverage.parseable_ratio',
-			message: `Cobertura de parseo ${Math.round(draft.coverage.parseable_ratio * 100)}% (< 60%).`,
+			message: `Solo pudimos leer ${Math.round(draft.coverage.parseable_ratio * 100)}% del contenido del PDF.`,
 			provenance: null,
-			suggested_fix: 'Revisá formato de origen o usá importación tabular.'
+			suggested_fix: 'Probá con un PDF más claro o copiando y pegando el texto.'
 		});
 	}
 
@@ -64,9 +64,9 @@ export const validateCoverageForPdf = (draft: ImportDraft): ImportIssue[] => {
 			code: 'pdf_required_fields_ratio_below_threshold',
 			scope: 'job',
 			path: 'coverage.required_fields_ratio',
-			message: `Campos obligatorios completos ${Math.round(draft.coverage.required_fields_ratio * 100)}% (< 70%).`,
+			message: `Faltan datos importantes en varios ejercicios (${Math.round(draft.coverage.required_fields_ratio * 100)}% completo).`,
 			provenance: null,
-			suggested_fix: 'Corregí datos en preview o usá formato más estructurado.'
+			suggested_fix: 'Completá lo faltante en pantalla o probá con un archivo más prolijo.'
 		});
 	}
 
@@ -85,9 +85,9 @@ export const buildDraftBundle = (draft: ImportDraft): ImportDraftBundle => {
 			code: 'possible_multi_exercise_line',
 			scope: 'job',
 			path: 'coverage.unresolved_multi_exercise_lines',
-			message: `Detectamos ${unresolvedMultiExerciseLines} línea(s) con múltiples prescripciones que no pudieron separarse automáticamente.`,
+			message: `Hay ${unresolvedMultiExerciseLines} línea(s) con más de un ejercicio que no se separaron solas.`,
 			provenance: null,
-			suggested_fix: 'Revisá esas líneas en el preview y separá ejercicios compuestos manualmente.'
+			suggested_fix: 'Revisalas y separá manualmente cada ejercicio.'
 		});
 	}
 
@@ -97,9 +97,9 @@ export const buildDraftBundle = (draft: ImportDraft): ImportDraftBundle => {
 			code: 'exercise_nodes_below_prescription_lines',
 			scope: 'job',
 			path: 'coverage.exercise_nodes_out',
-			message: `Se detectaron ${linesWithPrescriptionDetected} línea(s) con prescripción, pero solo ${exerciseNodesOut} nodos de ejercicio.`,
+			message: `Se detectaron ${linesWithPrescriptionDetected} líneas con ejercicios, pero solo ${exerciseNodesOut} quedaron listadas.`,
 			provenance: null,
-			suggested_fix: 'Validá si hay líneas con más de un ejercicio y separalas manualmente.'
+			suggested_fix: 'Revisá si hay líneas que incluyan dos ejercicios juntos.'
 		});
 	}
 
@@ -113,9 +113,9 @@ export const buildDraftBundle = (draft: ImportDraft): ImportDraftBundle => {
 			code: 'low_parse_ratio_non_pdf',
 			scope: 'job',
 			path: 'coverage.parseable_ratio',
-			message: `Parseamos ${Math.round(draft.coverage.parseable_ratio * 100)}% de líneas candidatas. Revisá el preview antes de confirmar.`,
+			message: `Pudimos reconocer ${Math.round(draft.coverage.parseable_ratio * 100)}% de las líneas con ejercicios.`,
 			provenance: null,
-			suggested_fix: 'Corregí ejercicios no detectados o pegá texto con formato más consistente.'
+			suggested_fix: 'Corregí lo que falte en pantalla o pegá el texto en un formato más claro.'
 		});
 	}
 	if (draft.coverage.exercises_parsed <= 0) {
@@ -124,9 +124,9 @@ export const buildDraftBundle = (draft: ImportDraft): ImportDraftBundle => {
 			code: 'no_exercises_detected',
 			scope: 'job',
 			path: 'coverage.exercises_parsed',
-			message: 'No detectamos ejercicios válidos en el contenido importado.',
+			message: 'No pudimos reconocer ejercicios válidos en el contenido cargado.',
 			provenance: null,
-			suggested_fix: 'Verificá el formato (ej: "Ejercicio (3x8)") o probá con CSV/XLSX.'
+			suggested_fix: 'Revisá el formato y probá nuevamente con archivo o texto pegado.'
 		});
 	}
 	const { plan, issues: adapterIssues } = deriveRoutinePlanFromDraft(draft);

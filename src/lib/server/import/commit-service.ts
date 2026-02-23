@@ -49,7 +49,7 @@ export const commitImportJob = async (params: {
 			ok: false as const,
 			status: 404,
 			code: IMPORT_ERROR_CODES.JOB_NOT_FOUND,
-			message: 'Job de importación no encontrado.'
+			message: 'No encontramos esta carga.'
 		};
 	}
 
@@ -58,7 +58,7 @@ export const commitImportJob = async (params: {
 			ok: false as const,
 			status: 403,
 			code: IMPORT_ERROR_CODES.CLIENT_MISMATCH,
-			message: 'El job no corresponde a este cliente.'
+			message: 'Esta carga no corresponde a este alumno.'
 		};
 	}
 
@@ -68,7 +68,7 @@ export const commitImportJob = async (params: {
 			ok: false as const,
 			status: 409,
 			code: IMPORT_ERROR_CODES.INVALID_PAYLOAD,
-			message: 'El job no tiene draft listo para commit.'
+			message: 'Todavía no hay una versión lista para confirmar.'
 		};
 	}
 
@@ -77,7 +77,7 @@ export const commitImportJob = async (params: {
 			ok: false as const,
 			status: 422,
 			code: IMPORT_ERROR_CODES.BLOCKING_ISSUES,
-			message: 'Hay errores bloqueantes en el preview. Corregí antes de confirmar.'
+			message: 'Hay correcciones obligatorias pendientes antes de confirmar.'
 		};
 	}
 
@@ -165,10 +165,8 @@ export const commitImportJob = async (params: {
 					? IMPORT_ERROR_CODES.OPTIMISTIC_LOCK_CONFLICT
 					: IMPORT_ERROR_CODES.INTERNAL_ERROR,
 				message: isConflict
-					? 'La rutina cambió mientras revisabas el import. Recargá y validá de nuevo.'
-					: isMissingFunction
-						? 'La base remota no tiene la versión actual de funciones de importación. Aplicá la migración 202602220003_routine_ui_meta_day_labels.sql y reintentá.'
-					: 'No pudimos confirmar el commit de importación.',
+					? 'La rutina cambió mientras revisabas. Actualizá y confirmá de nuevo.'
+					: 'No pudimos confirmar los cambios en este momento. Intentá de nuevo.',
 				meta: isConflict
 					? {
 							expected_version: detail.expectedVersion,
@@ -185,7 +183,7 @@ export const commitImportJob = async (params: {
 			ok: false as const,
 			status: 500,
 			code: IMPORT_ERROR_CODES.INTERNAL_ERROR,
-			message: 'La base de datos no devolvió un resultado válido para el commit.'
+			message: 'No pudimos confirmar los cambios.'
 		};
 	}
 
@@ -236,7 +234,7 @@ export const rollbackImportJob = async (params: {
 			ok: false as const,
 			status: 404,
 			code: IMPORT_ERROR_CODES.JOB_NOT_FOUND,
-			message: 'Job de importación no encontrado.'
+			message: 'No encontramos esta carga.'
 		};
 	}
 
@@ -252,7 +250,7 @@ export const rollbackImportJob = async (params: {
 			ok: false as const,
 			status: 500,
 			code: IMPORT_ERROR_CODES.INTERNAL_ERROR,
-			message: 'No pudimos revertir la importación.'
+			message: 'No pudimos deshacer los cambios.'
 		};
 	}
 
@@ -262,7 +260,7 @@ export const rollbackImportJob = async (params: {
 			ok: false as const,
 			status: 500,
 			code: IMPORT_ERROR_CODES.INTERNAL_ERROR,
-			message: 'Rollback sin respuesta válida de base de datos.'
+			message: 'No pudimos deshacer los cambios.'
 		};
 	}
 

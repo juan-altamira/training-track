@@ -13,17 +13,20 @@ export const PATCH: RequestHandler = async (event) => {
 	const parsed = patchImportDraftPayloadSchema.safeParse(payload ?? {});
 	if (!parsed.success) {
 		return json(
-			{ message: parsed.error.issues[0]?.message ?? 'Payload inválido para draft.' },
+			{ message: 'No pudimos guardar los cambios.' },
 			{ status: 400 }
 		);
 	}
 
 	const job = await getImportJobForTrainer(jobId, session.user.id);
 	if (!job) {
-		return json({ message: 'Job no encontrado.' }, { status: 404 });
+		return json({ message: 'No encontramos esta carga.' }, { status: 404 });
 	}
 	if (!['ready', 'failed'].includes(job.status)) {
-		return json({ message: 'El draft solo puede editarse cuando el job está en ready/failed.' }, { status: 409 });
+		return json(
+			{ message: 'Solo podés editar cuando la carga ya terminó de procesarse.' },
+			{ status: 409 }
+		);
 	}
 
 	const bundle = buildDraftBundle(parsed.data.draft);
@@ -56,4 +59,3 @@ export const PATCH: RequestHandler = async (event) => {
 		derived_plan: bundle.derivedPlan
 	});
 };
-

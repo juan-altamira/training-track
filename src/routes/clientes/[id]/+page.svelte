@@ -82,8 +82,7 @@
 	};
 
 	const updateCustomDayLabel = (dayKey: string, value: string) => {
-		const fallback = defaultDayLabelByKey[dayKey] ?? dayKey;
-		const nextLabel = sanitizeCustomLabel(value, fallback);
+		const nextLabel = sanitizeCustomLabel(value, '');
 		plan = {
 			...plan,
 			[dayKey]: { ...plan[dayKey], label: nextLabel }

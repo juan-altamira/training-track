@@ -1,5 +1,5 @@
-import { normalizePlan, normalizeProgress, WEEK_DAYS } from '$lib/routines';
-import type { RoutinePlan } from '$lib/types';
+import { normalizePlan, normalizeProgress, normalizeRoutineUiMeta, WEEK_DAYS } from '$lib/routines';
+import type { RoutinePlan, RoutineUiMeta } from '$lib/types';
 import { buildProgressCycleKey, toDayFeedbackByDay } from '$lib/dayFeedback';
 import { error, fail, redirect } from '@sveltejs/kit';
 import { nowIsoUtc } from '$lib/time';
@@ -14,6 +14,7 @@ const MAX_EXERCISES_PER_DAY = 50;
 
 type RoutineRelation = {
 	plan: RoutinePlan | null;
+	ui_meta?: RoutineUiMeta | null;
 	reset_progress_on_change?: boolean | null;
 	version?: number | null;
 };
@@ -69,7 +70,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 			const { data: clientRow, error: clientError } = await supabase
 				.from('clients')
 				.select(
-					'id,name,objective,status,client_code,created_at,routines(plan,reset_progress_on_change,version),progress(progress,last_completed_at)'
+					'id,name,objective,status,client_code,created_at,routines(plan,ui_meta,reset_progress_on_change,version),progress(progress,last_completed_at)'
 				)
 				.eq('id', clientId)
 				.eq('trainer_id', trainerId)
@@ -95,6 +96,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 					created_at: clientRow.created_at
 				},
 				plan: normalizePlan(routineRow?.plan as RoutinePlan | null),
+				uiMeta: normalizeRoutineUiMeta(routineRow?.ui_meta ?? null),
 				routineVersion: routineRow?.version ?? 1,
 				progress: normalizedProgress,
 				dayFeedback,
@@ -118,7 +120,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 
 		const { data: routineRow, error: routineError } = await supabase
 			.from('routines')
-			.select('plan,reset_progress_on_change,version')
+			.select('plan,ui_meta,reset_progress_on_change,version')
 			.eq('client_id', clientId)
 			.maybeSingle();
 		if (routineError) {
@@ -148,6 +150,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 		return {
 			client,
 			plan: normalizePlan(routineRow?.plan as RoutinePlan | null),
+			uiMeta: normalizeRoutineUiMeta(routineRow?.ui_meta ?? null),
 			routineVersion: routineRow?.version ?? 1,
 			progress: normalizedProgress,
 			dayFeedback,
@@ -179,6 +182,7 @@ export const actions: Actions = {
 
 		const formData = await request.formData();
 		const rawPlan = String(formData.get('plan') || '');
+		const rawUiMeta = formData.get('ui_meta');
 
 		let parsed: RoutinePlan;
 		try {
@@ -189,6 +193,19 @@ export const actions: Actions = {
 		}
 
 		const plan = normalizePlan(parsed);
+		let normalizedUiMeta: ReturnType<typeof normalizeRoutineUiMeta> | null = null;
+		let hasUiMetaPatch = false;
+		if (typeof rawUiMeta === 'string' && rawUiMeta.trim()) {
+			try {
+				const parsedUiMeta = JSON.parse(rawUiMeta) as RoutineUiMeta;
+				normalizedUiMeta = normalizeRoutineUiMeta(parsedUiMeta);
+				hasUiMetaPatch = true;
+			} catch (e) {
+				console.error(e);
+				return fail(400, { message: 'Formato de modo visual inválido' });
+			}
+		}
+
 		for (const day of Object.values(plan)) {
 			if (day.exercises.length > MAX_EXERCISES_PER_DAY) {
 				return fail(400, {
@@ -212,14 +229,16 @@ export const actions: Actions = {
 		}
 
 		const nowUtc = nowIsoUtc();
-		const { data: savedRoutine, error: updateError } = await supabase.from('routines').upsert(
-			{
-				client_id: params.id,
-				plan,
-				last_saved_at: nowUtc
-			},
-			{ onConflict: 'client_id' }
-		)
+		const routinePayload: Record<string, unknown> = {
+			client_id: params.id,
+			plan,
+			last_saved_at: nowUtc
+		};
+		if (hasUiMetaPatch && normalizedUiMeta) {
+			routinePayload.ui_meta = normalizedUiMeta;
+		}
+
+		const { data: savedRoutine, error: updateError } = await supabase.from('routines').upsert(routinePayload, { onConflict: 'client_id' })
 			.select('version')
 			.single();
 
@@ -374,7 +393,7 @@ export const actions: Actions = {
 
 		const { data: sourceRoutine, error: sourceError } = await supabase
 			.from('routines')
-			.select('plan')
+			.select('plan,ui_meta')
 			.eq('client_id', sourceClientId)
 			.maybeSingle();
 
@@ -383,10 +402,17 @@ export const actions: Actions = {
 		}
 
 		const plan = normalizePlan(sourceRoutine.plan as RoutinePlan | null, true);
+		const uiMeta = normalizeRoutineUiMeta((sourceRoutine.ui_meta as RoutineUiMeta | null | undefined) ?? null);
 		const nowUtc = nowIsoUtc();
 
 		const { error: updateError } = await supabase.from('routines').upsert(
-			{ client_id: targetClientId, plan, reset_progress_on_change: true },
+			{
+				client_id: targetClientId,
+				plan,
+				ui_meta: uiMeta,
+				reset_progress_on_change: true,
+				last_saved_at: nowUtc
+			},
 			{ onConflict: 'client_id' }
 		);
 

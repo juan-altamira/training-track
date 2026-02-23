@@ -4,6 +4,8 @@ import { hasBlockingIssues } from './validation';
 import { getImportDraftForJob, getImportJobForTrainer, updateImportJobStatus } from './job-repo';
 import { supabaseAdmin } from '$lib/server/supabaseAdmin';
 import { logImportAudit } from './audit-service';
+import { normalizeRoutineUiMeta } from '$lib/routines';
+import type { RoutineUiMeta } from '$lib/types';
 
 const parseOptimisticConflict = (message: string | null | undefined) =>
 	(message ?? '').toLowerCase().includes('optimistic_lock_conflict');
@@ -26,6 +28,7 @@ export const commitImportJob = async (params: {
 	overwriteDays?: string[] | null;
 	routineVersionExpected: number;
 	commitIdempotencyKey: string;
+	uiMeta?: RoutineUiMeta | null;
 }) => {
 	const job = await getImportJobForTrainer(params.jobId, params.trainerId);
 	if (!job) {
@@ -72,6 +75,15 @@ export const commitImportJob = async (params: {
 		progressPercent: 95
 	});
 
+	const draftPresentationMode =
+		(draftRow.draft_json as { presentation?: { day_label_mode?: RoutineUiMeta['day_label_mode'] } })?.presentation
+			?.day_label_mode ?? 'weekday';
+	const resolvedUiMeta = normalizeRoutineUiMeta(
+		params.uiMeta ?? {
+			day_label_mode: draftPresentationMode
+		}
+	);
+
 	const { data, error } = await supabaseAdmin.rpc('apply_import_commit', {
 		p_job_id: job.id,
 		p_trainer_id: params.trainerId,
@@ -80,7 +92,8 @@ export const commitImportJob = async (params: {
 		p_overwrite_days: params.policy === 'overwrite_days' ? params.overwriteDays ?? [] : null,
 		p_routine_version_expected: params.routineVersionExpected,
 		p_commit_idempotency_key: params.commitIdempotencyKey,
-		p_next_plan: draftRow.derived_routineplan_json
+		p_next_plan: draftRow.derived_routineplan_json,
+		p_next_ui_meta: resolvedUiMeta
 	});
 
 	if (error) {
@@ -122,20 +135,20 @@ export const commitImportJob = async (params: {
 		return {
 			ok: false as const,
 			status: isConflict ? 409 : 500,
-				code: isConflict
-					? IMPORT_ERROR_CODES.OPTIMISTIC_LOCK_CONFLICT
-					: IMPORT_ERROR_CODES.INTERNAL_ERROR,
-				message: isConflict
-					? 'La rutina cambió mientras revisabas el import. Recargá y validá de nuevo.'
-					: 'No pudimos confirmar el commit de importación.',
-				meta: isConflict
-					? {
-							expected_version: detail.expectedVersion,
-							current_version: detail.currentVersion,
-							last_saved_at: lastSavedAt
-						}
-					: null
-			};
+			code: isConflict
+				? IMPORT_ERROR_CODES.OPTIMISTIC_LOCK_CONFLICT
+				: IMPORT_ERROR_CODES.INTERNAL_ERROR,
+			message: isConflict
+				? 'La rutina cambió mientras revisabas el import. Recargá y validá de nuevo.'
+				: 'No pudimos confirmar el commit de importación.',
+			meta: isConflict
+				? {
+						expected_version: detail.expectedVersion,
+						current_version: detail.currentVersion,
+						last_saved_at: lastSavedAt
+					}
+				: null
+		};
 	}
 
 	const row = Array.isArray(data) ? data[0] : null;
@@ -158,7 +171,8 @@ export const commitImportJob = async (params: {
 			routine_version_after: row.routine_version_after,
 			backup_id: row.backup_id,
 			policy: params.policy,
-			overwrite_days: params.overwriteDays ?? []
+			overwrite_days: params.overwriteDays ?? [],
+			ui_meta: resolvedUiMeta
 		}
 	});
 

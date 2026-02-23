@@ -8,6 +8,7 @@
 		type ImportStats
 	} from '$lib/import/types';
 	import { importDraftSchema } from '$lib/import/schemas';
+	import type { RoutineUiMeta } from '$lib/types';
 
 	type ImportJobView = {
 		id: string;
@@ -57,10 +58,18 @@
 		overwrite_days: 'Reemplazar días seleccionados'
 	};
 	const COMMIT_POLICIES: ImportCommitPolicy[] = ['overwrite_all', 'overwrite_days'];
+	const DAY_LABEL_MODE_LABELS = {
+		weekday: 'Semanal (Lunes..Domingo)',
+		sequential: 'Secuencial (Día 1..N)',
+		custom: 'Personalizado'
+	} as const;
+	const DAY_LABEL_MODES = ['weekday', 'sequential', 'custom'] as const;
+	type DayLabelMode = (typeof DAY_LABEL_MODES)[number];
 
-	let { clientId, initialRoutineVersion } = $props<{
+	let { clientId, initialRoutineVersion, initialUiMeta = null } = $props<{
 		clientId: string;
 		initialRoutineVersion: number;
+		initialUiMeta?: RoutineUiMeta | null;
 	}>();
 
 	let sourceMode = $state<'file' | 'text'>('file');
@@ -147,11 +156,91 @@
 		panelMessage = null;
 	};
 
+	const normalizeDraftMode = (value: string | null | undefined): DayLabelMode => {
+		if (value === 'sequential' || value === 'custom') return value;
+		return 'weekday';
+	};
+
+	const normalizeDraftForUi = (incoming: ImportDraft | null): ImportDraft | null => {
+		if (!incoming) return null;
+		const fallbackMode = normalizeDraftMode(initialUiMeta?.day_label_mode);
+		const mode = normalizeDraftMode(incoming.presentation?.day_label_mode ?? fallbackMode);
+		return {
+			...incoming,
+			presentation: {
+				day_label_mode: mode
+			},
+			days: incoming.days.map((day, index) => ({
+				...day,
+				display_label:
+					typeof day.display_label === 'string' && day.display_label.trim()
+						? day.display_label.trim()
+						: `Día ${index + 1}`
+			}))
+		};
+	};
+
 	const applyStatusPayload = (payload: Record<string, any>) => {
 		job = payload.job as ImportJobView;
-		draft = payload.draft;
+		draft = normalizeDraftForUi(payload.draft as ImportDraft | null);
 		issues = Array.isArray(payload.issues) ? payload.issues : [];
 		stats = payload.stats ?? null;
+	};
+
+	const getDraftMode = (): DayLabelMode => normalizeDraftMode(draft?.presentation?.day_label_mode);
+
+	const setDraftMode = (mode: DayLabelMode) => {
+		if (!draft) return;
+		draft = {
+			...draft,
+			presentation: {
+				day_label_mode: mode
+			}
+		};
+	};
+
+	const updateDayDisplayLabel = (dayId: string, value: string) => {
+		if (!draft) return;
+		const cleaned = value
+			.replace(/[\u0000-\u001F\u007F]/g, '')
+			.trim()
+			.replace(/\s+/g, ' ')
+			.slice(0, 40);
+		draft = {
+			...draft,
+			days: draft.days.map((day) =>
+				day.id === dayId
+					? {
+							...day,
+							display_label: cleaned || null
+						}
+					: day
+			)
+		};
+	};
+
+	const autoMapSequentialDays = () => {
+		if (!draft) return;
+		draft = {
+			...draft,
+			days: draft.days.map((day, index) => ({
+				...day,
+				mapped_day_key: IMPORT_WEEK_DAY_KEYS[index] ?? null
+			}))
+		};
+	};
+
+	const hasSequentialMappingWarning = () => {
+		if (!draft || getDraftMode() !== 'sequential') return false;
+		for (let index = 0; index < draft.days.length; index += 1) {
+			const mapped = draft.days[index]?.mapped_day_key;
+			if (!mapped) continue;
+			const mappedIndex = IMPORT_WEEK_DAY_KEYS.indexOf(mapped as (typeof IMPORT_WEEK_DAY_KEYS)[number]);
+			if (mappedIndex !== index) {
+				return true;
+			}
+		}
+		return false;
 	};
 
 	const fetchJobStatus = async () => {
@@ -353,6 +442,10 @@
 				body: JSON.stringify({
 					policy: commitPolicy,
 					overwrite_days: commitPolicy === 'overwrite_days' ? selectedOverwriteDays() : undefined,
+					ui_meta: {
+						day_label_mode: getDraftMode(),
+						hide_empty_days_in_sequential: true
+					},
 					routine_version_expected: routineVersionExpected,
 					commit_idempotency_key: crypto.randomUUID()
 				})
@@ -612,6 +705,36 @@
 				</button>
 			</div>
 
+			<div class="grid gap-3 rounded-xl border border-slate-700/70 bg-[#0f1420] p-3 sm:grid-cols-[1fr_auto] sm:items-end">
+				<label class="text-xs text-slate-300">
+					Modo de visualización
+					<select
+						class="mt-1 block w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs font-semibold text-slate-100"
+						value={getDraftMode()}
+						onchange={(event) =>
+							setDraftMode((event.currentTarget as HTMLSelectElement).value as DayLabelMode)}
+					>
+						{#each DAY_LABEL_MODES as mode}
+							<option value={mode}>{DAY_LABEL_MODE_LABELS[mode]}</option>
+						{/each}
+					</select>
+				</label>
+				{#if getDraftMode() === 'sequential'}
+					<button
+						type="button"
+						class="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-500 bg-[#1a2132] px-4 py-2 text-xs font-semibold text-slate-100 transition hover:bg-[#252f47]"
+						onclick={autoMapSequentialDays}
+					>
+						Auto-map secuencial
+					</button>
+				{/if}
+			</div>
+			{#if getDraftMode() === 'sequential' && hasSequentialMappingWarning()}
+				<p class="rounded-xl border border-amber-700/60 bg-amber-950/25 px-3 py-2 text-xs text-amber-100">
+					El mapeo actual no respeta la secuencia Día 1..N. Se puede confirmar igual, pero puede resultar confuso.
+				</p>
+			{/if}
+
 			<div class="space-y-3">
 				{#each draft.days as day (day.id)}
 					<article class="space-y-3 rounded-xl border border-slate-700/70 bg-[#0f1420] p-3 sm:p-4">
@@ -635,6 +758,22 @@
 								</select>
 							</label>
 						</div>
+						{#if getDraftMode() === 'custom'}
+							<label class="block text-xs text-slate-300">
+								Etiqueta visible para este día
+								<input
+									class="mt-1 w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
+									value={day.display_label ?? ''}
+									maxlength="40"
+									placeholder="Ej: Día de empuje"
+									oninput={(event) =>
+										updateDayDisplayLabel(
+											day.id,
+											(event.currentTarget as HTMLInputElement).value
+										)}
+								/>
+							</label>
+						{/if}
 
 						{#each day.blocks as block (block.id)}
 							<div class="space-y-2 rounded-lg border border-slate-800 bg-[#0d1220] p-3">

@@ -1,6 +1,6 @@
 import type { ImportDraft, ImportIssue } from '$lib/import/types';
 import type { RoutineExercise, RoutinePlan } from '$lib/types';
-import { createEmptyPlan } from '$lib/routines';
+import { createEmptyPlan, normalizeRoutineUiMeta, sanitizeCustomLabel } from '$lib/routines';
 import { randomUUID } from 'node:crypto';
 
 const VALID_WEEK_DAYS = new Set([
@@ -19,6 +19,8 @@ export const deriveRoutinePlanFromDraft = (
 	const plan = createEmptyPlan();
 	const issues: ImportIssue[] = [];
 	const mappedDays = new Set<string>();
+	const uiMeta = normalizeRoutineUiMeta(draft.presentation ?? null);
+	const shouldPersistCustomLabels = uiMeta.day_label_mode === 'custom';
 
 	if (draft.days.length > 7) {
 		issues.push({
@@ -62,6 +64,12 @@ export const deriveRoutinePlanFromDraft = (
 		mappedDays.add(mappedDay);
 
 		const targetDay = plan[mappedDay];
+		if (shouldPersistCustomLabels) {
+			targetDay.label = sanitizeCustomLabel(
+				day.display_label ?? day.source_label ?? targetDay.label,
+				targetDay.label
+			);
+		}
 		let nextOrder = targetDay.exercises.length;
 
 		day.blocks.forEach((block, blockIndex) => {
@@ -138,4 +146,3 @@ export const deriveRoutinePlanFromDraft = (
 
 	return { plan, issues };
 };
-

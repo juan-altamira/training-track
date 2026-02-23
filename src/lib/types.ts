@@ -18,6 +18,13 @@ export type RoutineDay = {
 
 export type RoutinePlan = Record<string, RoutineDay>;
 
+export type RoutineDayLabelMode = 'weekday' | 'sequential' | 'custom';
+
+export type RoutineUiMeta = {
+	day_label_mode?: RoutineDayLabelMode;
+	hide_empty_days_in_sequential?: boolean;
+};
+
 export type ProgressDay = {
 	completed: boolean;
 	exercises: Record<string, number>;

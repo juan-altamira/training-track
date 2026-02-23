@@ -1,4 +1,4 @@
-import { getTargetSets, normalizePlan, normalizeProgress, WEEK_DAYS } from '$lib/routines';
+import { getTargetSets, normalizePlan, normalizeProgress, normalizeRoutineUiMeta, WEEK_DAYS } from '$lib/routines';
 import {
 	DAY_FEEDBACK_COMMENT_MAX_LENGTH,
 	buildProgressCycleKey,
@@ -12,7 +12,7 @@ import {
 import { env as privateEnv } from '$env/dynamic/private';
 import { supabaseAdmin } from '$lib/server/supabaseAdmin';
 import { ensureTrainerAccessByTrainerId } from '$lib/server/trainerAccess';
-import type { ProgressState, RoutinePlan } from '$lib/types';
+import type { ProgressState, RoutinePlan, RoutineUiMeta } from '$lib/types';
 import { error, fail } from '@sveltejs/kit';
 import { nowIsoUtc } from '$lib/time';
 import type { Actions, PageServerLoad } from './$types';
@@ -85,7 +85,7 @@ export const load: PageServerLoad = async ({ params }) => {
 
 	const { data: routineRow } = await supabaseAdmin
 		.from('routines')
-		.select('plan')
+		.select('plan,ui_meta')
 		.eq('client_id', client.id)
 		.maybeSingle();
 
@@ -114,6 +114,7 @@ export const load: PageServerLoad = async ({ params }) => {
 		clientName: client.name,
 		objective: client.objective,
 		plan,
+		uiMeta: normalizeRoutineUiMeta((routineRow?.ui_meta as RoutineUiMeta | null | undefined) ?? null),
 		progress,
 		dayFeedback,
 		last_completed_at: progressRow?.last_completed_at ?? null

@@ -997,6 +997,7 @@ const splitMultiExerciseLine = (sourceLine: ParsedLine): CandidateLineSplit => {
 const createDay = (sourceLabel: string, mapped: string | null): ImportDraftDay => ({
 	id: makeId(),
 	source_label: sourceLabel,
+	display_label: null,
 	mapped_day_key: mapped,
 	blocks: []
 });
@@ -1135,6 +1136,9 @@ export const parseLinesToDraft = (lines: ParsedLine[], context: ParserContext): 
 			exercise_nodes_out: exercisesParsed,
 			multi_exercise_splits_applied: multiExerciseSplitsApplied,
 			unresolved_multi_exercise_lines: unresolvedMultiExerciseLines
+		},
+		presentation: {
+			day_label_mode: 'weekday'
 		},
 		days: effectiveDays
 	};

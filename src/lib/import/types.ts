@@ -1,4 +1,4 @@
-import type { RoutinePlan } from '$lib/types';
+import type { RoutineDayLabelMode, RoutinePlan } from '$lib/types';
 
 export const IMPORT_JOB_STATUS = [
 	'queued',
@@ -125,6 +125,7 @@ export type ImportDraftBlock = {
 export type ImportDraftDay = {
 	id: string;
 	source_label: string;
+	display_label: string | null;
 	mapped_day_key: string | null;
 	blocks: ImportDraftBlock[];
 };
@@ -148,6 +149,9 @@ export type ImportDraft = {
 		exercise_nodes_out?: number;
 		multi_exercise_splits_applied?: number;
 		unresolved_multi_exercise_lines?: number;
+	};
+	presentation: {
+		day_label_mode: RoutineDayLabelMode;
 	};
 	days: ImportDraftDay[];
 };

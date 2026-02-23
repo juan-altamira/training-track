@@ -8,12 +8,15 @@ import {
 	type DayFeedbackPain,
 	type DayFeedbackRow
 } from '$lib/dayFeedback';
-import { WEEK_DAYS, getTargetSets, formatPrescriptionLong } from '$lib/routines';
-import type { ProgressState, RoutinePlan } from '$lib/types';
+import { WEEK_DAYS, getDisplayDays, getTargetSets, formatPrescriptionLong, normalizeRoutineUiMeta } from '$lib/routines';
+import type { ProgressState, RoutinePlan, RoutineUiMeta } from '$lib/types';
 
 	let { data } = $props();
 
 	let plan: RoutinePlan = data.status === 'ok' ? data.plan : ({} as RoutinePlan);
+	let uiMeta: Required<RoutineUiMeta> = $state(
+		data.status === 'ok' ? normalizeRoutineUiMeta(data.uiMeta ?? null) : normalizeRoutineUiMeta(null)
+	);
 	let progress: ProgressState = $state(
 		data.status === 'ok' ? structuredClone(data.progress) : ({} as ProgressState)
 	);
@@ -47,6 +50,7 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 	let timerStartedAtMs = $state<number | null>(null);
 	let timerTickIntervalId: ReturnType<typeof setInterval> | null = null;
 	const TIMER_STORAGE_KEY = 'training_track_rest_timer_v1';
+	const displayDays = (activeDayKey: string | null) => getDisplayDays(plan, uiMeta, { activeDayKey });
 
 	type PersistedTimerState = {
 		accumulatedMs: number;
@@ -627,29 +631,28 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 			</header>
 
 		<div class="days">
-			{#each WEEK_DAYS as day}
-				{#if plan[day.key] && plan[day.key].exercises.length > 0}
-					<article class={`day-card ${expanded[day.key] ? 'is-open' : ''} ${isDayCompleted(day.key) ? 'is-done' : ''}`}>
-						<button class="day-header" type="button" onclick={() => toggleExpanded(day.key)}>
+			{#each displayDays(Object.entries(expanded).find(([, isOpen]) => isOpen)?.[0] ?? null).filter((entry) => entry.hasExercises || expanded[entry.dayKey]) as day}
+					<article class={`day-card ${expanded[day.dayKey] ? 'is-open' : ''} ${isDayCompleted(day.dayKey) ? 'is-done' : ''}`}>
+						<button class="day-header" type="button" onclick={() => toggleExpanded(day.dayKey)}>
 							<div class="day-left">
-								<span class="day-name">{day.label}</span>
-								{#if isDayCompleted(day.key)}
+								<span class="day-name">{day.displayLabel}</span>
+								{#if isDayCompleted(day.dayKey)}
 									<span class="badge success">Día completado</span>
 								{/if}
 							</div>
-							<span class="arrow">{expanded[day.key] ? '▾' : '▸'}</span>
+							<span class="arrow">{expanded[day.dayKey] ? '▾' : '▸'}</span>
 						</button>
 
-							{#if expanded[day.key]}
+							{#if expanded[day.dayKey]}
 								<div class="day-body">
-									{#each plan[day.key].exercises as exercise (exercise.id)}
+									{#each plan[day.dayKey].exercises as exercise (exercise.id)}
 										<div class="exercise-card">
 										<div class="exercise-head">
 											<div>
 												<p class="exercise-name">{exercise.name}</p>
 												<p class="exercise-scheme">{formatPrescriptionLong(exercise) || exercise.scheme}</p>
 											</div>
-											{#if (progress[day.key]?.exercises?.[exercise.id] ?? 0) >= Math.max(1, getTargetSets(exercise) || 0)}
+											{#if (progress[day.dayKey]?.exercises?.[exercise.id] ?? 0) >= Math.max(1, getTargetSets(exercise) || 0)}
 												<span class="badge success">Completado</span>
 											{/if}
 										</div>
@@ -657,46 +660,46 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 											<p class="exercise-note">{exercise.note}</p>
 										{/if}
 											<div class="exercise-controls">
-												<button class="pill-btn" type="button" onclick={() => adjustSets(day.key, exercise.id, -1)}>−</button>
+												<button class="pill-btn" type="button" onclick={() => adjustSets(day.dayKey, exercise.id, -1)}>−</button>
 												<div class="sets">
-												<span class="sets-done">{progress[day.key]?.exercises?.[exercise.id] ?? 0}</span>
+												<span class="sets-done">{progress[day.dayKey]?.exercises?.[exercise.id] ?? 0}</span>
 												<span class="sets-separator">/</span>
 												<span class="sets-total">{Math.max(1, getTargetSets(exercise) || 0)}</span>
 											</div>
-											<button class="pill-btn" type="button" onclick={() => adjustSets(day.key, exercise.id, 1)}>+</button>
+											<button class="pill-btn" type="button" onclick={() => adjustSets(day.dayKey, exercise.id, 1)}>+</button>
 											</div>
 										</div>
 									{/each}
 
-										{#if getFeedbackCardMode(day.key)}
+										{#if getFeedbackCardMode(day.dayKey)}
 											<div class="feedback-zone">
-												{#if getFeedbackCardMode(day.key) === 'prompt'}
+												{#if getFeedbackCardMode(day.dayKey) === 'prompt'}
 													<div class="feedback-card">
 														<h3>¿Cómo te fue hoy?</h3>
 														<p class="feedback-subtitle">10 segundos. Me ayuda a ajustar tu rutina.</p>
 														<div class="feedback-actions">
-															<button class="btn primary" type="button" onclick={() => openFeedbackForm(day.key)}>Responder</button>
-															<button class="btn ghost" type="button" onclick={() => skipFeedbackForNow(day.key)}>Ahora no</button>
+															<button class="btn primary" type="button" onclick={() => openFeedbackForm(day.dayKey)}>Responder</button>
+															<button class="btn ghost" type="button" onclick={() => skipFeedbackForNow(day.dayKey)}>Ahora no</button>
 														</div>
 													</div>
-												{:else if getFeedbackCardMode(day.key) === 'reminder'}
+												{:else if getFeedbackCardMode(day.dayKey) === 'reminder'}
 													<div class="feedback-reminder">
 														<p>¿Cómo te fue hoy?</p>
-														<button class="btn ghost" type="button" onclick={() => openFeedbackForm(day.key)}>Responder</button>
+														<button class="btn ghost" type="button" onclick={() => openFeedbackForm(day.dayKey)}>Responder</button>
 													</div>
-												{:else if getFeedbackCardMode(day.key) === 'saved'}
+												{:else if getFeedbackCardMode(day.dayKey) === 'saved'}
 													<div class="feedback-card feedback-card-saved">
 														<h3>¿Como te fue hoy?</h3>
 														<p class="feedback-saved-status">
 															<span aria-hidden="true">✅</span>
 															<span>Registro guardado</span>
 														</p>
-														<button class="btn ghost feedback-edit-btn" type="button" onclick={() => openFeedbackForm(day.key)}>
+														<button class="btn ghost feedback-edit-btn" type="button" onclick={() => openFeedbackForm(day.dayKey)}>
 															Editar respuestas.
 														</button>
 													</div>
-												{:else if getFeedbackCardMode(day.key) === 'form'}
-													{@const draft = feedbackDraftByDay[day.key] ?? emptyFeedbackDraft()}
+												{:else if getFeedbackCardMode(day.dayKey) === 'form'}
+													{@const draft = feedbackDraftByDay[day.dayKey] ?? emptyFeedbackDraft()}
 													<div class="feedback-card">
 														<h3>¿Cómo te fue hoy?</h3>
 														<p class="feedback-subtitle">10 segundos. Me ayuda a ajustar tu rutina.</p>
@@ -708,7 +711,7 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 																	<button
 																		type="button"
 																		class={`chip-btn mood-chip mood-${item.value} ${draft.mood === item.value ? 'is-selected' : ''}`}
-																		onclick={() => updateFeedbackDraft(day.key, { mood: draft.mood === item.value ? '' : item.value })}
+																		onclick={() => updateFeedbackDraft(day.dayKey, { mood: draft.mood === item.value ? '' : item.value })}
 																	>
 																		<span>{item.icon}</span>
 																		<span>{item.label}</span>
@@ -726,7 +729,7 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 																		type="button"
 																		class={`scale-btn ${draft.difficulty === level ? 'is-selected' : ''}`}
 																		onclick={() =>
-																			updateFeedbackDraft(day.key, {
+																			updateFeedbackDraft(day.dayKey, {
 																				difficulty: draft.difficulty === level ? '' : level
 																			})}
 																	>
@@ -749,7 +752,7 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 																	<button
 																		type="button"
 																		class={`chip-btn ${draft.pain === item.value ? 'is-selected' : ''}`}
-																		onclick={() => updateFeedbackDraft(day.key, { pain: draft.pain === item.value ? '' : item.value })}
+																		onclick={() => updateFeedbackDraft(day.dayKey, { pain: draft.pain === item.value ? '' : item.value })}
 																	>
 																		{item.label}
 																	</button>
@@ -766,7 +769,7 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 																value={draft.comment}
 																use:autoResizeTextarea={draft.comment}
 																oninput={(event) =>
-																	handleFeedbackCommentInput(day.key, event)}
+																	handleFeedbackCommentInput(day.dayKey, event)}
 																placeholder="Si querés, contame en una línea cómo te sentiste."
 															></textarea>
 															<p class={`feedback-counter ${feedbackCounterTone(draft.comment.length)}`}>{draft.comment.length}/300</p>
@@ -775,20 +778,20 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 															{/if}
 														</div>
 
-														{#if feedbackErrorByDay[day.key]}
-															<p class="feedback-error">{feedbackErrorByDay[day.key]}</p>
+														{#if feedbackErrorByDay[day.dayKey]}
+															<p class="feedback-error">{feedbackErrorByDay[day.dayKey]}</p>
 														{/if}
 
 														<div class="feedback-actions">
 															<button
 																class="btn primary"
 																type="button"
-																onclick={() => saveDayFeedback(day.key)}
-																disabled={feedbackSavingByDay[day.key]}
+																onclick={() => saveDayFeedback(day.dayKey)}
+																disabled={feedbackSavingByDay[day.dayKey]}
 															>
-																{feedbackSavingByDay[day.key] ? 'Guardando...' : 'Guardar'}
+																{feedbackSavingByDay[day.dayKey] ? 'Guardando...' : 'Guardar'}
 															</button>
-															<button class="btn ghost" type="button" onclick={() => cancelFeedbackForm(day.key)}>Cancelar</button>
+															<button class="btn ghost" type="button" onclick={() => cancelFeedbackForm(day.dayKey)}>Cancelar</button>
 														</div>
 													</div>
 												{/if}
@@ -797,7 +800,6 @@ import type { ProgressState, RoutinePlan } from '$lib/types';
 								</div>
 							{/if}
 						</article>
-				{/if}
 			{/each}
 		</div>
 

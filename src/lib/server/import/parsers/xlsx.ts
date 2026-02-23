@@ -162,6 +162,7 @@ const toDraft = (
 			day = {
 				id: makeId(),
 				source_label: parsed.dayLabel,
+				display_label: null,
 				mapped_day_key: mapped,
 				blocks: [block]
 			};
@@ -195,6 +196,9 @@ const toDraft = (
 			exercise_nodes_out: exercisesParsed,
 			multi_exercise_splits_applied: 0,
 			unresolved_multi_exercise_lines: 0
+		},
+		presentation: {
+			day_label_mode: 'weekday'
 		},
 		days
 	};

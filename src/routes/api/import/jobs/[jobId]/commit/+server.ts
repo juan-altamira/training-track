@@ -42,7 +42,8 @@ export const POST: RequestHandler = async (event) => {
 		policy: parsed.data.policy,
 		overwriteDays,
 		routineVersionExpected: parsed.data.routine_version_expected,
-		commitIdempotencyKey: parsed.data.commit_idempotency_key
+		commitIdempotencyKey: parsed.data.commit_idempotency_key,
+		uiMeta: parsed.data.ui_meta ?? null
 	});
 
 	if (!result.ok) {

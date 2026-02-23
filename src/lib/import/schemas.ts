@@ -65,6 +65,7 @@ const draftBlockSchema = z.object({
 const draftDaySchema = z.object({
 	id: z.string().min(1),
 	source_label: z.string().min(1),
+	display_label: z.string().max(40).nullable().optional().default(null),
 	mapped_day_key: z
 		.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])
 		.nullable(),
@@ -91,6 +92,12 @@ export const importDraftSchema = z.object({
 		multi_exercise_splits_applied: z.number().int().nonnegative().optional(),
 		unresolved_multi_exercise_lines: z.number().int().nonnegative().optional()
 	}),
+	presentation: z
+		.object({
+			day_label_mode: z.enum(['weekday', 'sequential', 'custom'])
+		})
+		.optional()
+		.default({ day_label_mode: 'weekday' }),
 	days: z.array(draftDaySchema)
 });
 
@@ -139,6 +146,12 @@ export const importCommitPayloadSchema = z.object({
 	policy: z.enum(IMPORT_COMMIT_POLICY),
 	overwrite_days: z
 		.array(z.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']))
+		.optional(),
+	ui_meta: z
+		.object({
+			day_label_mode: z.enum(['weekday', 'sequential', 'custom']),
+			hide_empty_days_in_sequential: z.boolean().optional()
+		})
 		.optional(),
 	routine_version_expected: z.number().int().positive(),
 	commit_idempotency_key: z.string().min(1).max(128)

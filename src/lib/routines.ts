@@ -1,4 +1,12 @@
-import type { ProgressMeta, ProgressState, RoutineDay, RoutineExercise, RoutinePlan } from './types';
+import type {
+	ProgressMeta,
+	ProgressState,
+	RoutineDay,
+	RoutineDayLabelMode,
+	RoutineExercise,
+	RoutinePlan,
+	RoutineUiMeta
+} from './types';
 
 export const WEEK_DAYS: RoutineDay[] = [
 	{ key: 'monday', label: 'Lunes', exercises: [] },
@@ -9,6 +17,141 @@ export const WEEK_DAYS: RoutineDay[] = [
 	{ key: 'saturday', label: 'Sábado', exercises: [] },
 	{ key: 'sunday', label: 'Domingo', exercises: [] }
 ];
+
+const VALID_DAY_LABEL_MODES = new Set<RoutineDayLabelMode>(['weekday', 'sequential', 'custom']);
+const MAX_CUSTOM_DAY_LABEL_LENGTH = 40;
+
+export const normalizeLabelForCompare = (value: string | null | undefined) =>
+	(value ?? '')
+		.trim()
+		.normalize('NFD')
+		.replace(/\p{Diacritic}/gu, '')
+		.toLowerCase()
+		.replace(/\s+/g, ' ');
+
+export const sanitizeCustomLabel = (value: string | null | undefined, fallback: string) => {
+	const cleaned = (value ?? '')
+		.replace(/[\u0000-\u001F\u007F]/g, '')
+		.trim()
+		.replace(/\s+/g, ' ')
+		.slice(0, MAX_CUSTOM_DAY_LABEL_LENGTH);
+	return cleaned || fallback;
+};
+
+export const normalizeRoutineUiMeta = (input?: RoutineUiMeta | null): Required<RoutineUiMeta> => {
+	const mode = input?.day_label_mode;
+	const dayLabelMode: RoutineDayLabelMode = VALID_DAY_LABEL_MODES.has(mode as RoutineDayLabelMode)
+		? (mode as RoutineDayLabelMode)
+		: 'weekday';
+	return {
+		day_label_mode: dayLabelMode,
+		hide_empty_days_in_sequential:
+			typeof input?.hide_empty_days_in_sequential === 'boolean'
+				? input.hide_empty_days_in_sequential
+				: true
+	};
+};
+
+export const resolveEffectiveDayLabelMode = (
+	plan: RoutinePlan,
+	uiMeta?: RoutineUiMeta | null
+): RoutineDayLabelMode => {
+	const explicitMode = uiMeta?.day_label_mode;
+	if (VALID_DAY_LABEL_MODES.has(explicitMode as RoutineDayLabelMode)) {
+		return explicitMode as RoutineDayLabelMode;
+	}
+
+	let hasCustomEvidence = false;
+	for (const day of WEEK_DAYS) {
+		const planDay = plan?.[day.key];
+		const exercisesCount = planDay?.exercises?.length ?? 0;
+		const rawLabel = (planDay?.label ?? '').trim();
+		const normalizedLabel = normalizeLabelForCompare(rawLabel);
+		const normalizedDefault = normalizeLabelForCompare(day.label);
+		const labelIsEmpty = normalizedLabel.length === 0;
+		const labelIsDefault = !labelIsEmpty && normalizedLabel === normalizedDefault;
+		const isRelevant = exercisesCount > 0 || (!labelIsEmpty && !labelIsDefault);
+		if (!isRelevant) continue;
+		if (!labelIsEmpty && !labelIsDefault) {
+			hasCustomEvidence = true;
+			break;
+		}
+	}
+
+	return hasCustomEvidence ? 'custom' : 'weekday';
+};
+
+export type DisplayRoutineDay = {
+	dayKey: string;
+	displayLabel: string;
+	slotIndex: number;
+	hasExercises: boolean;
+	exercisesCount: number;
+	isEmpty: boolean;
+};
+
+export const getDisplayDays = (
+	plan: RoutinePlan,
+	uiMeta?: RoutineUiMeta | null,
+	options?: {
+		activeDayKey?: string | null;
+		includeEmptyOverride?: boolean;
+	}
+): DisplayRoutineDay[] => {
+	const activeDayKey = options?.activeDayKey ?? null;
+	const includeEmptyOverride = options?.includeEmptyOverride === true;
+	const normalizedMeta = normalizeRoutineUiMeta(uiMeta);
+	const effectiveMode = resolveEffectiveDayLabelMode(plan, normalizedMeta);
+
+	const base = WEEK_DAYS.map((day, index) => {
+		const planDay = plan?.[day.key];
+		const exercisesCount = planDay?.exercises?.length ?? 0;
+		const hasExercises = exercisesCount > 0;
+		return {
+			dayKey: day.key,
+			displayLabel:
+				effectiveMode === 'custom'
+					? sanitizeCustomLabel(planDay?.label, day.label)
+					: day.label,
+			slotIndex: index,
+			hasExercises,
+			exercisesCount,
+			isEmpty: !hasExercises
+		};
+	});
+
+	let visible = base;
+	if (effectiveMode === 'sequential' && normalizedMeta.hide_empty_days_in_sequential && !includeEmptyOverride) {
+		visible = base.filter((day) => day.hasExercises || day.dayKey === activeDayKey);
+	}
+
+	if (visible.length === 0) {
+		const fallback =
+			base.find((day) => day.dayKey === activeDayKey) ??
+			base[0] ?? {
+				dayKey: 'monday',
+				displayLabel: 'Lunes',
+				slotIndex: 0,
+				hasExercises: false,
+				exercisesCount: 0,
+				isEmpty: true
+			};
+		visible = [fallback];
+	}
+
+	if (effectiveMode === 'sequential') {
+		return visible.map((day, index) => ({
+			...day,
+			displayLabel: `Día ${index + 1}`,
+			slotIndex: index
+		}));
+	}
+
+	return visible.map((day, index) => ({
+		...day,
+		slotIndex: index
+	}));
+};
 
 const uuid = () => {
 	if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -30,7 +173,7 @@ export const normalizePlan = (plan?: RoutinePlan | null, regenerateIds = false):
 		if (plan[day.key]) {
 			base[day.key] = {
 				key: day.key,
-				label: day.label,
+				label: sanitizeCustomLabel(plan[day.key]?.label, day.label),
 				exercises: (plan[day.key]?.exercises || []).map((ex, idx) => ({
 					...ex,
 					id: regenerateIds ? uuid() : (ex.id || uuid()),

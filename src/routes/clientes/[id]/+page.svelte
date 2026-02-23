@@ -1,9 +1,22 @@
 <script lang="ts">
 	import { goto, preloadData } from '$app/navigation';
 	import { DAY_FEEDBACK_MOOD_LABEL, DAY_FEEDBACK_PAIN_LABEL, type DayFeedbackByDay, type DayFeedbackMood, type DayFeedbackPain } from '$lib/dayFeedback';
-	import { WEEK_DAYS, getTargetSets } from '$lib/routines';
+	import {
+		WEEK_DAYS,
+		getDisplayDays,
+		getTargetSets,
+		normalizeRoutineUiMeta,
+		sanitizeCustomLabel
+	} from '$lib/routines';
 	import RoutineImportPanel from '$lib/components/RoutineImportPanel.svelte';
-	import type { OtherClientRow, ProgressState, RoutineExercise, RoutinePlan } from '$lib/types';
+	import type {
+		OtherClientRow,
+		ProgressState,
+		RoutineDayLabelMode,
+		RoutineExercise,
+		RoutinePlan,
+		RoutineUiMeta
+	} from '$lib/types';
 	import { onMount } from 'svelte';
 	import { rememberLastClientRoute } from '$lib/client/sessionResumeWarmup';
 
@@ -11,6 +24,7 @@
 
 	let plan: RoutinePlan = $state(structuredClone(data.plan));
 	let progress: ProgressState = $state(structuredClone(data.progress));
+	let uiMeta: Required<RoutineUiMeta> = $state(normalizeRoutineUiMeta(data.uiMeta ?? null));
 	let routineVersion = $state(data.routineVersion ?? 1);
 	let selectedDay = $state(WEEK_DAYS[0].key);
 	let saving = $state(false);
@@ -39,6 +53,44 @@
 
 	const SITE_URL = (data.siteUrl ?? '').replace(/\/?$/, '');
 	const link = `${SITE_URL}/r/${data.client.client_code}`;
+
+	const defaultDayLabelByKey = Object.fromEntries(WEEK_DAYS.map((day) => [day.key, day.label])) as Record<
+		string,
+		string
+	>;
+
+	const displayDays = (
+		activeDayKey: string | null,
+		includeEmptyOverride = false
+	) => getDisplayDays(plan, uiMeta, { activeDayKey, includeEmptyOverride });
+
+	const dayDisplayLabel = (dayKey: string) =>
+		displayDays(dayKey, true).find((day) => day.dayKey === dayKey)?.displayLabel ??
+		defaultDayLabelByKey[dayKey] ??
+		dayKey;
+
+	const setDayLabelMode = (mode: RoutineDayLabelMode) => {
+		uiMeta = normalizeRoutineUiMeta({
+			...uiMeta,
+			day_label_mode: mode
+		});
+	};
+
+	const updateCustomDayLabel = (dayKey: string, value: string) => {
+		const fallback = defaultDayLabelByKey[dayKey] ?? dayKey;
+		const nextLabel = sanitizeCustomLabel(value, fallback);
+		plan = {
+			...plan,
+			[dayKey]: { ...plan[dayKey], label: nextLabel }
+		};
+	};
+
+	$effect(() => {
+		const visible = displayDays(null);
+		if (!visible.some((day) => day.dayKey === selectedDay)) {
+			selectedDay = visible[0]?.dayKey ?? WEEK_DAYS[0].key;
+		}
+	});
 
 	onMount(() => {
 		rememberLastClientRoute(data.client.id);
@@ -191,23 +243,24 @@
 		for (const day of WEEK_DAYS) {
 			const exercises = plan[day.key].exercises;
 			if (exercises.length === 0) continue;
+			const displayLabel = dayDisplayLabel(day.key);
 			
 			for (const ex of exercises) {
 				if (!ex.name || ex.name.trim() === '') {
-					feedback = `${day.label}: Hay ejercicios sin nombre. Completá el nombre antes de guardar.`;
+					feedback = `${displayLabel}: Hay ejercicios sin nombre. Completá el nombre antes de guardar.`;
 					feedbackType = 'warning';
 					saving = false;
 					return;
 				}
 				if (ex.name.length > MAX_EXERCISE_NAME_LENGTH) {
-					feedback = `${day.label}: El nombre "${ex.name.slice(0, 20)}..." es demasiado largo.`;
+					feedback = `${displayLabel}: El nombre "${ex.name.slice(0, 20)}..." es demasiado largo.`;
 					feedbackType = 'warning';
 					saving = false;
 					return;
 				}
 				const sets = getTargetSets(ex);
 				if (sets === 0) {
-					feedback = `${day.label}: "${ex.name}" no tiene series. Completá el campo Series.`;
+					feedback = `${displayLabel}: "${ex.name}" no tiene series. Completá el campo Series.`;
 					feedbackType = 'warning';
 					saving = false;
 					return;
@@ -221,6 +274,7 @@
 		
 		const formData = new FormData();
 		formData.set('plan', JSON.stringify(plan));
+		formData.set('ui_meta', JSON.stringify(uiMeta));
 		const res = await fetch('?/saveRoutine', {
 			method: 'POST',
 			body: formData
@@ -472,7 +526,7 @@
 		<p class="rounded-lg bg-[#151827] px-3 py-2 text-sm text-emerald-200 border border-emerald-700/40">{statusMessage}</p>
 	{/if}
 
-	<RoutineImportPanel clientId={data.client.id} initialRoutineVersion={routineVersion} />
+	<RoutineImportPanel clientId={data.client.id} initialRoutineVersion={routineVersion} initialUiMeta={uiMeta} />
 
 	<section class="grid gap-6 lg:grid-cols-[2fr,1fr]">
 		<div class="order-3 lg:order-1 space-y-5 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 md:p-6 shadow-lg shadow-black/30">
@@ -502,20 +556,67 @@
 				</div>
 			{/if}
 
-			<div class="flex flex-wrap gap-2">
-				{#each WEEK_DAYS as day}
-					<button
-						type="button"
-						class={`rounded-full px-4 py-2 text-base border ${
-							selectedDay === day.key
-								? 'bg-[#16223d] text-white border-slate-600'
-								: 'bg-[#070c1d] text-slate-300 border-[#0f162b] hover:bg-[#0d152b]'
-						}`}
-						onclick={() => (selectedDay = day.key)}
-					>
-						{day.label}
-					</button>
-				{/each}
+			<div class="space-y-3 rounded-xl border border-slate-800 bg-[#0b0d14] p-3">
+				<div class="grid gap-3 md:grid-cols-2">
+					<label class="text-xs font-medium uppercase tracking-wide text-slate-400">
+						Modo de días
+						<select
+							class="mt-1 block w-full rounded-lg border border-slate-700 bg-[#151827] px-3 py-2 text-sm text-slate-100"
+							value={uiMeta.day_label_mode}
+							onchange={(event) =>
+								setDayLabelMode((event.currentTarget as HTMLSelectElement).value as RoutineDayLabelMode)}
+						>
+							<option value="weekday">Semanal (Lunes..Domingo)</option>
+							<option value="sequential">Secuencial (Día 1..N)</option>
+							<option value="custom">Personalizado</option>
+						</select>
+					</label>
+					<label class="flex items-center gap-2 rounded-lg border border-slate-800 bg-[#101523] px-3 py-2 text-xs text-slate-300">
+						<input
+							type="checkbox"
+							checked={uiMeta.hide_empty_days_in_sequential}
+							onchange={(event) =>
+								(uiMeta = normalizeRoutineUiMeta({
+									...uiMeta,
+									hide_empty_days_in_sequential: (event.currentTarget as HTMLInputElement).checked
+								}))}
+						/>
+						Ocultar días vacíos en modo secuencial
+					</label>
+				</div>
+
+				<div class="flex flex-wrap gap-2">
+					{#each displayDays(selectedDay) as day}
+						<button
+							type="button"
+							class={`rounded-full px-4 py-2 text-base border ${
+								selectedDay === day.dayKey
+									? 'bg-[#16223d] text-white border-slate-600'
+									: 'bg-[#070c1d] text-slate-300 border-[#0f162b] hover:bg-[#0d152b]'
+							}`}
+							onclick={() => (selectedDay = day.dayKey)}
+						>
+							{day.displayLabel}
+						</button>
+					{/each}
+				</div>
+
+				{#if uiMeta.day_label_mode === 'custom'}
+					<label class="block text-sm font-medium text-slate-300">
+						Etiqueta visible del día seleccionado
+						<input
+							class="mt-1 w-full rounded-lg border border-slate-700 bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
+							value={plan[selectedDay]?.label ?? ''}
+							maxlength="40"
+							placeholder="Ej: Día de empuje"
+							oninput={(event) =>
+								updateCustomDayLabel(
+									selectedDay,
+									(event.currentTarget as HTMLInputElement).value
+								)}
+						/>
+					</label>
+				{/if}
 			</div>
 
 			<div class="space-y-3 rounded-xl border border-slate-800 bg-[#0b0d14] p-3 md:p-5">
@@ -703,28 +804,29 @@
 		<div class="order-1 lg:order-2 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 md:p-6 shadow-lg shadow-black/30">
 			<div class="flex items-center justify-between">
 				<div class="flex flex-col gap-1">
-					<h3 class="text-xl font-semibold uppercase tracking-wide text-slate-50">Semana actual</h3>
+					<h3 class="text-xl font-semibold uppercase tracking-wide text-slate-50">
+						{uiMeta.day_label_mode === 'sequential' ? 'Ciclo actual' : 'Semana actual'}
+					</h3>
 				</div>
 			</div>
 			<ul class="mt-4 space-y-5 text-base text-slate-200">
-				{#each WEEK_DAYS as day}
-					{#if plan[day.key] && plan[day.key].exercises.length > 0}
-						{@const completion = dayCompletion(day.key)}
-							<li class="rounded-lg border border-slate-700/90 bg-gradient-to-b from-[#1a223a] to-[#131b2f] overflow-hidden hover:from-[#1e2947] hover:to-[#16223a] transition-colors cursor-pointer shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-							<button type="button" class="w-full text-left px-4 py-4 sm:py-5" onclick={() => toggleDayDetail(day.key)}>
+				{#each displayDays(expandedDay).filter((entry) => entry.hasExercises || entry.dayKey === expandedDay) as day}
+					{@const completion = dayCompletion(day.dayKey)}
+						<li class="rounded-lg border border-slate-700/90 bg-gradient-to-b from-[#1a223a] to-[#131b2f] overflow-hidden hover:from-[#1e2947] hover:to-[#16223a] transition-colors cursor-pointer shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+							<button type="button" class="w-full text-left px-4 py-4 sm:py-5" onclick={() => toggleDayDetail(day.dayKey)}>
 								<div class="grid grid-cols-[auto_1fr_auto] items-center gap-3 sm:gap-4">
-									<p class="font-semibold text-slate-100">{day.label}</p>
+									<p class="font-semibold text-slate-100">{day.displayLabel}</p>
 									<div class="flex justify-center">
 										<span
 											class={`rounded-full px-3 py-1 text-sm font-semibold whitespace-nowrap ${
-												progress[day.key]?.suspicious && completion.completed
+												progress[day.dayKey]?.suspicious && completion.completed
 													? 'bg-amber-900/50 text-amber-200'
 													: completion.completed
 														? 'bg-emerald-900/50 text-emerald-300'
 														: 'bg-slate-800 text-slate-300'
 											}`}
 										>
-											{progress[day.key]?.suspicious && completion.completed
+											{progress[day.dayKey]?.suspicious && completion.completed
 												? 'Posible engaño'
 												: completion.completed
 													? 'Completado'
@@ -733,7 +835,7 @@
 									</div>
 									<div class="flex items-center gap-1.5 text-sm text-slate-300">
 										<span class="hidden sm:inline">Detalle</span>
-										<svg class="w-4 h-4 transition-transform {expandedDay === day.key ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<svg class="w-4 h-4 transition-transform {expandedDay === day.dayKey ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
 										</svg>
 									</div>
@@ -742,8 +844,8 @@
 									{completion.done}/{completion.total} ejercicios
 								</p>
 							</button>
-							{#if expandedDay === day.key}
-								{@const details = getExerciseDetails(day.key)}
+							{#if expandedDay === day.dayKey}
+								{@const details = getExerciseDetails(day.dayKey)}
 										<div class="border-t border-slate-700/70 bg-[#0b1222] px-4 py-3 space-y-1">
 										<div class="divide-y divide-slate-800/60">
 												{#each details.exercises as ex}
@@ -764,23 +866,23 @@
 												<button
 													type="button"
 													class="w-full flex items-center justify-between gap-3 rounded-lg bg-[#0e1526] px-3 py-4 text-left transition-colors hover:bg-[#111b31]"
-													onclick={() => toggleFeedbackDetail(day.key)}
+													onclick={() => toggleFeedbackDetail(day.dayKey)}
 												>
 													<span class="text-sm font-semibold text-slate-200">🧠 Ver sensaciones del día</span>
 													<span class={`inline-flex min-h-[1.75rem] min-w-[7rem] items-center justify-center whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold text-center ${
-														getDayFeedbackBadgeState(day.key) === 'registered'
+														getDayFeedbackBadgeState(day.dayKey) === 'registered'
 															? 'bg-slate-800/80 text-slate-200'
-															: getDayFeedbackBadgeState(day.key) === 'partial'
+															: getDayFeedbackBadgeState(day.dayKey) === 'partial'
 																? 'bg-amber-900/25 text-amber-200'
 															: 'bg-slate-900/70 text-slate-400'
 												}`}>
-													{getDayFeedbackBadgeLabel(day.key)}
+													{getDayFeedbackBadgeLabel(day.dayKey)}
 												</span>
 											</button>
-											{#if feedbackExpanded[day.key]}
+											{#if feedbackExpanded[day.dayKey]}
 												<div class="mt-4 rounded-lg border border-slate-800 bg-[#0b1120] px-3 py-3 text-xs text-slate-300">
-													{#if hasDayFeedback(day.key)}
-														{@const row = dayFeedback[day.key]}
+													{#if hasDayFeedback(day.dayKey)}
+														{@const row = dayFeedback[day.dayKey]}
 														<div class="space-y-0">
 															<div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-slate-700/40 py-2.5">
 																<span class="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-400">🧠 Sensación</span>
@@ -827,7 +929,6 @@
 									</div>
 								{/if}
 							</li>
-					{/if}
 				{/each}
 			</ul>
 			{#if hasSuspicious}

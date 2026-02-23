@@ -53,6 +53,8 @@
 
 	const SITE_URL = (data.siteUrl ?? '').replace(/\/?$/, '');
 	const link = `${SITE_URL}/r/${data.client.client_code}`;
+	const SHOW_SEQUENTIAL_HIDE_EMPTY_TOGGLE = false;
+	const FORCE_SHOW_EMPTY_DAYS = true;
 
 	const defaultDayLabelByKey = Object.fromEntries(WEEK_DAYS.map((day) => [day.key, day.label])) as Record<
 		string,
@@ -62,7 +64,10 @@
 	const displayDays = (
 		activeDayKey: string | null,
 		includeEmptyOverride = false
-	) => getDisplayDays(plan, uiMeta, { activeDayKey, includeEmptyOverride });
+	) => getDisplayDays(plan, uiMeta, {
+		activeDayKey,
+		includeEmptyOverride: includeEmptyOverride || FORCE_SHOW_EMPTY_DAYS
+	});
 
 	const dayDisplayLabel = (dayKey: string) =>
 		displayDays(dayKey, true).find((day) => day.dayKey === dayKey)?.displayLabel ??
@@ -557,20 +562,20 @@
 			{/if}
 
 			<div class="space-y-3 rounded-xl border border-slate-800 bg-[#0b0d14] p-3">
-				<div class="grid gap-3 md:grid-cols-2">
-					<label class="text-xs font-medium uppercase tracking-wide text-slate-400">
-						Modo de días
-						<select
-							class="mt-1 block w-full rounded-lg border border-slate-700 bg-[#151827] px-3 py-2 text-sm text-slate-100"
-							value={uiMeta.day_label_mode}
-							onchange={(event) =>
-								setDayLabelMode((event.currentTarget as HTMLSelectElement).value as RoutineDayLabelMode)}
-						>
-							<option value="weekday">Semanal (Lunes..Domingo)</option>
-							<option value="sequential">Secuencial (Día 1..N)</option>
-							<option value="custom">Personalizado</option>
-						</select>
-					</label>
+				<div class="flex flex-wrap items-center gap-3">
+					<span class="text-xs font-medium uppercase tracking-wide text-slate-400">Modo de días</span>
+					<select
+						class="block min-w-56 rounded-lg border border-slate-700 bg-[#151827] px-3 py-2 text-sm text-slate-100"
+						value={uiMeta.day_label_mode}
+						onchange={(event) =>
+							setDayLabelMode((event.currentTarget as HTMLSelectElement).value as RoutineDayLabelMode)}
+					>
+						<option value="weekday">Semanal (Lunes..Domingo)</option>
+						<option value="sequential">Secuencial (Día 1..N)</option>
+						<option value="custom">Personalizado</option>
+					</select>
+				</div>
+				{#if SHOW_SEQUENTIAL_HIDE_EMPTY_TOGGLE}
 					<label class="flex items-center gap-2 rounded-lg border border-slate-800 bg-[#101523] px-3 py-2 text-xs text-slate-300">
 						<input
 							type="checkbox"
@@ -583,7 +588,7 @@
 						/>
 						Ocultar días vacíos en modo secuencial
 					</label>
-				</div>
+				{/if}
 
 				<div class="flex flex-wrap gap-2">
 					{#each displayDays(selectedDay) as day}

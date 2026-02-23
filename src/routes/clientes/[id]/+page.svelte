@@ -48,7 +48,13 @@
 	let otherClientsError = $state<string | null>(null);
 	let dayFeedback = $state((data.dayFeedback ?? {}) as DayFeedbackByDay);
 	let feedbackExpanded = $state<Record<string, boolean>>({});
-	const hasSuspicious = WEEK_DAYS.some((d) => progress[d.key]?.suspicious && progress[d.key]?.completed);
+	const hasSuspicious = () =>
+		displayDays(expandedDay)
+			.filter((entry) => entry.hasExercises || entry.dayKey === expandedDay)
+			.some((day) => {
+				const completion = dayCompletion(day.dayKey);
+				return Boolean(progress[day.dayKey]?.suspicious && completion.completed);
+			});
 	let showImportPanel = $state(false);
 	let dayModeMenuEl: HTMLDivElement | null = null;
 
@@ -1050,11 +1056,11 @@
 							</li>
 				{/each}
 			</ul>
-			{#if hasSuspicious}
-				<p class="mt-3 text-sm text-amber-200">
-					Posible engaño significa que el alumno marcó todas las series del día en menos de 60 segundos. Es posible que las haya marcado sin haber entrenado.
-				</p>
-			{/if}
+				{#if hasSuspicious()}
+					<p class="mt-3 text-sm text-amber-200">
+						Posible engaño significa que el alumno marcó todas las series del día en menos de 60 segundos. Es posible que las haya marcado sin haber entrenado.
+					</p>
+				{/if}
 		</div>
 
 		<div class="order-2 min-w-0 lg:order-3 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 shadow-lg shadow-black/30 text-sm text-slate-300">

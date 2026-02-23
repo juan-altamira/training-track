@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { goto, preloadData } from '$app/navigation';
 	import { DAY_FEEDBACK_MOOD_LABEL, DAY_FEEDBACK_PAIN_LABEL, type DayFeedbackByDay, type DayFeedbackMood, type DayFeedbackPain } from '$lib/dayFeedback';
 	import {
 		WEEK_DAYS,
@@ -41,7 +40,7 @@
 	let showCopyModal = $state(false);
 	let selectedSource = $state('');
 	let expandedDay = $state<string | null>(null);
-	let navigatingBack = $state(false);
+	let showDayModeMenu = $state(false);
 	const MAX_EXERCISES_PER_DAY = 50;
 	let otherClients = $state((data.otherClients ?? []) as OtherClientRow[]);
 	let lazyOtherClients = $state(data.lazyOtherClients === true);
@@ -50,6 +49,30 @@
 	let dayFeedback = $state((data.dayFeedback ?? {}) as DayFeedbackByDay);
 	let feedbackExpanded = $state<Record<string, boolean>>({});
 	const hasSuspicious = WEEK_DAYS.some((d) => progress[d.key]?.suspicious && progress[d.key]?.completed);
+	let showImportPanel = $state(false);
+	let dayModeMenuEl: HTMLDivElement | null = null;
+
+	const DAY_MODE_OPTIONS: Array<{
+		value: RoutineDayLabelMode;
+		label: string;
+		description: string;
+	}> = [
+		{
+			value: 'weekday',
+			label: 'Semanal (Lunes..Domingo)',
+			description: 'Mantiene la vista clásica por semana.'
+		},
+		{
+			value: 'sequential',
+			label: 'Secuencial (Día 1..N)',
+			description: 'Ideal para planes tipo Día 1, Día 2 y Día 3.'
+		},
+		{
+			value: 'custom',
+			label: 'Personalizado',
+			description: 'Permite definir etiquetas propias para cada día.'
+		}
+	];
 
 	const SITE_URL = (data.siteUrl ?? '').replace(/\/?$/, '');
 	const link = `${SITE_URL}/r/${data.client.client_code}`;
@@ -74,11 +97,21 @@
 		defaultDayLabelByKey[dayKey] ??
 		dayKey;
 
+	const totalExercisesInPlan = () =>
+		WEEK_DAYS.reduce((total, day) => total + (plan[day.key]?.exercises?.length ?? 0), 0);
+
+	const hasAnyExercise = () => totalExercisesInPlan() > 0;
+
 	const setDayLabelMode = (mode: RoutineDayLabelMode) => {
 		uiMeta = normalizeRoutineUiMeta({
 			...uiMeta,
 			day_label_mode: mode
 		});
+	};
+
+	const chooseDayLabelMode = (mode: RoutineDayLabelMode) => {
+		setDayLabelMode(mode);
+		showDayModeMenu = false;
 	};
 
 	const updateCustomDayLabel = (dayKey: string, value: string) => {
@@ -98,6 +131,27 @@
 
 	onMount(() => {
 		rememberLastClientRoute(data.client.id);
+
+		const handleGlobalPointerDown = (event: PointerEvent) => {
+			if (!showDayModeMenu || !dayModeMenuEl) return;
+			const target = event.target as Node | null;
+			if (!target || dayModeMenuEl.contains(target)) return;
+			showDayModeMenu = false;
+		};
+
+		const handleGlobalKeyDown = (event: KeyboardEvent) => {
+			if (event.key === 'Escape') {
+				showDayModeMenu = false;
+			}
+		};
+
+		document.addEventListener('pointerdown', handleGlobalPointerDown);
+		document.addEventListener('keydown', handleGlobalKeyDown);
+
+		return () => {
+			document.removeEventListener('pointerdown', handleGlobalPointerDown);
+			document.removeEventListener('keydown', handleGlobalKeyDown);
+		};
 	});
 
 	const freshProgress = (): ProgressState =>
@@ -250,10 +304,6 @@
 		if (lazyOtherClients) {
 			await loadOtherClients();
 		}
-	};
-
-	const warmClientsRoute = () => {
-		void preloadData('/clientes');
 	};
 
 	const saveRoutine = async () => {
@@ -470,13 +520,13 @@
 	};
 </script>
 
-<section class="space-y-6 text-slate-100">
-	<div class="flex flex-wrap items-start justify-between gap-4">
+<section class="text-slate-100">
 		<div>
-			<h1 class="text-3xl font-extrabold tracking-wide text-slate-50">{data.client.name}</h1>
-		</div>
-		<div class="flex w-full flex-col gap-4">
-			<div class="flex flex-col md:flex-row items-stretch md:items-center gap-3 justify-between">
+			<div class="flex justify-center md:hidden">
+				<h1 class="text-center text-3xl font-extrabold tracking-wide text-slate-50">{data.client.name}</h1>
+			</div>
+				<div class="mt-12 flex w-full flex-col gap-4 md:mt-14">
+				<div class="flex flex-col md:flex-row items-stretch md:items-center gap-3 justify-between">
 				<button
 					class="w-full md:w-1/2 rounded-2xl border border-emerald-700/40 bg-gradient-to-r from-emerald-700 to-teal-600 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-emerald-900/30 transition hover:-translate-y-0.5 hover:shadow-emerald-900/50 hover:brightness-110"
 					type="button"
@@ -517,56 +567,52 @@
 						showDeleteConfirm = true;
 						deleteConfirmText = '';
 					}}
-				>
-					Eliminar alumno
-				</button>
+					>
+						Eliminar alumno
+					</button>
+				</div>
+				<div class="space-y-3">
+					<div class="flex">
+						<button
+							type="button"
+							class="w-full rounded-2xl border border-cyan-700/40 bg-gradient-to-r from-[#1a2747] to-[#173861] px-5 py-3 text-left text-base font-semibold text-cyan-50 shadow-lg shadow-cyan-900/30 transition hover:-translate-y-0.5 hover:shadow-cyan-900/50 hover:brightness-110"
+							aria-expanded={showImportPanel}
+							onclick={() => (showImportPanel = !showImportPanel)}
+						>
+							<span class="flex items-center justify-between gap-3">
+								<span>Crea la rutina a partir de un archivo (PDF, Excel, CSV o texto)</span>
+								<svg
+									class={`h-4 w-4 flex-shrink-0 transition-transform ${showImportPanel ? 'rotate-180' : ''}`}
+									fill="none"
+									stroke="currentColor"
+									viewBox="0 0 24 24"
+								>
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+								</svg>
+							</span>
+						</button>
+					</div>
+					{#if showImportPanel}
+						<RoutineImportPanel
+							clientId={data.client.id}
+							initialRoutineVersion={routineVersion}
+							initialUiMeta={uiMeta}
+							onRoutineApplied={applyImportedRoutineUpdate}
+						/>
+					{/if}
+				</div>
 			</div>
 		</div>
-	</div>
-
-		<div class="flex items-center gap-3">
-			<button
-				type="button"
-				onpointerenter={warmClientsRoute}
-				onfocus={warmClientsRoute}
-				onpointerdown={warmClientsRoute}
-				onclick={async () => { navigatingBack = true; await goto('/clientes'); }}
-				disabled={navigatingBack}
-				aria-busy={navigatingBack}
-			class={`back-btn relative inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-gradient-to-r from-[#151827] to-[#0f162b] px-4 py-2.5 text-base text-slate-100 shadow-md shadow-black/30 transition hover:-translate-y-0.5 hover:border-emerald-600 hover:shadow-emerald-900/30 overflow-hidden disabled:cursor-wait ${
-				navigatingBack ? 'loading' : ''
-			}`}
-		>
-			<span class="btn-label flex items-center gap-2">
-				<span aria-hidden="true" class="text-lg leading-none">↩︎</span>
-				<span>{navigatingBack ? 'Volviendo al panel...' : 'Volver al panel'}</span>
-			</span>
-		</button>
-	</div>
 
 	{#if statusMessage}
-		<p class="rounded-lg bg-[#151827] px-3 py-2 text-sm text-emerald-200 border border-emerald-700/40">{statusMessage}</p>
+		<p class="mt-6 rounded-lg border border-emerald-700/40 bg-[#151827] px-3 py-2 text-sm text-emerald-200">{statusMessage}</p>
 	{/if}
 
-	<RoutineImportPanel
-		clientId={data.client.id}
-		initialRoutineVersion={routineVersion}
-		initialUiMeta={uiMeta}
-		onRoutineApplied={applyImportedRoutineUpdate}
-	/>
-
-	<section class="grid gap-6 lg:grid-cols-[2fr,1fr]">
-		<div class="order-3 lg:order-1 space-y-5 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 md:p-6 shadow-lg shadow-black/30">
-			<div class="flex items-center justify-between">
-				<h2 class="text-3xl font-extrabold uppercase tracking-wide text-slate-50">Rutina</h2>
-				<button
-					class="save-cta rounded-lg bg-[#1c2338] px-4 py-2.5 text-base font-medium text-slate-100 hover:bg-[#222b43] disabled:cursor-not-allowed disabled:opacity-70"
-					onclick={saveRoutine}
-					disabled={saving}
-				>
-					<span>{saving ? 'Guardando...' : 'Guardar cambios'}</span>
-				</button>
-			</div>
+			<section class="mt-16 md:mt-[5.5rem] grid gap-6 lg:grid-cols-[2fr,1fr]">
+				<div class="order-3 lg:order-1 space-y-6 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 md:p-6 shadow-lg shadow-black/30">
+				<div class="flex justify-center pt-5 pb-6 md:pt-6 md:pb-7">
+					<h2 class="text-center text-4xl font-serif font-semibold uppercase tracking-[0.18em] text-slate-50">RUTINA</h2>
+				</div>
 
 			{#if feedback && feedbackType !== 'success'}
 				<div class="flex items-center gap-2 rounded-lg px-4 py-2.5 text-base border {feedbackType === 'warning' ? 'bg-amber-900/40 text-amber-200 border-amber-700/50' : 'bg-red-900/40 text-red-200 border-red-700/50'}">
@@ -583,20 +629,60 @@
 				</div>
 			{/if}
 
-			<div class="space-y-3 rounded-xl border border-slate-800 bg-[#0b0d14] p-3">
-				<div class="flex flex-wrap items-center gap-3">
-					<span class="text-xs font-medium uppercase tracking-wide text-slate-400">Modo de días</span>
-					<select
-						class="block min-w-56 rounded-lg border border-slate-700 bg-[#151827] px-3 py-2 text-sm text-slate-100"
-						value={uiMeta.day_label_mode}
-						onchange={(event) =>
-							setDayLabelMode((event.currentTarget as HTMLSelectElement).value as RoutineDayLabelMode)}
-					>
-						<option value="weekday">Semanal (Lunes..Domingo)</option>
-						<option value="sequential">Secuencial (Día 1..N)</option>
-						<option value="custom">Personalizado</option>
-					</select>
-				</div>
+					<div class="space-y-5 rounded-xl border border-slate-800 bg-[#0b0d14] p-4">
+						<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+							<div class="relative" bind:this={dayModeMenuEl}>
+								<button
+									type="button"
+									class="group inline-flex w-auto items-center justify-between gap-2 rounded-xl border border-slate-600/80 bg-gradient-to-b from-[#1a2235] to-[#121a2b] px-4 py-2.5 text-sm font-semibold text-slate-100 shadow-[0_8px_24px_rgba(2,6,23,0.35)] transition hover:border-cyan-500/50 hover:text-cyan-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40"
+									aria-haspopup="menu"
+									aria-expanded={showDayModeMenu}
+									onclick={() => (showDayModeMenu = !showDayModeMenu)}
+								>
+									<span>Modo de días</span>
+									<svg
+										class={`h-4 w-4 flex-shrink-0 text-slate-400 transition-transform group-hover:text-cyan-200 ${showDayModeMenu ? 'rotate-180' : ''}`}
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+									>
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+									</svg>
+								</button>
+								{#if showDayModeMenu}
+									<div
+										role="menu"
+										class="absolute left-0 z-30 mt-2 w-[22rem] overflow-hidden rounded-xl border border-slate-700 bg-[#111827] shadow-xl shadow-black/45"
+									>
+										{#each DAY_MODE_OPTIONS as option}
+											<button
+												type="button"
+												role="menuitemradio"
+												aria-checked={uiMeta.day_label_mode === option.value}
+												class={`flex w-full flex-col items-start gap-1 px-4 py-3 text-left transition ${
+													uiMeta.day_label_mode === option.value
+														? 'bg-slate-700/50 text-slate-50'
+														: 'text-slate-200 hover:bg-[#1a2338]'
+												}`}
+												onclick={() => chooseDayLabelMode(option.value)}
+											>
+												<span class="text-sm font-semibold">{option.label}</span>
+												<span class="text-xs text-slate-400">{option.description}</span>
+											</button>
+										{/each}
+									</div>
+								{/if}
+							</div>
+							{#if hasAnyExercise()}
+								<button
+									class="save-cta w-full rounded-lg bg-[#1c2338] px-4 py-2.5 text-base font-medium text-slate-100 hover:bg-[#222b43] disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+									onclick={saveRoutine}
+									disabled={saving}
+								>
+									<span>{saving ? 'Publicando...' : 'Publicar cambios'}</span>
+								</button>
+							{/if}
+						</div>
 				{#if SHOW_SEQUENTIAL_HIDE_EMPTY_TOGGLE}
 					<label class="flex items-center gap-2 rounded-lg border border-slate-800 bg-[#101523] px-3 py-2 text-xs text-slate-300">
 						<input
@@ -612,7 +698,7 @@
 					</label>
 				{/if}
 
-					<div class="flex gap-2 overflow-x-auto pb-1">
+					<div class="flex gap-2 overflow-x-auto pb-1 pt-1">
 						{#each displayDays(selectedDay) as day}
 							<button
 								type="button"
@@ -781,7 +867,7 @@
 					{/each}
 				{/if}
 
-				<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+				<div class={`grid grid-cols-1 gap-3 ${hasAnyExercise() ? 'sm:grid-cols-3' : 'sm:grid-cols-1'}`}>
 					<button
 						class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-3 text-base font-medium text-slate-100 hover:bg-[#1b1f30] disabled:opacity-50 disabled:cursor-not-allowed"
 						onclick={() => addExercise(selectedDay)}
@@ -790,20 +876,22 @@
 					>
 						+ Agregar ejercicio
 					</button>
-					<button
-						class="save-cta rounded-lg bg-[#1c2338] px-4 py-3 text-base font-medium text-slate-100 hover:bg-[#222b43] disabled:cursor-not-allowed disabled:opacity-70"
-						onclick={saveRoutine}
-						disabled={saving || plan[selectedDay].exercises.length === 0}
-					>
-						<span>{saving ? 'Guardando...' : 'Guardar cambios'}</span>
-					</button>
-					<button
-						class="rounded-lg border border-amber-600/50 bg-amber-900/40 px-4 py-3 text-base font-medium text-amber-200 hover:bg-amber-900/60"
-						onclick={() => (showResetConfirm = true)}
-						type="button"
-					>
-						Resetear progreso
-					</button>
+					{#if hasAnyExercise()}
+						<button
+							class="save-cta rounded-lg bg-[#1c2338] px-4 py-3 text-base font-medium text-slate-100 hover:bg-[#222b43] disabled:cursor-not-allowed disabled:opacity-70"
+							onclick={saveRoutine}
+							disabled={saving}
+						>
+							<span>{saving ? 'Publicando...' : 'Publicar cambios'}</span>
+						</button>
+						<button
+							class="rounded-lg border border-amber-600/50 bg-amber-900/40 px-4 py-3 text-base font-medium text-amber-200 hover:bg-amber-900/60"
+							onclick={() => (showResetConfirm = true)}
+							type="button"
+						>
+							Resetear progreso
+						</button>
+					{/if}
 				</div>
 			</div>
 
@@ -976,15 +1064,14 @@
 			</p>
 		</div>
 
-		<div class="order-4 lg:order-1 rounded-2xl border border-slate-800 bg-gradient-to-br from-[#0f172a] to-[#0b1224] p-4 md:p-6 shadow-lg shadow-black/30 space-y-3">
-			<div class="flex items-center justify-between">
-				<div>
-					<p class="text-sm font-semibold uppercase tracking-[0.12em] text-slate-400">Link de la rutina</p>
-					<p class="mt-1 text-base font-semibold text-emerald-200 break-all">{link}</p>
-					<p class="mt-2 text-xs text-white">El alumno accede sin login; si está archivado verá “acceso desactivado”.</p>
+			<div class="order-4 lg:order-1 self-start rounded-2xl border border-slate-800 bg-gradient-to-br from-[#0f172a] to-[#0b1224] p-4 md:p-6 shadow-lg shadow-black/30 space-y-2">
+				<div class="flex items-center justify-between">
+					<div>
+						<p class="text-sm font-semibold uppercase tracking-[0.12em] text-slate-400">Link de la rutina</p>
+						<p class="mt-1 text-base font-semibold text-emerald-200 break-all">{link}</p>
+					</div>
 				</div>
 			</div>
-		</div>
 		</div>
 	</section>
 
@@ -1192,27 +1279,6 @@
 		}
 		100% {
 			transform: translateX(120%);
-		}
-	}
-	.back-btn.loading::after {
-		content: '';
-		position: absolute;
-		inset: 0;
-		background: linear-gradient(90deg, #10b981 0%, #34d399 100%);
-		transform-origin: left;
-		animation: fillbtn 2s ease-in-out infinite;
-		opacity: 0.9;
-	}
-	.back-btn .btn-label {
-		position: relative;
-		z-index: 1;
-	}
-	@keyframes fillbtn {
-		from {
-			transform: scaleX(0);
-		}
-		to {
-			transform: scaleX(1);
 		}
 	}
 </style>

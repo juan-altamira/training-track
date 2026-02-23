@@ -195,6 +195,9 @@
 		panelMessage = null;
 	};
 
+	const canStartImport = () =>
+		sourceMode === 'file' ? Boolean(selectedFile) : Boolean(rawText.trim());
+
 	const normalizeDraftMode = (value: string | null | undefined): DayLabelMode => {
 		if (value === 'sequential' || value === 'custom') return value;
 		return 'weekday';
@@ -585,45 +588,51 @@
 		</p>
 	</header>
 
-	<div class="space-y-4 rounded-xl border border-slate-700/70 bg-[#101523]/90 p-4 sm:p-5">
-		<div class="grid gap-2 rounded-xl border border-slate-700/70 bg-[#0f1420] p-1 sm:grid-cols-2">
-			<button
-				type="button"
-				class={`rounded-lg px-3 py-2.5 text-sm font-semibold transition ${
-					sourceMode === 'file'
-						? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/30'
-						: 'text-slate-300 hover:bg-[#1a2132]'
-				}`}
-				onclick={() => (sourceMode = 'file')}
-			>
-				Subir archivo
-			</button>
-			<button
-				type="button"
-				class={`rounded-lg px-3 py-2.5 text-sm font-semibold transition ${
-					sourceMode === 'text'
-						? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/30'
-						: 'text-slate-300 hover:bg-[#1a2132]'
-				}`}
-				onclick={() => (sourceMode = 'text')}
-			>
-				Pegar texto
-			</button>
-		</div>
+		<div class="space-y-4 rounded-xl border border-slate-700/70 bg-[#101523]/90 p-4 sm:p-5">
+			<div class="space-y-2">
+				<p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Paso 1 · Elegí la fuente</p>
+				<div class="grid gap-2 rounded-xl border border-slate-700/70 bg-[#0f1420] p-1 sm:grid-cols-2">
+				<button
+					type="button"
+					class={`rounded-lg border px-3 py-2.5 text-sm font-semibold transition ${
+						sourceMode === 'file'
+							? 'border-slate-500/80 bg-slate-700/40 text-slate-50'
+							: 'border-transparent text-slate-400 hover:bg-[#1a2132] hover:text-slate-200'
+					}`}
+					onclick={() => (sourceMode = 'file')}
+				>
+					Desde archivo
+				</button>
+				<button
+					type="button"
+					class={`rounded-lg border px-3 py-2.5 text-sm font-semibold transition ${
+						sourceMode === 'text'
+							? 'border-slate-500/80 bg-slate-700/40 text-slate-50'
+							: 'border-transparent text-slate-400 hover:bg-[#1a2132] hover:text-slate-200'
+					}`}
+					onclick={() => (sourceMode = 'text')}
+				>
+					Desde texto pegado
+				</button>
+			</div>
+				<p class="text-xs text-slate-400">
+					Este selector solo cambia la fuente. Para procesar, usá el botón verde de abajo.
+				</p>
+			</div>
 
 		{#if sourceMode === 'file'}
 			<div class="space-y-2">
 				<label for={FILE_INPUT_ID} class="text-sm font-medium text-slate-200">Archivo de rutina</label>
-				<input
-					id={FILE_INPUT_ID}
-					type="file"
-					accept=".txt,.csv,.xlsx,.docx,.pdf"
-					class="w-full rounded-xl border border-slate-600/70 bg-[#151b2a] px-3 py-3 text-sm text-slate-100 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-700 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-slate-100 hover:border-slate-500"
-					onchange={(event) => {
-						const input = event.currentTarget as HTMLInputElement;
-						selectedFile = input.files?.[0] ?? null;
-					}}
-				/>
+						<input
+							id={FILE_INPUT_ID}
+							type="file"
+							accept=".txt,.csv,.xlsx,.docx,.pdf"
+							class="w-full cursor-pointer rounded-xl border border-slate-600/70 bg-[#151b2a] px-3 py-3 text-sm text-slate-100 transition-colors hover:border-slate-500 file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-emerald-600 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white file:transition-colors file:hover:bg-emerald-500"
+							onchange={(event) => {
+								const input = event.currentTarget as HTMLInputElement;
+								selectedFile = input.files?.[0] ?? null;
+							}}
+						/>
 				<p class="text-xs text-slate-400">Formatos admitidos: TXT, CSV, XLSX, DOCX y PDF digital.</p>
 				{#if selectedFile}
 					<p class="text-xs text-cyan-200">
@@ -644,15 +653,19 @@
 			</div>
 		{/if}
 
-		<div class="flex flex-wrap items-center gap-3">
-			<button
-				type="button"
-				class="inline-flex min-h-11 items-center justify-center rounded-xl border border-emerald-500 bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
-				onclick={startImport}
-				disabled={createBusy || processingBusy}
-			>
-				{createBusy ? 'Iniciando importación...' : 'Iniciar importación'}
-			</button>
+			<div class="flex flex-wrap items-center gap-3">
+				<button
+					type="button"
+					class="inline-flex min-h-11 items-center justify-center rounded-xl border border-emerald-500 bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+					onclick={startImport}
+					disabled={createBusy || processingBusy || !canStartImport()}
+				>
+					{createBusy
+						? 'Iniciando importación...'
+						: sourceMode === 'file'
+							? 'Importar archivo'
+							: 'Importar texto'}
+				</button>
 			{#if job}
 				<button
 					type="button"

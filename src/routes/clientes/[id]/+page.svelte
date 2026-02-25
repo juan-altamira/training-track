@@ -41,6 +41,7 @@
 	let selectedSource = $state('');
 	let expandedDay = $state<string | null>(null);
 	let showDayModeMenu = $state(false);
+	let showCopySourceMenu = $state(false);
 	const MAX_EXERCISES_PER_DAY = 50;
 	let otherClients = $state((data.otherClients ?? []) as OtherClientRow[]);
 	let lazyOtherClients = $state(data.lazyOtherClients === true);
@@ -57,6 +58,7 @@
 			});
 	let showImportPanel = $state(false);
 	let dayModeMenuEl: HTMLDivElement | null = null;
+	let copySourceMenuEl = $state<HTMLDivElement | null>(null);
 
 	const DAY_MODE_OPTIONS: Array<{
 		value: RoutineDayLabelMode;
@@ -120,6 +122,13 @@
 		showDayModeMenu = false;
 	};
 
+	const selectedSourceClient = () => otherClients.find((client) => client.id === selectedSource) ?? null;
+	const selectedSourceLabel = () => selectedSourceClient()?.name ?? 'Elegí un alumno';
+	const selectSourceClient = (clientId: string) => {
+		selectedSource = clientId;
+		showCopySourceMenu = false;
+	};
+
 	const updateCustomDayLabel = (dayKey: string, value: string) => {
 		const nextLabel = sanitizeCustomLabel(value, '');
 		plan = {
@@ -139,15 +148,20 @@
 		rememberLastClientRoute(data.client.id);
 
 		const handleGlobalPointerDown = (event: PointerEvent) => {
-			if (!showDayModeMenu || !dayModeMenuEl) return;
 			const target = event.target as Node | null;
-			if (!target || dayModeMenuEl.contains(target)) return;
-			showDayModeMenu = false;
+			if (!target) return;
+			if (showDayModeMenu && dayModeMenuEl && !dayModeMenuEl.contains(target)) {
+				showDayModeMenu = false;
+			}
+			if (showCopySourceMenu && copySourceMenuEl && !copySourceMenuEl.contains(target)) {
+				showCopySourceMenu = false;
+			}
 		};
 
 		const handleGlobalKeyDown = (event: KeyboardEvent) => {
 			if (event.key === 'Escape') {
 				showDayModeMenu = false;
+				showCopySourceMenu = false;
 			}
 		};
 
@@ -275,6 +289,7 @@
 		if (res.ok) {
 			statusMessage = 'Rutina copiada correctamente';
 			showCopyModal = false;
+			showCopySourceMenu = false;
 			setTimeout(() => (statusMessage = ''), 2500);
 			location.reload();
 		} else {
@@ -306,6 +321,7 @@
 
 	const openCopyModal = async () => {
 		selectedSource = '';
+		showCopySourceMenu = false;
 		showCopyModal = true;
 		if (lazyOtherClients) {
 			await loadOtherClients();
@@ -1218,32 +1234,78 @@
 								Reintentar
 							</button>
 						</div>
-					{:else if otherClients.length > 0}
-						<label class="block text-sm font-medium text-slate-200 mt-6">
-							Seleccioná desde qué alumno querés copiar
-							<select
-							class="mt-3 w-full rounded-xl border border-slate-600 bg-[#0f1322] px-4 py-3 pr-12 text-base text-slate-100 shadow-inner focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-600 appearance-none"
-							bind:value={selectedSource}
-							style="background-image: linear-gradient(45deg, transparent 50%, #94a3b8 50%), linear-gradient(135deg, #94a3b8 50%, transparent 50%); background-position: calc(100% - 18px) 50%, calc(100% - 12px) 50%; background-size: 6px 6px, 6px 6px; background-repeat: no-repeat;"
-						>
-							<option value="">Elegí un alumno</option>
-							{#each otherClients as c}
-								<option value={c.id}>{c.name}</option>
-							{/each}
-						</select>
-					</label>
-					{:else}
-						<p class="text-sm text-slate-400">No tenés otros alumnos para copiar.</p>
+						{:else if otherClients.length > 0}
+							<label class="block text-sm font-medium text-slate-200 mt-6">
+								Seleccioná desde qué alumno querés copiar
+								<div class="relative mt-3" bind:this={copySourceMenuEl}>
+									<button
+										type="button"
+										class={`flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left text-base shadow-inner transition ${
+											showCopySourceMenu
+												? 'border-emerald-500/80 bg-[#0f1d29] text-slate-100 ring-2 ring-emerald-600/40'
+												: 'border-slate-600 bg-[#0f1322] text-slate-100 hover:border-slate-500'
+										}`}
+										aria-haspopup="listbox"
+										aria-expanded={showCopySourceMenu}
+										onclick={() => {
+											showCopySourceMenu = !showCopySourceMenu;
+										}}
+									>
+										<span class={selectedSource ? 'text-slate-100' : 'text-slate-400'}>
+											{selectedSourceLabel()}
+										</span>
+										<svg
+											class={`h-4 w-4 flex-shrink-0 text-slate-400 transition-transform ${showCopySourceMenu ? 'rotate-180' : ''}`}
+											fill="none"
+											stroke="currentColor"
+											viewBox="0 0 24 24"
+										>
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+										</svg>
+									</button>
+									{#if showCopySourceMenu}
+										<div
+											class="absolute z-30 mt-2 max-h-64 w-full overflow-auto rounded-xl border border-slate-600 bg-[#121a2d] p-1 shadow-2xl shadow-black/50"
+											role="listbox"
+											aria-label="Alumnos disponibles"
+										>
+											{#each otherClients as c}
+												<button
+													type="button"
+													class={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm transition ${
+														selectedSource === c.id
+															? 'bg-emerald-600/20 text-emerald-200'
+															: 'text-slate-200 hover:bg-slate-700/40'
+													}`}
+													role="option"
+													aria-selected={selectedSource === c.id}
+													onclick={() => selectSourceClient(c.id)}
+												>
+													<span class="truncate">{c.name}</span>
+													{#if selectedSource === c.id}
+														<svg class="h-4 w-4 flex-shrink-0 text-emerald-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+														</svg>
+													{/if}
+												</button>
+											{/each}
+										</div>
+									{/if}
+								</div>
+						</label>
+						{:else}
+							<p class="text-sm text-slate-400">No tenés otros alumnos para copiar.</p>
 					{/if}
 				<div class="flex justify-end gap-3">
 					<button
 						type="button"
 						class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-2 text-slate-200 hover:bg-[#1b1f30]"
-						onclick={() => {
-							showCopyModal = false;
-							selectedSource = '';
-							otherClientsError = null;
-						}}
+							onclick={() => {
+								showCopyModal = false;
+								showCopySourceMenu = false;
+								selectedSource = '';
+								otherClientsError = null;
+							}}
 					>
 						Cancelar
 					</button>

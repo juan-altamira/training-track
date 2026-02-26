@@ -28,8 +28,10 @@ const NOISE_LINE_REGEX = /^(rutina|semana|objetivo|total|resumen|series?\s+de)\b
 const EXERCISE_PATTERNS = [
 	/^(?:[A-Z]\d+\s*[\.\-\)]?\s*)?(.+?)\s*\(\s*(\d{1,2})\s*[xX]\s*(\d{1,3})(?:\s*[-–]\s*(\d{1,3}))?\s*\)(?:\s*(?:\||•|-)\s*(.*))?$/i,
 	/^(?:[A-Z]\d+\s*[\.\-\)]?\s*)?(.+?)\s*\(\s*(\d{1,2})\s*[xX*]\s*(\d{1,3})(?:\s*(?:[-–]|a|to|\/)\s*(\d{1,3}))?(?:\s*(?:repeticiones?|reps?))?\s*\)(?:\s*(?:\||•|-)\s*(.*))?$/i,
+	/^(?:[A-Z]\d+\s*[\.\-\)]?\s*)?(.+?)(?:\s*[:\-–\/]\s*|\s+)[xX]\s*(\d{1,2})\s*(\d{1,3})(?:\s*(?:[-–]|a|to|\/)\s*(\d{1,3}))?\s*(?:repeticiones?|reps?)?\b(?:\s*(?:\||•|-)\s*(.*))?$/i,
 	/^(?:[A-Z]\d+\s*[\.\-\)]?\s*)?(.+?)\s+(\d{1,2})\s*[xX]\s*(\d{1,3})(?:\s*[-–]\s*(\d{1,3}))?(?:\s*(?:\||•|-)\s*(.*))?$/i,
 	/^(?:[A-Z]\d+\s*[\.\-\)]?\s*)?(.+?)(?:\s*[:\-–\/]\s*|\s+)\(?\s*(\d{1,2})\s*[xX*]\s*(\d{1,3})(?:\s*(?:[-–]|a|to|\/)\s*(\d{1,3}))?\s*(?:repeticiones?|reps?)?\s*\)?\s*\/?(?:\s*(?:\||•|-)\s*(.*)|\s*(.*))?$/i,
+	/^(?:[A-Z]\d+\s*[\.\-\)]?\s*)?(.+?)(?:\s*[:\-–\/]\s*|\s+)\(?\s*(\d{1,2})\s*por\s*(\d{1,3})(?:\s*(?:[-–]|a|to|\/)\s*(\d{1,3}))?\s*(?:repeticiones?|reps?)?\s*\)?\s*\/?(?:\s*(?:\||•|-)\s*(.*)|\s*(.*))?$/i,
 	/^(?:[A-Z]\d+\s*[\.\-\)]?\s*)?(.+?)(?:\s*[:\-–\/]\s*|\s+)\(?\s*(\d{1,2})\s*series?\s*(?:de|x)?\s*(\d{1,3})(?:\s*(?:a|-|–|to|\/)\s*(\d{1,3}))?\s*(?:repeticiones?|reps?)?\s*\)?\s*\/?(?:\s*(.*))?$/i
 ];
 
@@ -77,7 +79,7 @@ const WORD_SERIES_PATTERNS = [
 ];
 
 const PRESCRIPTION_SPAN_PATTERNS = [
-	/\d{1,2}\s*(?:[xX*]|series?\s*(?:de|x)?)\s*\d{1,3}(?:\s*(?:-|–|a|to|\/)\s*\d{1,3})?/gi,
+	/\d{1,2}\s*(?:[xX*]|por|series?\s*(?:de|x)?)\s*\d{1,3}(?:\s*(?:-|–|a|to|\/)\s*\d{1,3})?/gi,
 	/\b(?:uno|una|un|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|dieciseis|dieciséis|diecisiete|dieciocho|diecinueve|veinte)\s+series?\s+de\s+(?:uno|una|un|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|dieciseis|dieciséis|diecisiete|dieciocho|diecinueve|veinte|\d{1,3})\b/giu
 ] as const;
 
@@ -670,6 +672,21 @@ const parseExerciseLine = (line: ParsedLine, confidenceFloor: number): ImportDra
 		};
 	};
 
+	const shouldSwapCompactRepsBySets = (
+		setsCandidate: number,
+		repsCandidate: number,
+		repsMaxCandidate: number | null,
+		matchedChunk: string
+	) => {
+		if (!Number.isFinite(setsCandidate) || !Number.isFinite(repsCandidate)) return false;
+		if (repsMaxCandidate && Number.isFinite(repsMaxCandidate)) return false;
+		if (/\b(?:series?|repeticiones?|reps?|por)\b/i.test(matchedChunk)) return false;
+		if (setsCandidate <= repsCandidate) return false;
+		if (setsCandidate < 6) return false;
+		if (repsCandidate < 2 || repsCandidate > 8) return false;
+		return true;
+	};
+
 	const createNodeFromRaw = (
 		rawName: string,
 		rawNote: string | null,
@@ -697,10 +714,18 @@ const parseExerciseLine = (line: ParsedLine, confidenceFloor: number): ImportDra
 	for (const pattern of EXERCISE_PATTERNS) {
 		const match = normalized.match(pattern);
 		if (!match) continue;
-		const sets = Number.parseInt(match[2] ?? '', 10);
-		const repsMin = Number.parseInt(match[3] ?? '', 10);
+		let sets = Number.parseInt(match[2] ?? '', 10);
+		let repsMin = Number.parseInt(match[3] ?? '', 10);
 		const repsMaxRaw = match[4] ? Number.parseInt(match[4], 10) : null;
 		if (!Number.isFinite(sets) || !Number.isFinite(repsMin)) return null;
+
+		const matchedChunk = match[0] ?? normalized;
+		if (shouldSwapCompactRepsBySets(sets, repsMin, repsMaxRaw, matchedChunk)) {
+			const previousSets = sets;
+			sets = repsMin;
+			repsMin = previousSets;
+		}
+
 		const { rangeMin, repsMax, repsText } = toRange(repsMin, repsMaxRaw);
 
 		return createNodeFromRaw(
@@ -802,6 +827,39 @@ const parseExerciseLine = (line: ParsedLine, confidenceFloor: number): ImportDra
 			Math.max(0.55, confidenceFloor - 0.2)
 		);
 	}
+
+	const repeatedRepScheme = normalized.match(
+		/^(?:[A-Z]\d+\s*[\.\-\)]?\s*)?(.+?)\s+((?:\d{1,3}\s+){1,5}\d{1,3})(?:\s*(?:\||•|-)\s*(.*))?$/i
+	);
+	if (
+		repeatedRepScheme &&
+		!/[xX*]/.test(normalized) &&
+		!/\b(?:series?|repeticiones?|reps?|por)\b/i.test(normalized)
+	) {
+		const schemeValues = (repeatedRepScheme[2] ?? '')
+			.trim()
+			.split(/\s+/)
+			.map((value) => Number.parseInt(value, 10))
+			.filter((value) => Number.isFinite(value) && value > 0 && value <= 99);
+		if (schemeValues.length >= 2) {
+			const sets = schemeValues.length;
+			const repsMin = Math.min(...schemeValues);
+			const repsMax = Math.max(...schemeValues);
+			const repsText = repsMax > repsMin ? `${repsMin}-${repsMax}` : `${repsMin}`;
+			return createNodeFromRaw(
+				repeatedRepScheme[1] ?? '',
+				sanitizeNote(repeatedRepScheme[3] ?? null),
+				{
+					sets,
+					repsMin,
+					repsMax: repsMax > repsMin ? repsMax : null,
+					repsText
+				},
+				Math.max(0.55, confidenceFloor - 0.2)
+			);
+		}
+	}
+
 	return null;
 };
 

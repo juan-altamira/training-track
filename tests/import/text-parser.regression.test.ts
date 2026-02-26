@@ -154,3 +154,50 @@ Remo en Maquina (4x12)`;
 	assert.equal(draft.presentation.day_label_mode, 'sequential');
 	assert.equal(bundle.issues.some((issue) => issue.code === 'day_mapping_required'), false);
 });
+
+test('regression: parses compact mixed prescriptions (8 8 8, x4 10 reps, 12x3, 5por5)', async () => {
+	const raw = `Press banca 8 8 8
+Sentadilla x4 10 reps
+Curl 12x3
+Peso muerto 5por5
+Remo 4*10
+Fondos 3 series de 12`;
+
+	const draft = await parseDraft(raw);
+	const nodes = draft.days[0]?.blocks[0]?.nodes ?? [];
+	assert.equal(nodes.length, 6);
+
+	const byName = (needle: string) =>
+		nodes.find((node) => node.raw_exercise_name.toLowerCase().includes(needle.toLowerCase()));
+
+	const press = byName('press banca');
+	assert.ok(press);
+	assert.equal(press.sets, 3);
+	assert.equal(press.reps_min, 8);
+	assert.equal(press.reps_max, null);
+
+	const sentadilla = byName('sentadilla');
+	assert.ok(sentadilla);
+	assert.equal(sentadilla.sets, 4);
+	assert.equal(sentadilla.reps_min, 10);
+
+	const curl = byName('curl');
+	assert.ok(curl);
+	assert.equal(curl.sets, 3);
+	assert.equal(curl.reps_min, 12);
+
+	const pesoMuerto = byName('peso muerto');
+	assert.ok(pesoMuerto);
+	assert.equal(pesoMuerto.sets, 5);
+	assert.equal(pesoMuerto.reps_min, 5);
+
+	const remo = byName('remo');
+	assert.ok(remo);
+	assert.equal(remo.sets, 4);
+	assert.equal(remo.reps_min, 10);
+
+	const fondos = byName('fondos');
+	assert.ok(fondos);
+	assert.equal(fondos.sets, 3);
+	assert.equal(fondos.reps_min, 12);
+});

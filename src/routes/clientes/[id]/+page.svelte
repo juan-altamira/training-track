@@ -45,6 +45,7 @@
 	let showDayModeMenu = $state(false);
 	let showCopySourceMenu = $state(false);
 	const MAX_EXERCISES_PER_DAY = 50;
+	const UNDO_DELETE_TIMEOUT_MS = 6000;
 	let otherClients = $state((data.otherClients ?? []) as OtherClientRow[]);
 	let lazyOtherClients = $state(data.lazyOtherClients === true);
 	let loadingOtherClients = $state(false);
@@ -173,6 +174,7 @@
 		return () => {
 			document.removeEventListener('pointerdown', handleGlobalPointerDown);
 			document.removeEventListener('keydown', handleGlobalKeyDown);
+			clearDeleteUndoTimer();
 		};
 	});
 
@@ -184,6 +186,16 @@
 
 	const MAX_EXERCISE_NAME_LENGTH = 100;
 	const MAX_SPECIAL_REPS_LENGTH = 80;
+	type DeletedExerciseBatchItem = {
+		dayKey: string;
+		exercise: RoutineExercise;
+		deletedIndex: number;
+	};
+
+	let deletedExercisesBatch = $state<DeletedExerciseBatchItem[]>([]);
+	let showDeleteUndoSnackbar = $state(false);
+	let deletedBatchSnapshotsByDay: Record<string, RoutineExercise[]> = {};
+	let deleteUndoTimer: ReturnType<typeof setTimeout> | null = null;
 
 	const getExerciseRepsMode = (exercise: RoutineExercise) => getRoutineExerciseRepsMode(exercise);
 
@@ -192,6 +204,90 @@
 
 	const getExerciseSpecialPreview = (exercise: RoutineExercise) =>
 		formatSpecialRepsForDisplay(getExerciseSpecialReps(exercise));
+
+	const clearDeleteUndoTimer = () => {
+		if (deleteUndoTimer) {
+			clearTimeout(deleteUndoTimer);
+			deleteUndoTimer = null;
+		}
+	};
+
+	const resetDeleteUndoBatch = () => {
+		clearDeleteUndoTimer();
+		deletedExercisesBatch = [];
+		deletedBatchSnapshotsByDay = {};
+		showDeleteUndoSnackbar = false;
+	};
+
+	const scheduleDeleteUndoBatchReset = () => {
+		clearDeleteUndoTimer();
+		deleteUndoTimer = setTimeout(() => {
+			resetDeleteUndoBatch();
+		}, UNDO_DELETE_TIMEOUT_MS);
+	};
+
+	const undoDeletedExercises = () => {
+		if (deletedExercisesBatch.length === 0) return;
+
+		const deletedByDay = new Map<string, Map<string, DeletedExerciseBatchItem>>();
+		for (const item of deletedExercisesBatch) {
+			if (!deletedByDay.has(item.dayKey)) {
+				deletedByDay.set(item.dayKey, new Map());
+			}
+			deletedByDay.get(item.dayKey)?.set(item.exercise.id, {
+				...item,
+				exercise: structuredClone(item.exercise)
+			});
+		}
+
+		const nextPlan = structuredClone(plan);
+		for (const [dayKey, snapshot] of Object.entries(deletedBatchSnapshotsByDay)) {
+			const currentExercises = nextPlan[dayKey]?.exercises ?? [];
+			const currentById = new Map(currentExercises.map((exercise) => [exercise.id, exercise]));
+			const deletedExercisesMap = deletedByDay.get(dayKey) ?? new Map<string, DeletedExerciseBatchItem>();
+			const restored: RoutineExercise[] = [];
+			const usedIds = new Set<string>();
+
+			for (const baseExercise of snapshot) {
+				const currentExercise = currentById.get(baseExercise.id);
+				if (currentExercise) {
+					restored.push(currentExercise);
+					usedIds.add(baseExercise.id);
+					continue;
+				}
+				const deletedExerciseItem = deletedExercisesMap.get(baseExercise.id);
+				if (deletedExerciseItem) {
+					restored.push(structuredClone(deletedExerciseItem.exercise));
+					usedIds.add(baseExercise.id);
+				}
+			}
+
+			for (const currentExercise of currentExercises) {
+				if (!usedIds.has(currentExercise.id)) {
+					restored.push(currentExercise);
+					usedIds.add(currentExercise.id);
+				}
+			}
+
+			const remainingDeletedItems = [...deletedExercisesMap.values()]
+				.filter((item) => !usedIds.has(item.exercise.id))
+				.sort((a, b) => a.deletedIndex - b.deletedIndex);
+			for (const item of remainingDeletedItems) {
+				if (!usedIds.has(item.exercise.id)) {
+					restored.push(structuredClone(item.exercise));
+					usedIds.add(item.exercise.id);
+				}
+			}
+
+			nextPlan[dayKey] = {
+				...nextPlan[dayKey],
+				exercises: restored.map((exercise, index) => ({ ...exercise, order: index }))
+			};
+		}
+
+		plan = nextPlan;
+		resetDeleteUndoBatch();
+	};
 
 	const validateExercises = (dayKey: string): string | null => {
 		const exercises = plan[dayKey].exercises;
@@ -288,8 +384,31 @@
 	};
 
 	const removeExercise = (dayKey: string, id: string) => {
-		const exercises = plan[dayKey].exercises.filter((ex) => ex.id !== id);
+		const currentExercises = plan[dayKey].exercises;
+		const deletedIndex = currentExercises.findIndex((ex) => ex.id === id);
+		if (deletedIndex < 0) return;
+
+		if (!deletedBatchSnapshotsByDay[dayKey]) {
+			deletedBatchSnapshotsByDay = {
+				...deletedBatchSnapshotsByDay,
+				[dayKey]: structuredClone(currentExercises)
+			};
+		}
+
+		const deletedExercise = structuredClone(currentExercises[deletedIndex]);
+		const exercises = currentExercises.filter((ex) => ex.id !== id);
 		plan = { ...plan, [dayKey]: { ...plan[dayKey], exercises } };
+
+		deletedExercisesBatch = [
+			...deletedExercisesBatch,
+			{
+				dayKey,
+				exercise: deletedExercise,
+				deletedIndex
+			}
+		];
+		showDeleteUndoSnackbar = true;
+		scheduleDeleteUndoBatchReset();
 	};
 
 	const copyLink = async () => {
@@ -304,6 +423,7 @@
 		uiMeta: RoutineUiMeta | null;
 		routineVersion: number;
 	}) => {
+		resetDeleteUndoBatch();
 		plan = structuredClone(payload.plan);
 		uiMeta = normalizeRoutineUiMeta(payload.uiMeta ?? null);
 		routineVersion = payload.routineVersion;
@@ -1207,6 +1327,26 @@
 			</div>
 		</div>
 	</section>
+
+	{#if showDeleteUndoSnackbar && deletedExercisesBatch.length > 0}
+		<div class="pointer-events-none fixed inset-x-0 bottom-4 z-[60] flex justify-center px-4">
+			<div class="pointer-events-auto flex w-full max-w-xl items-center justify-between gap-3 rounded-2xl border border-slate-700/80 bg-[#0f1728]/95 px-4 py-3 text-slate-100 shadow-[0_16px_40px_rgba(0,0,0,0.45)] backdrop-blur">
+				<div class="flex items-center gap-2 text-sm font-semibold">
+					<svg class="h-5 w-5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7h16m-6 0V5.5a1.5 1.5 0 0 0-3 0V7m-4 0 .7 11.2A2 2 0 0 0 9.7 20h4.6a2 2 0 0 0 2-1.8L17 7M10 10.5v6M14 10.5v6" />
+					</svg>
+					<span>{deletedExercisesBatch.length === 1 ? 'Ejercicio eliminado' : `${deletedExercisesBatch.length} ejercicios eliminados`}</span>
+				</div>
+				<button
+					type="button"
+					class="rounded-lg border border-cyan-500/45 bg-[#13213d] px-3.5 py-2 text-sm font-semibold text-cyan-100 transition hover:bg-[#173056] hover:border-cyan-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/45"
+					onclick={undoDeletedExercises}
+				>
+					Deshacer
+				</button>
+			</div>
+		</div>
+	{/if}
 
 	{#if showDeleteConfirm}
 		<div class="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm px-4">

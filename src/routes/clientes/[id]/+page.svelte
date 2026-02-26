@@ -1265,7 +1265,7 @@
 									</button>
 									{#if showCopySourceMenu}
 										<div
-											class="absolute z-30 mt-2 max-h-64 w-full overflow-auto rounded-xl border border-slate-600 bg-[#121a2d] p-1 shadow-2xl shadow-black/50"
+											class="copy-source-scrollbar absolute z-30 mt-2 max-h-64 w-full overflow-auto rounded-xl border border-slate-600 bg-[#121a2d] p-1 shadow-2xl shadow-black/50"
 											role="listbox"
 											aria-label="Alumnos disponibles"
 										>
@@ -1323,11 +1323,33 @@
 	{/if}
 </section>
 
-<style>
-	.save-cta {
-		position: relative;
-		overflow: hidden;
-	}
+	<style>
+		.copy-source-scrollbar {
+			scrollbar-width: thin;
+			scrollbar-color: rgba(52, 211, 153, 0.65) rgba(15, 19, 34, 0.9);
+		}
+		.copy-source-scrollbar::-webkit-scrollbar {
+			width: 10px;
+		}
+		.copy-source-scrollbar::-webkit-scrollbar-track {
+			background: rgba(15, 19, 34, 0.95);
+			border-left: 1px solid rgba(148, 163, 184, 0.18);
+			border-radius: 999px;
+		}
+		.copy-source-scrollbar::-webkit-scrollbar-thumb {
+			background: linear-gradient(180deg, rgba(45, 212, 191, 0.9), rgba(16, 185, 129, 0.9));
+			border-radius: 999px;
+			border: 2px solid rgba(15, 19, 34, 0.95);
+			box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.25);
+		}
+		.copy-source-scrollbar::-webkit-scrollbar-thumb:hover {
+			background: linear-gradient(180deg, rgba(94, 234, 212, 0.95), rgba(34, 197, 94, 0.95));
+		}
+
+		.save-cta {
+			position: relative;
+			overflow: hidden;
+		}
 	.save-cta:not(:disabled)::after {
 		content: '';
 		position: absolute;

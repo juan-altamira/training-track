@@ -175,6 +175,7 @@
 			document.removeEventListener('pointerdown', handleGlobalPointerDown);
 			document.removeEventListener('keydown', handleGlobalKeyDown);
 			clearDeleteUndoTimer();
+			clearDeleteUndoTicker();
 		};
 	});
 
@@ -196,6 +197,9 @@
 	let showDeleteUndoSnackbar = $state(false);
 	let deletedBatchSnapshotsByDay: Record<string, RoutineExercise[]> = {};
 	let deleteUndoTimer: ReturnType<typeof setTimeout> | null = null;
+	let deleteUndoTicker: ReturnType<typeof setInterval> | null = null;
+	let deleteUndoDeadlineTs = 0;
+	let deleteUndoSecondsLeft = $state(0);
 
 	const getExerciseRepsMode = (exercise: RoutineExercise) => getRoutineExerciseRepsMode(exercise);
 
@@ -212,8 +216,27 @@
 		}
 	};
 
+	const clearDeleteUndoTicker = () => {
+		if (deleteUndoTicker) {
+			clearInterval(deleteUndoTicker);
+			deleteUndoTicker = null;
+		}
+	};
+
+	const updateDeleteUndoSecondsLeft = () => {
+		if (!deleteUndoDeadlineTs) {
+			deleteUndoSecondsLeft = 0;
+			return;
+		}
+		const msLeft = Math.max(0, deleteUndoDeadlineTs - Date.now());
+		deleteUndoSecondsLeft = Math.ceil(msLeft / 1000);
+	};
+
 	const resetDeleteUndoBatch = () => {
 		clearDeleteUndoTimer();
+		clearDeleteUndoTicker();
+		deleteUndoDeadlineTs = 0;
+		deleteUndoSecondsLeft = 0;
 		deletedExercisesBatch = [];
 		deletedBatchSnapshotsByDay = {};
 		showDeleteUndoSnackbar = false;
@@ -221,6 +244,10 @@
 
 	const scheduleDeleteUndoBatchReset = () => {
 		clearDeleteUndoTimer();
+		clearDeleteUndoTicker();
+		deleteUndoDeadlineTs = Date.now() + UNDO_DELETE_TIMEOUT_MS;
+		updateDeleteUndoSecondsLeft();
+		deleteUndoTicker = setInterval(updateDeleteUndoSecondsLeft, 200);
 		deleteUndoTimer = setTimeout(() => {
 			resetDeleteUndoBatch();
 		}, UNDO_DELETE_TIMEOUT_MS);
@@ -236,11 +263,11 @@
 			}
 			deletedByDay.get(item.dayKey)?.set(item.exercise.id, {
 				...item,
-				exercise: structuredClone(item.exercise)
+				exercise: { ...item.exercise }
 			});
 		}
 
-		const nextPlan = structuredClone(plan);
+		const nextPlan: RoutinePlan = { ...plan };
 		for (const [dayKey, snapshot] of Object.entries(deletedBatchSnapshotsByDay)) {
 			const currentExercises = nextPlan[dayKey]?.exercises ?? [];
 			const currentById = new Map(currentExercises.map((exercise) => [exercise.id, exercise]));
@@ -257,7 +284,7 @@
 				}
 				const deletedExerciseItem = deletedExercisesMap.get(baseExercise.id);
 				if (deletedExerciseItem) {
-					restored.push(structuredClone(deletedExerciseItem.exercise));
+					restored.push({ ...deletedExerciseItem.exercise });
 					usedIds.add(baseExercise.id);
 				}
 			}
@@ -274,7 +301,7 @@
 				.sort((a, b) => a.deletedIndex - b.deletedIndex);
 			for (const item of remainingDeletedItems) {
 				if (!usedIds.has(item.exercise.id)) {
-					restored.push(structuredClone(item.exercise));
+					restored.push({ ...item.exercise });
 					usedIds.add(item.exercise.id);
 				}
 			}
@@ -391,11 +418,11 @@
 		if (!deletedBatchSnapshotsByDay[dayKey]) {
 			deletedBatchSnapshotsByDay = {
 				...deletedBatchSnapshotsByDay,
-				[dayKey]: structuredClone(currentExercises)
+				[dayKey]: currentExercises.map((exercise) => ({ ...exercise }))
 			};
 		}
 
-		const deletedExercise = structuredClone(currentExercises[deletedIndex]);
+		const deletedExercise = { ...currentExercises[deletedIndex] };
 		const exercises = currentExercises.filter((ex) => ex.id !== id);
 		plan = { ...plan, [dayKey]: { ...plan[dayKey], exercises } };
 
@@ -1331,12 +1358,15 @@
 	{#if showDeleteUndoSnackbar && deletedExercisesBatch.length > 0}
 		<div class="pointer-events-none fixed inset-x-0 bottom-4 z-[60] flex justify-center px-4">
 			<div class="pointer-events-auto flex w-full max-w-xl items-center justify-between gap-3 rounded-2xl border border-slate-700/80 bg-[#0f1728]/95 px-4 py-3 text-slate-100 shadow-[0_16px_40px_rgba(0,0,0,0.45)] backdrop-blur">
-				<div class="flex items-center gap-2 text-sm font-semibold">
-					<svg class="h-5 w-5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7h16m-6 0V5.5a1.5 1.5 0 0 0-3 0V7m-4 0 .7 11.2A2 2 0 0 0 9.7 20h4.6a2 2 0 0 0 2-1.8L17 7M10 10.5v6M14 10.5v6" />
-					</svg>
-					<span>{deletedExercisesBatch.length === 1 ? 'Ejercicio eliminado' : `${deletedExercisesBatch.length} ejercicios eliminados`}</span>
-				</div>
+					<div class="flex items-center gap-2 text-sm font-semibold">
+						<svg class="h-5 w-5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7h16m-6 0V5.5a1.5 1.5 0 0 0-3 0V7m-4 0 .7 11.2A2 2 0 0 0 9.7 20h4.6a2 2 0 0 0 2-1.8L17 7M10 10.5v6M14 10.5v6" />
+						</svg>
+						<span>{deletedExercisesBatch.length === 1 ? 'Ejercicio eliminado' : `${deletedExercisesBatch.length} ejercicios eliminados`}</span>
+						<span class="rounded-full border border-slate-600/80 bg-[#151f33] px-2 py-0.5 text-xs font-semibold text-slate-300 tabular-nums">
+							{deleteUndoSecondsLeft}s
+						</span>
+					</div>
 				<button
 					type="button"
 					class="rounded-lg border border-cyan-500/45 bg-[#13213d] px-3.5 py-2 text-sm font-semibold text-cyan-100 transition hover:bg-[#173056] hover:border-cyan-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/45"

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
 	IMPORT_COMMIT_POLICY,
+	IMPORT_INFERENCE_REASON,
 	IMPORT_ISSUE_SEVERITY,
 	IMPORT_JOB_SCOPE,
 	IMPORT_JOB_STATUS,
@@ -37,15 +38,95 @@ const splitMetaSchema = z.object({
 	tail_original: z.string().nullable()
 });
 
+const parsedBlockContextSchema = z.union([
+	z.object({
+		kind: z.literal('circuit'),
+		rounds: z.number().int().positive().optional(),
+		header_text: z.string().min(1),
+		header_unit_id: z.string().min(1)
+	}),
+	z.object({
+		kind: z.literal('superset'),
+		group_id: z.string().optional(),
+		index: z.number().int().positive().optional(),
+		header_text: z.string().min(1),
+		header_unit_id: z.string().min(1)
+	})
+]);
+
+const parsedShapeBaseSchema = z.object({
+	version: z.literal(1),
+	evidence: z.enum(['explicit', 'heuristic']),
+	inference_reasons: z.array(z.enum(IMPORT_INFERENCE_REASON)).optional(),
+	block: parsedBlockContextSchema.optional()
+});
+
+const fixedShapeSchema = parsedShapeBaseSchema.extend({
+	kind: z.literal('fixed'),
+	sets: z.number().int().min(1).max(50),
+	reps_min: z.number().int().min(1),
+	reps_max: z.null().optional()
+});
+
+const rangeShapeSchema = parsedShapeBaseSchema
+	.extend({
+		kind: z.literal('range'),
+		sets: z.number().int().min(1).max(50),
+		reps_min: z.number().int().min(1),
+		reps_max: z.number().int().min(1)
+	})
+	.refine((shape) => shape.reps_max >= shape.reps_min, {
+		message: 'reps_max must be >= reps_min',
+		path: ['reps_max']
+	});
+
+const schemeShapeSchema = parsedShapeBaseSchema
+	.extend({
+		kind: z.literal('scheme'),
+		sets: z.number().int().min(1).max(50),
+		reps_list: z.array(z.number().int().min(1)).min(1)
+	})
+	.refine((shape) => shape.reps_list.length === shape.sets, {
+		message: 'reps_list length must equal sets',
+		path: ['reps_list']
+	});
+
+const amrapShapeSchema = parsedShapeBaseSchema.extend({
+	kind: z.literal('amrap'),
+	sets: z.number().int().min(1).max(50)
+});
+
+const loadLadderEntrySchema = z.object({
+	weight: z.number().positive(),
+	reps: z.number().int().min(1),
+	unit: z.enum(['kg', 'lb']).nullable()
+});
+
+const loadLadderShapeSchema = parsedShapeBaseSchema.extend({
+	kind: z.literal('load_ladder'),
+	load_entries: z.array(loadLadderEntrySchema).min(2)
+});
+
+const parsedShapeSchema = z.union([
+	fixedShapeSchema,
+	rangeShapeSchema,
+	schemeShapeSchema,
+	amrapShapeSchema,
+	loadLadderShapeSchema
+]);
+
 const draftNodeSchema = z.object({
 	id: z.string().min(1),
 	source_raw_name: z.string().min(1),
 	raw_exercise_name: z.string().min(1),
 	sets: z.number().int().positive().nullable(),
+	reps_mode: z.enum(['number', 'special']).default('number'),
 	reps_text: z.string().nullable(),
 	reps_min: z.number().int().positive().nullable(),
 	reps_max: z.number().int().positive().nullable(),
+	reps_special: z.string().max(80).nullable(),
 	note: z.string().nullable(),
+	parsed_shape: parsedShapeSchema.nullable().optional(),
 	split_meta: splitMetaSchema.nullable(),
 	field_meta: z.object({
 		day: nodeFieldMetaSchema,
@@ -53,7 +134,13 @@ const draftNodeSchema = z.object({
 		sets: nodeFieldMetaSchema,
 		reps: nodeFieldMetaSchema,
 		note: nodeFieldMetaSchema.nullable()
-	})
+	}),
+	debug: z
+		.object({
+			path: z.enum(['contract', 'legacy']),
+			struct_tokens_used_count: z.number().int().nonnegative()
+		})
+		.optional()
 });
 
 const draftBlockSchema = z.object({
@@ -87,11 +174,15 @@ export const importDraftSchema = z.object({
 		required_fields_ratio: z.number().min(0).max(1),
 		lines_in: z.number().int().nonnegative().optional(),
 		lines_after_split: z.number().int().nonnegative().optional(),
-		lines_with_prescription_detected: z.number().int().nonnegative().optional(),
-		exercise_nodes_out: z.number().int().nonnegative().optional(),
-		multi_exercise_splits_applied: z.number().int().nonnegative().optional(),
-		unresolved_multi_exercise_lines: z.number().int().nonnegative().optional()
-	}),
+			lines_with_prescription_detected: z.number().int().nonnegative().optional(),
+			exercise_nodes_out: z.number().int().nonnegative().optional(),
+			multi_exercise_splits_applied: z.number().int().nonnegative().optional(),
+			unresolved_multi_exercise_lines: z.number().int().nonnegative().optional(),
+			contract_lines_total: z.number().int().nonnegative().optional(),
+			contract_lines_parsed: z.number().int().nonnegative().optional(),
+			contract_lines_failed_invariants: z.number().int().nonnegative().optional(),
+			legacy_fallback_hits: z.number().int().nonnegative().optional()
+		}),
 	presentation: z
 		.object({
 			day_label_mode: z.enum(['weekday', 'sequential', 'custom'])

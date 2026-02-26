@@ -4,6 +4,7 @@ import type {
 	RoutineDay,
 	RoutineDayLabelMode,
 	RoutineExercise,
+	RoutineRepsMode,
 	RoutinePlan,
 	RoutineUiMeta
 } from './types';
@@ -20,6 +21,7 @@ export const WEEK_DAYS: RoutineDay[] = [
 
 const VALID_DAY_LABEL_MODES = new Set<RoutineDayLabelMode>(['weekday', 'sequential', 'custom']);
 const MAX_CUSTOM_DAY_LABEL_LENGTH = 40;
+const MAX_SPECIAL_REPS_LENGTH = 80;
 
 export const normalizeLabelForCompare = (value: string | null | undefined) =>
 	(value ?? '')
@@ -50,6 +52,24 @@ export const normalizeRoutineUiMeta = (input?: RoutineUiMeta | null): Required<R
 				? input.hide_empty_days_in_sequential
 				: true
 	};
+};
+
+export const sanitizeSpecialRepsText = (value: string | null | undefined) =>
+	(value ?? '')
+		.replace(/[\u0000-\u001F\u007F]/g, '')
+		.trim()
+		.slice(0, MAX_SPECIAL_REPS_LENGTH);
+
+export const formatSpecialRepsForDisplay = (value: string | null | undefined) => {
+	const cleaned = sanitizeSpecialRepsText(value);
+	if (!cleaned) return '';
+	if (cleaned.toLowerCase() === 'amrap') return 'AMRAP';
+	return cleaned;
+};
+
+export const getRoutineExerciseRepsMode = (exercise: RoutineExercise): RoutineRepsMode => {
+	if (exercise.repsMode === 'special') return 'special';
+	return 'number';
 };
 
 export const resolveEffectiveDayLabelMode = (
@@ -174,11 +194,18 @@ export const normalizePlan = (plan?: RoutinePlan | null, regenerateIds = false):
 			base[day.key] = {
 				key: day.key,
 				label: sanitizeCustomLabel(plan[day.key]?.label, day.label),
-				exercises: (plan[day.key]?.exercises || []).map((ex, idx) => ({
-					...ex,
-					id: regenerateIds ? uuid() : (ex.id || uuid()),
-					order: ex.order ?? idx
-				}))
+				exercises: (plan[day.key]?.exercises || []).map((ex, idx) => {
+					const repsSpecial = sanitizeSpecialRepsText(ex.repsSpecial);
+					const repsMode: RoutineRepsMode =
+						ex.repsMode === 'special' && repsSpecial ? 'special' : 'number';
+					return {
+						...ex,
+						id: regenerateIds ? uuid() : (ex.id || uuid()),
+						order: ex.order ?? idx,
+						repsMode,
+						repsSpecial: repsSpecial || null
+					};
+				})
 			};
 		}
 	}
@@ -229,8 +256,14 @@ export const formatPrescription = (exercise: RoutineExercise): string => {
 	const sets = getTargetSets(exercise);
 	const repsMin = exercise.repsMin;
 	const repsMax = exercise.repsMax;
+	const repsMode = getRoutineExerciseRepsMode(exercise);
+	const repsSpecial = formatSpecialRepsForDisplay(exercise.repsSpecial);
 	
 	if (!sets || sets === 0) return '';
+	if (repsMode === 'special' && repsSpecial) {
+		const seriesWord = sets === 1 ? 'serie' : 'series';
+		return `${sets} ${seriesWord} x ${repsSpecial}`;
+	}
 	
 	let repsText = '';
 	if (repsMin != null && repsMin > 0) {
@@ -251,10 +284,15 @@ export const formatPrescriptionLong = (exercise: RoutineExercise): string => {
 	const sets = getTargetSets(exercise);
 	const repsMin = exercise.repsMin;
 	const repsMax = exercise.repsMax;
+	const repsMode = getRoutineExerciseRepsMode(exercise);
+	const repsSpecial = formatSpecialRepsForDisplay(exercise.repsSpecial);
 	
 	if (!sets || sets === 0) return '';
 	
 	const seriesWord = sets === 1 ? 'serie' : 'series';
+	if (repsMode === 'special' && repsSpecial) {
+		return `${sets} ${seriesWord} x ${repsSpecial}`;
+	}
 	
 	if (repsMin != null && repsMin > 0) {
 		if (repsMax != null && repsMax > repsMin) {

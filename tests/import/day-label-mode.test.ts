@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
 	createEmptyPlan,
+	formatPrescriptionLong,
 	getDisplayDays,
 	normalizePlan,
 	resolveEffectiveDayLabelMode
@@ -69,4 +70,20 @@ test('normalizePlan: preserves existing labels when provided', () => {
 	const normalized = normalizePlan(input);
 	assert.equal(normalized['monday'].label, 'Empuje A');
 	assert.equal(normalized['tuesday'].label, 'Martes');
+});
+
+test('formatPrescriptionLong: special reps uses series x texto', () => {
+	const plan = createEmptyPlan();
+	plan['monday'].exercises = [
+		{
+			id: 'ex-special',
+			name: 'Dominadas',
+			scheme: '',
+			order: 0,
+			totalSets: 3,
+			repsMode: 'special',
+			repsSpecial: 'amrap'
+		}
+	];
+	assert.equal(formatPrescriptionLong(plan['monday'].exercises[0]), '3 series x AMRAP');
 });

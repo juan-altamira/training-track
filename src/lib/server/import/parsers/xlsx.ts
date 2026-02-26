@@ -39,7 +39,14 @@ const detectHeaderKey = (raw: string): string => {
 
 const parseReps = (raw: string) => {
 	const value = normalizeLine(raw);
-	if (!value) return { repsMin: null as number | null, repsMax: null as number | null, repsText: null as string | null };
+	if (!value)
+		return {
+			repsMin: null as number | null,
+			repsMax: null as number | null,
+			repsText: null as string | null,
+			repsMode: 'number' as const,
+			repsSpecial: null as string | null
+		};
 	const range = value.match(/^(\d{1,3})\s*[-–]\s*(\d{1,3})$/);
 	if (range) {
 		const min = Number.parseInt(range[1], 10);
@@ -47,15 +54,29 @@ const parseReps = (raw: string) => {
 		return {
 			repsMin: min,
 			repsMax: max >= min ? max : null,
-			repsText: `${min}-${max}`
+			repsText: `${min}-${max}`,
+			repsMode: 'number' as const,
+			repsSpecial: null as string | null
 		};
 	}
 	const exact = value.match(/^(\d{1,3})$/);
 	if (exact) {
 		const reps = Number.parseInt(exact[1], 10);
-		return { repsMin: reps, repsMax: null, repsText: `${reps}` };
+		return {
+			repsMin: reps,
+			repsMax: null,
+			repsText: `${reps}`,
+			repsMode: 'number' as const,
+			repsSpecial: null as string | null
+		};
 	}
-	return { repsMin: null, repsMax: null, repsText: value };
+	return {
+		repsMin: null,
+		repsMax: null,
+		repsText: value,
+		repsMode: 'special' as const,
+		repsSpecial: value
+	};
 };
 
 const rowToNode = (
@@ -80,6 +101,8 @@ const rowToNode = (
 	let repsMin: number | null = null;
 	let repsMax: number | null = null;
 	let repsText: string | null = null;
+	let repsMode: 'number' | 'special' = 'number';
+	let repsSpecial: string | null = null;
 
 	if (Number.isFinite(repsFromExplicit.min) && repsFromExplicit.min > 0) {
 		repsMin = repsFromExplicit.min;
@@ -88,11 +111,15 @@ const rowToNode = (
 				? repsFromExplicit.max
 				: null;
 		repsText = repsMax ? `${repsMin}-${repsMax}` : `${repsMin}`;
+		repsMode = 'number';
+		repsSpecial = null;
 	} else {
 		const parsed = parseReps(String(row.reps ?? row.repeticiones ?? ''));
 		repsMin = parsed.repsMin;
 		repsMax = parsed.repsMax;
 		repsText = parsed.repsText;
+		repsMode = parsed.repsMode;
+		repsSpecial = parsed.repsSpecial;
 	}
 
 	const confidence = toConfidence(confidenceScore);
@@ -111,9 +138,11 @@ const rowToNode = (
 			source_raw_name: name,
 			raw_exercise_name: name,
 			sets,
+			reps_mode: repsMode,
 			reps_text: repsText,
 			reps_min: repsMin,
 			reps_max: repsMax,
+			reps_special: repsSpecial,
 			note: noteRaw || null,
 			split_meta: null,
 			field_meta: {
@@ -146,8 +175,8 @@ const toDraft = (
 		if (
 			parsed.node.raw_exercise_name &&
 			parsed.node.sets &&
-			parsed.node.reps_min &&
-			parsed.node.reps_text
+			((parsed.node.reps_mode === 'number' && parsed.node.reps_min && parsed.node.reps_text) ||
+				(parsed.node.reps_mode === 'special' && parsed.node.reps_special))
 		) {
 			requiredFields += 1;
 		}

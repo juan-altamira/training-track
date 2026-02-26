@@ -204,20 +204,20 @@
 		if (!incoming) return null;
 		const fallbackMode = normalizeDraftMode(initialUiMeta?.day_label_mode);
 		const mode = normalizeDraftMode(incoming.presentation?.day_label_mode ?? fallbackMode);
-		const normalizedDays = incoming.days.map((day, index) => ({
-			...day,
-			mapped_day_key:
-				day.mapped_day_key &&
-				IMPORT_WEEK_DAY_KEYS.includes(
+			const normalizedDays = incoming.days.map((day, index) => ({
+				...day,
+				mapped_day_key:
+					day.mapped_day_key &&
+					IMPORT_WEEK_DAY_KEYS.includes(
 					day.mapped_day_key as (typeof IMPORT_WEEK_DAY_KEYS)[number]
 				)
 					? (day.mapped_day_key as (typeof IMPORT_WEEK_DAY_KEYS)[number])
 					: IMPORT_WEEK_DAY_KEYS[index] ?? null,
-			display_label:
-				typeof day.display_label === 'string' && day.display_label.trim()
-					? day.display_label.trim()
-					: `Día ${index + 1}`
-		}));
+				display_label:
+					typeof day.display_label === 'string' && day.display_label.trim()
+						? day.display_label.trim()
+						: (day.source_label?.trim() || `Día ${index + 1}`)
+			}));
 		const modeAdjustedDays =
 			mode === 'sequential'
 				? normalizedDays.map((day, index) => ({
@@ -381,7 +381,14 @@
 		dayId: string,
 		blockId: string,
 		nodeId: string,
-		field: 'raw_exercise_name' | 'sets' | 'reps_min' | 'reps_max' | 'note',
+		field:
+			| 'raw_exercise_name'
+			| 'sets'
+			| 'reps_mode'
+			| 'reps_min'
+			| 'reps_max'
+			| 'reps_special'
+			| 'note',
 		value: string
 	) => {
 		if (!draft) return;
@@ -397,8 +404,16 @@
 							...block,
 							nodes: block.nodes.map((node) => {
 								if (node.id !== nodeId) return node;
-								if (field === 'raw_exercise_name' || field === 'note') {
+								if (
+									field === 'raw_exercise_name' ||
+									field === 'note' ||
+									field === 'reps_special'
+								) {
 									return { ...node, [field]: value };
+								}
+								if (field === 'reps_mode') {
+									const nextMode = value === 'special' ? 'special' : 'number';
+									return { ...node, reps_mode: nextMode };
 								}
 								const numeric = Number.parseInt(value, 10);
 								return {
@@ -411,6 +426,31 @@
 				};
 			})
 		};
+	};
+
+	const getNodeRepsMode = (node: {
+		reps_mode?: 'number' | 'special';
+		reps_text?: string | null;
+		reps_special?: string | null;
+		parsed_shape?: { kind?: string } | null;
+	}) => {
+		if (node.reps_mode === 'special') return 'special';
+		if (node.parsed_shape?.kind === 'amrap') return 'special';
+		return 'number';
+	};
+
+	const formatSpecialRepsPreview = (value: string | null | undefined) => {
+		const cleaned = (value ?? '').trim().slice(0, 80);
+		if (!cleaned) return '';
+		if (cleaned.toLowerCase() === 'amrap') return 'AMRAP';
+		return cleaned;
+	};
+
+	const getNodeSpecialReps = (node: {
+		reps_special?: string | null;
+		reps_text?: string | null;
+	}) => {
+		return formatSpecialRepsPreview(node.reps_special ?? node.reps_text ?? '');
 	};
 
 	const saveDraft = async () => {
@@ -783,10 +823,10 @@
 
 						{#each day.blocks as block (block.id)}
 							{#each block.nodes as node (node.id)}
-									<div class="space-y-2 rounded-lg border border-slate-700/70 bg-[#111827] p-3">
-										<div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_8rem_13rem] md:items-end">
-											<label class="block text-[11px] font-medium text-slate-300">
-												Ejercicio
+										<div class="space-y-2 rounded-lg border border-slate-700/70 bg-[#111827] p-3">
+											<div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_8rem_13rem] md:items-start">
+												<label class="block text-[11px] font-medium text-slate-300">
+													<span class="flex h-8 items-center">Ejercicio</span>
 												<input
 													class="mt-1 w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
 													placeholder="Nombre del ejercicio"
@@ -801,11 +841,11 @@
 														)}
 												/>
 											</label>
-											<label class="block text-[11px] font-medium text-slate-300">
-												Series
-												<input
-													class="input-no-spin mt-1 w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
-													type="number"
+												<label class="block text-[11px] font-medium text-slate-300">
+													<span class="flex h-8 items-center">Series</span>
+													<input
+														class="input-no-spin mt-1 w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
+														type="number"
 													min="1"
 													placeholder="Ej: 3"
 													value={node.sets ?? ''}
@@ -819,41 +859,91 @@
 														)}
 												/>
 											</label>
-											<div class="space-y-1">
-												<p class="text-[11px] font-medium text-slate-300">Repeticiones</p>
-												<div class="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-													<input
-														class="input-no-spin w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
-														type="number"
-														min="1"
-														placeholder="Mín."
-														value={node.reps_min ?? ''}
-														oninput={(event) =>
-															updateNodeField(
-																day.id,
-																block.id,
-																node.id,
-																'reps_min',
-																(event.currentTarget as HTMLInputElement).value
-															)}
-													/>
-													<span class="text-xs font-semibold text-slate-400">a</span>
-													<input
-														class="input-no-spin w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
-														type="number"
-														min="1"
-														placeholder="Máx."
-														value={node.reps_max ?? ''}
-														oninput={(event) =>
-															updateNodeField(
-																day.id,
-																block.id,
-																node.id,
-																'reps_max',
-																(event.currentTarget as HTMLInputElement).value
-															)}
-													/>
-												</div>
+												<div class="space-y-1">
+													<div class="flex h-8 items-center justify-between gap-2">
+														<p class="text-[11px] font-medium text-slate-300">Repeticiones</p>
+														<div class="inline-flex rounded-lg border border-slate-600 bg-[#111827] p-1">
+															<button
+																type="button"
+																class={`rounded-md px-2 py-1 text-[11px] font-semibold ${
+																	getNodeRepsMode(node) === 'number'
+																		? 'bg-slate-100 text-slate-900'
+																		: 'text-slate-300 hover:bg-[#1f293f]'
+																}`}
+																onclick={() => updateNodeField(day.id, block.id, node.id, 'reps_mode', 'number')}
+															>
+																Número
+															</button>
+															<button
+																type="button"
+																class={`rounded-md px-2 py-1 text-[11px] font-semibold ${
+																	getNodeRepsMode(node) === 'special'
+																		? 'bg-slate-100 text-slate-900'
+																		: 'text-slate-300 hover:bg-[#1f293f]'
+																}`}
+																onclick={() => updateNodeField(day.id, block.id, node.id, 'reps_mode', 'special')}
+															>
+																Especial
+															</button>
+														</div>
+													</div>
+													{#if getNodeRepsMode(node) === 'number'}
+														<div class="mt-6 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+														<input
+															class="input-no-spin w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
+															type="number"
+															min="1"
+															placeholder="Mín."
+															value={node.reps_min ?? ''}
+															oninput={(event) =>
+																updateNodeField(
+																	day.id,
+																	block.id,
+																	node.id,
+																	'reps_min',
+																	(event.currentTarget as HTMLInputElement).value
+																)}
+														/>
+														<span class="text-xs font-semibold text-slate-400">a</span>
+														<input
+															class="input-no-spin w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
+															type="number"
+															min="1"
+															placeholder="Máx."
+															value={node.reps_max ?? ''}
+															oninput={(event) =>
+																updateNodeField(
+																	day.id,
+																	block.id,
+																	node.id,
+																	'reps_max',
+																	(event.currentTarget as HTMLInputElement).value
+																)}
+														/>
+													</div>
+													{:else}
+															<div class="mt-6 space-y-2">
+														<input
+															class="w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
+															type="text"
+															maxlength="80"
+															placeholder="Ej: 30 segundos, AMRAP, al fallo..."
+															value={node.reps_special ?? node.reps_text ?? ''}
+															oninput={(event) =>
+																updateNodeField(
+																	day.id,
+																	block.id,
+																	node.id,
+																	'reps_special',
+																	(event.currentTarget as HTMLInputElement).value
+																)}
+														/>
+														<p class="text-[10px] text-slate-400">
+															Se verá así: {(node.sets ?? 1) === 1 ? '1 serie' : `${node.sets ?? 1} series`} x
+															{getNodeSpecialReps(node) || '...'}
+														</p>
+													</div>
+												{/if}
 											</div>
 										</div>
 										<input

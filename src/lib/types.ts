@@ -1,3 +1,7 @@
+import type { ImportShapeV1 } from '$lib/import/types';
+
+export type RoutineRepsMode = 'number' | 'special';
+
 export type RoutineExercise = {
 	id: string;
 	name: string;
@@ -7,7 +11,10 @@ export type RoutineExercise = {
 	totalSets?: number;
 	repsMin?: number;
 	repsMax?: number | null;
+	repsMode?: RoutineRepsMode;
+	repsSpecial?: string | null;
 	showRange?: boolean;
+	importShape?: ImportShapeV1;
 };
 
 export type RoutineDay = {

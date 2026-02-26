@@ -13,6 +13,16 @@ const VALID_WEEK_DAYS = new Set([
 	'sunday'
 ]);
 
+const WEEK_DAY_ORDER = [
+	'monday',
+	'tuesday',
+	'wednesday',
+	'thursday',
+	'friday',
+	'saturday',
+	'sunday'
+] as const;
+
 export const deriveRoutinePlanFromDraft = (
 	draft: ImportDraft
 ): { plan: RoutinePlan; issues: ImportIssue[] } => {
@@ -35,7 +45,12 @@ export const deriveRoutinePlanFromDraft = (
 	}
 
 	draft.days.forEach((day, dayIndex) => {
-		const mappedDay = day.mapped_day_key;
+		const mappedDay =
+			day.mapped_day_key && VALID_WEEK_DAYS.has(day.mapped_day_key)
+				? day.mapped_day_key
+				: shouldPersistCustomLabels
+					? WEEK_DAY_ORDER[dayIndex] ?? null
+					: null;
 		if (!mappedDay || !VALID_WEEK_DAYS.has(mappedDay)) {
 			issues.push({
 				severity: 'needs_review_blocking',
@@ -75,8 +90,16 @@ export const deriveRoutinePlanFromDraft = (
 		day.blocks.forEach((block, blockIndex) => {
 			block.nodes.forEach((node, nodeIndex) => {
 				const exerciseName = node.raw_exercise_name?.trim() ?? '';
+				const shape = node.parsed_shape ?? null;
 				const sets = node.sets ?? 0;
 				const repsMin = node.reps_min ?? 0;
+				const repsMax = node.reps_max ?? null;
+				const repsMode: 'number' | 'special' =
+					node.reps_mode === 'special' || shape?.kind === 'amrap' ? 'special' : 'number';
+				const repsSpecialRaw =
+					(node.reps_special ?? '').trim() ||
+					(repsMode === 'special' ? (node.reps_text ?? '').trim() : '');
+				const repsSpecial = repsSpecialRaw ? repsSpecialRaw.slice(0, 80) : null;
 
 				if (!exerciseName) {
 					issues.push({
@@ -102,7 +125,19 @@ export const deriveRoutinePlanFromDraft = (
 					});
 				}
 
-				if (!repsMin || repsMin <= 0) {
+				if (repsMode === 'special') {
+					if (!repsSpecial) {
+						issues.push({
+							severity: 'needs_review_blocking',
+							code: 'missing_special_reps',
+							scope: 'field',
+							path: `days.${dayIndex}.blocks.${blockIndex}.nodes.${nodeIndex}.reps_special`,
+							message: `El ejercicio "${exerciseName || 'sin nombre'}" no tiene indicación de repeticiones especiales.`,
+							provenance: node.field_meta.reps.provenance,
+							suggested_fix: 'Completá el texto de repeticiones especiales (ej: AMRAP, 30 segundos).'
+						});
+					}
+				} else if (!repsMin || repsMin <= 0) {
 					issues.push({
 						severity: 'needs_review_blocking',
 						code: 'missing_reps',
@@ -120,18 +155,15 @@ export const deriveRoutinePlanFromDraft = (
 					scheme: '',
 					order: nextOrder,
 					totalSets: sets > 0 ? sets : undefined,
-					repsMin: repsMin > 0 ? repsMin : undefined,
+					repsMode,
+					repsSpecial: repsMode === 'special' ? repsSpecial : null,
+					repsMin: repsMode === 'number' && repsMin > 0 ? repsMin : undefined,
 					repsMax:
-						node.reps_max && node.reps_min && node.reps_max >= node.reps_min
-							? node.reps_max
-							: null,
-					showRange: Boolean(
-						node.reps_max && node.reps_min && node.reps_max > node.reps_min
-					),
-					note:
-						[node.note, block.block_type !== 'single' ? `Bloque: ${block.block_type}` : null]
-							.filter(Boolean)
-							.join(' · ') || undefined
+						repsMode === 'number' && repsMax && repsMin && repsMax >= repsMin ? repsMax : null,
+					showRange:
+						repsMode === 'number' && Boolean(repsMax && repsMin && repsMax > repsMin),
+					note: node.note ?? undefined,
+					importShape: shape ?? undefined
 				};
 
 				targetDay.exercises.push(exercise);

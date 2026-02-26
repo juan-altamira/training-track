@@ -2,7 +2,9 @@
 	import { DAY_FEEDBACK_MOOD_LABEL, DAY_FEEDBACK_PAIN_LABEL, type DayFeedbackByDay, type DayFeedbackMood, type DayFeedbackPain } from '$lib/dayFeedback';
 	import {
 		WEEK_DAYS,
+		formatSpecialRepsForDisplay,
 		getDisplayDays,
+		getRoutineExerciseRepsMode,
 		getTargetSets,
 		normalizeRoutineUiMeta,
 		sanitizeCustomLabel
@@ -181,6 +183,15 @@
 		}, {} as ProgressState);
 
 	const MAX_EXERCISE_NAME_LENGTH = 100;
+	const MAX_SPECIAL_REPS_LENGTH = 80;
+
+	const getExerciseRepsMode = (exercise: RoutineExercise) => getRoutineExerciseRepsMode(exercise);
+
+	const getExerciseSpecialReps = (exercise: RoutineExercise) =>
+		(exercise.repsSpecial ?? '').trim().slice(0, MAX_SPECIAL_REPS_LENGTH);
+
+	const getExerciseSpecialPreview = (exercise: RoutineExercise) =>
+		formatSpecialRepsForDisplay(getExerciseSpecialReps(exercise));
 
 	const validateExercises = (dayKey: string): string | null => {
 		const exercises = plan[dayKey].exercises;
@@ -194,6 +205,13 @@
 			const sets = getTargetSets(ex);
 			if (sets === 0) {
 				return `El ejercicio "${ex.name}" no tiene series. Completá el campo Series.`;
+			}
+			if (getExerciseRepsMode(ex) === 'special') {
+				if (!getExerciseSpecialReps(ex)) {
+					return `El ejercicio "${ex.name}" necesita una indicación en repeticiones especiales (ej: AMRAP, 30 segundos).`;
+				}
+			} else if (!ex.repsMin || ex.repsMin <= 0) {
+				return `El ejercicio "${ex.name}" no tiene repeticiones válidas.`;
 			}
 		}
 		return null;
@@ -225,6 +243,8 @@
 			totalSets: undefined,
 			repsMin: undefined,
 			repsMax: null,
+			repsMode: 'number',
+			repsSpecial: null,
 			showRange: false
 		};
 		plan = {
@@ -240,10 +260,25 @@
 		plan = { ...plan, [dayKey]: { ...plan[dayKey], exercises } };
 		
 		// Limpiar advertencia si el usuario corrigió el error
-		if (showValidationErrors && feedbackType === 'warning' && (field === 'name' || field === 'totalSets')) {
+		if (
+			showValidationErrors &&
+			feedbackType === 'warning' &&
+			(field === 'name' ||
+				field === 'totalSets' ||
+				field === 'repsMode' ||
+				field === 'repsMin' ||
+				field === 'repsMax' ||
+				field === 'repsSpecial')
+		) {
 			const updatedExercises = plan[dayKey].exercises;
 			const hasErrors = updatedExercises.some(ex => 
-				!ex.name || ex.name.trim() === '' || !ex.totalSets || ex.totalSets === 0
+				!ex.name ||
+				ex.name.trim() === '' ||
+				!ex.totalSets ||
+				ex.totalSets === 0 ||
+				(getExerciseRepsMode(ex) === 'number'
+					? !ex.repsMin || ex.repsMin <= 0
+					: !getExerciseSpecialReps(ex))
 			);
 			if (!hasErrors) {
 				feedback = '';
@@ -359,7 +394,25 @@
 					saving = false;
 					return;
 				}
-				if (ex.showRange && (ex.repsMax ?? 0) > 0 && (ex.repsMax ?? 0) < (ex.repsMin ?? 0)) {
+				if (getExerciseRepsMode(ex) === 'special') {
+					if (!getExerciseSpecialReps(ex)) {
+						feedback = `${displayLabel}: "${ex.name}" necesita una indicación en repeticiones especiales.`;
+						feedbackType = 'warning';
+						saving = false;
+						return;
+					}
+				} else if (!ex.repsMin || ex.repsMin <= 0) {
+					feedback = `${displayLabel}: "${ex.name}" no tiene repeticiones válidas.`;
+					feedbackType = 'warning';
+					saving = false;
+					return;
+				}
+				if (
+					getExerciseRepsMode(ex) === 'number' &&
+					ex.showRange &&
+					(ex.repsMax ?? 0) > 0 &&
+					(ex.repsMax ?? 0) < (ex.repsMin ?? 0)
+				) {
 					saving = false;
 					return;
 				}
@@ -773,7 +826,7 @@
 									Quitar
 								</button>
 							</div>
-							<div class="mt-3 space-y-3">
+								<div class="mt-3">
 								<label class="block text-sm font-medium text-slate-300">
 									Nombre
 									<input
@@ -789,91 +842,140 @@
 									/>
 								</label>
 								
-								<div class="grid gap-3 md:grid-cols-2">
-									<label class="block text-sm font-medium text-slate-300">
-										Series
-										<input
-											type="number"
-											min="1"
-											max="99"
-											class="mt-1 w-full rounded-lg border {showValidationErrors && (!exercise.totalSets || exercise.totalSets === 0) ? 'border-red-500' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
-											value={exercise.totalSets ?? ''}
-											placeholder="Ej: 4"
-											oninput={(e) =>
-												updateExercise(
-													selectedDay,
-													exercise.id,
-													'totalSets',
-													Number((e.target as HTMLInputElement).value) || 0
-												)}
-										/>
-									</label>
-									
-									<div class="block text-sm font-medium text-slate-300">
-										Repeticiones
-										<div class="mt-1 flex items-center gap-2">
+									<div class="mt-6 grid gap-6 md:mt-10 md:gap-5 md:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] md:items-start">
+										<label class="block text-sm font-medium text-slate-300">
+											<span class="flex items-center md:h-11">Series</span>
 											<input
 												type="number"
 												min="1"
-												max="999"
-												class="w-full rounded-lg border border-slate-700 bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
-												value={exercise.repsMin ?? ''}
-												placeholder="Ej: 8"
+												max="99"
+												class="mt-3 w-full rounded-lg border {showValidationErrors && (!exercise.totalSets || exercise.totalSets === 0) ? 'border-red-500' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700 md:mt-2"
+												value={exercise.totalSets ?? ''}
+												placeholder="Ej: 4"
 												oninput={(e) =>
 													updateExercise(
 														selectedDay,
 														exercise.id,
-														'repsMin',
+														'totalSets',
 														Number((e.target as HTMLInputElement).value) || 0
 													)}
 											/>
-											{#if exercise.showRange}
-												<span class="text-slate-400">–</span>
+										</label>
+
+										<div class="block text-sm font-medium text-slate-300">
+											<div class="flex items-center justify-between gap-3 md:h-11 md:flex-nowrap">
+												<span>Repeticiones</span>
+												<div class="inline-flex shrink-0 rounded-lg border border-slate-700 bg-[#101423] p-1">
+													<button
+														type="button"
+														class={`rounded-md px-3 py-1.5 text-xs font-semibold ${
+															getExerciseRepsMode(exercise) === 'number'
+																? 'bg-slate-100 text-slate-900'
+																: 'text-slate-300 hover:bg-[#1c2336]'
+														}`}
+														onclick={() => updateExercise(selectedDay, exercise.id, 'repsMode', 'number')}
+													>
+														Número
+													</button>
+													<button
+														type="button"
+														class={`rounded-md px-3 py-1.5 text-xs font-semibold ${
+															getExerciseRepsMode(exercise) === 'special'
+																? 'bg-slate-100 text-slate-900'
+																: 'text-slate-300 hover:bg-[#1c2336]'
+														}`}
+														onclick={() => updateExercise(selectedDay, exercise.id, 'repsMode', 'special')}
+													>
+														Especial
+													</button>
+												</div>
+											</div>
+											{#if getExerciseRepsMode(exercise) === 'number'}
+												<div class="mt-3 flex items-center gap-2 md:mt-2">
 												<input
 													type="number"
 													min="1"
 													max="999"
-													class="w-full rounded-lg border {(exercise.repsMax ?? 0) > 0 && (exercise.repsMax ?? 0) < (exercise.repsMin ?? 0) ? 'border-red-500' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
-													value={exercise.repsMax ?? ''}
-													placeholder="máx"
+													class="w-full rounded-lg border {showValidationErrors && (!exercise.repsMin || exercise.repsMin <= 0) ? 'border-red-500' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
+													value={exercise.repsMin ?? ''}
+													placeholder="Ej: 8"
 													oninput={(e) =>
 														updateExercise(
 															selectedDay,
 															exercise.id,
-															'repsMax',
-															Number((e.target as HTMLInputElement).value) || null
+															'repsMin',
+															Number((e.target as HTMLInputElement).value) || 0
 														)}
 												/>
-												<button
-													type="button"
-													class="flex-shrink-0 rounded p-1.5 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
-													title="Quitar rango"
-													onclick={() => {
-														updateExercise(selectedDay, exercise.id, 'showRange', false);
-														updateExercise(selectedDay, exercise.id, 'repsMax', null);
-													}}
-												>
-													<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-													</svg>
-												</button>
-											{:else}
-												<button
-													type="button"
-													class="flex-shrink-0 whitespace-nowrap rounded-lg border border-slate-600 px-4 py-3 text-sm text-slate-300 hover:bg-slate-700"
-													onclick={() => updateExercise(selectedDay, exercise.id, 'showRange', true)}
-												>
-													agregar rango
-												</button>
+												{#if exercise.showRange}
+													<span class="text-slate-400">a</span>
+													<input
+														type="number"
+														min="1"
+														max="999"
+														class="w-full rounded-lg border {(exercise.repsMax ?? 0) > 0 && (exercise.repsMax ?? 0) < (exercise.repsMin ?? 0) ? 'border-red-500' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
+														value={exercise.repsMax ?? ''}
+														placeholder="máx"
+														oninput={(e) =>
+															updateExercise(
+																selectedDay,
+																exercise.id,
+																'repsMax',
+																Number((e.target as HTMLInputElement).value) || null
+															)}
+													/>
+													<button
+														type="button"
+														class="flex-shrink-0 rounded p-1.5 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+														title="Quitar rango"
+														onclick={() => {
+															updateExercise(selectedDay, exercise.id, 'showRange', false);
+															updateExercise(selectedDay, exercise.id, 'repsMax', null);
+														}}
+													>
+														<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+														</svg>
+													</button>
+												{:else}
+													<button
+														type="button"
+														class="flex-shrink-0 whitespace-nowrap rounded-lg border border-slate-600 px-4 py-3 text-sm text-slate-300 hover:bg-slate-700"
+														onclick={() => updateExercise(selectedDay, exercise.id, 'showRange', true)}
+													>
+														agregar rango
+													</button>
+												{/if}
+											</div>
+											{#if exercise.showRange && (exercise.repsMax ?? 0) > 0 && (exercise.repsMax ?? 0) < (exercise.repsMin ?? 0)}
+												<p class="mt-1 text-xs text-red-400">El máximo debe ser igual o mayor que el mínimo</p>
 											{/if}
-										</div>
-										{#if exercise.showRange && (exercise.repsMax ?? 0) > 0 && (exercise.repsMax ?? 0) < (exercise.repsMin ?? 0)}
-											<p class="mt-1 text-xs text-red-400">El máximo debe ser igual o mayor que el mínimo</p>
+											{:else}
+												<div class="mt-3 space-y-2 md:mt-2">
+												<input
+													type="text"
+													maxlength={MAX_SPECIAL_REPS_LENGTH}
+													class="w-full rounded-lg border {showValidationErrors && !getExerciseSpecialReps(exercise) ? 'border-red-500' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
+													value={exercise.repsSpecial ?? ''}
+													placeholder="Ej: 30 segundos, AMRAP, al fallo, 1:30"
+													oninput={(e) =>
+														updateExercise(
+															selectedDay,
+															exercise.id,
+															'repsSpecial',
+															(e.target as HTMLInputElement).value
+														)}
+												/>
+												<p class="text-xs text-slate-400">
+													Se verá así: {(exercise.totalSets ?? 1) === 1 ? '1 serie' : `${exercise.totalSets ?? 1} series`} x
+													{getExerciseSpecialPreview(exercise) || '...'}
+												</p>
+											</div>
 										{/if}
 									</div>
 								</div>
 								
-								<label class="block text-sm font-medium text-slate-300">
+									<label class="mt-6 block text-sm font-medium text-slate-300">
 									Nota (opcional)
 									<input
 										class="mt-1 w-full rounded-lg border border-slate-700 bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"

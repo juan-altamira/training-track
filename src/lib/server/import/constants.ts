@@ -1,7 +1,7 @@
 import type { ImportSourceType } from '$lib/import/types';
 
-export const IMPORT_PARSER_VERSION = '1.1.2';
-export const IMPORT_RULESET_VERSION = '1.1.2';
+export const IMPORT_PARSER_VERSION = '2.0.0';
+export const IMPORT_RULESET_VERSION = '2.0.0';
 export const IMPORT_EXTRACTOR_VERSION = '1.1.0';
 export const IMPORT_DRAFT_VERSION = 1;
 

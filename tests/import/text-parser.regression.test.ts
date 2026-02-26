@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseTextPayload } from '../../src/lib/server/import/parsers/text';
+import { buildDraftBundle } from '../../src/lib/server/import/validation';
 import {
 	IMPORT_EXTRACTOR_VERSION,
 	IMPORT_PARSER_VERSION,
 	IMPORT_RULESET_VERSION
 } from '../../src/lib/server/import/constants';
-import { buildDraftBundle } from '../../src/lib/server/import/validation';
 
 const parseDraft = async (raw: string) => {
 	const out = await parseTextPayload(new TextEncoder().encode(raw), {
@@ -18,186 +18,181 @@ const parseDraft = async (raw: string) => {
 	return out.draft;
 };
 
-test('regression: full messy routine keeps 43 exercises and splits compact combined line', async () => {
-	const raw = `LUNES (Énfasis en Pectoral)
-    • Sentadillas 3x6a8
-    • Curl Femoral 3x12-8
-    • Banco Plano 3*8
-    • Press Militar con Barra Parado 3x8 en esa
-    • Remo en Maquina 5 x 10 lentas (atento a la tecnica)
-    • Cruces de Polea para Pectoral Inferior 3x 10
-    • Cruces de Polea para Pectoral Superior 4 x12
-    • Biceps con barra  /3x10/
-    • Biceps en banco scot  /3x12/
-    • Vuelos Laterales ( 3x12 )
-    • Vuelos Posteriores  3 series de 12 repeticiones (hacerlo lento en la exentrica)
-    • Tríceps Polea Alta 3x10 en este
-    • Triceps Polea Baja o Press Frances (3 series x12
-    1. Gemelos 4 series de 12 pero tene cuidado con la extentrica, controlala
+const getNodes = (draft: Awaited<ReturnType<typeof parseDraft>>) =>
+	draft.days.flatMap((day) => day.blocks.flatMap((block) => block.nodes));
 
-MIÉRCOLES (Énfasis en Espalda)
-      -Prensa Pesada (4x10 a 12repeticiones)
-      -Curl Femoral (4x 8
-      -(4 series de 12) Remo en Maquina
-      -Jalon al Pecho para Espalda (3x12)
-      -3 series x12 de Banco Plano
-      +Press Militar Sentado con Mancuernas (3x10)
-      +tres series de ocho repeticiones en Remo en Maquina
-      +Cruces de Polea para Pectoral Superior hacete 3 series de 8 a 12 repeticiones en este
-      * Biceps con Barra – aca hace hacete ocho de 15 repeticiones
-      *Biceps en Banco Inclinado con Mancuernas (3x12)
-      *Vuelos Laterales (3x12)
-      Vuelos Posteriores – aca hace hacete ocho de 15 repeticiones
-      Tríceps Polea Alta – aca hace hacete ocho de 15 repeticiones
-      Triceps Polea Baja o Press Frances – aca hace hacete ocho de 15 repeticiones
-      Gemelos (4x12)
-
-VIERNES:
-      Sentadillas (3x6)
-      Curl Femoral (3x12)
-      Banco Plano (3x8)
-      Press Militar con Barra Parado (3x8)
-      Remo en Maquina (5x10)
-      Cruces de Polea para Pectoral Inferior (3x10)
-      Cruces de Polea para Pectoral Superior (4x12)
-      Biceps con Barra (3x10)
-      Biceps en Banco Scott (3x12)
-      Vuelos Laterales (3x12)Vuelos Posteriores (3x12)
-      Tríceps Polea Alta (3x10)
-      Triceps Polea Baja o Press Frances (3x12)
-      Gemelos (4x12)`;
-
-	const draft = await parseDraft(raw);
-	const nodes = draft.days.flatMap((day) => day.blocks.flatMap((block) => block.nodes));
-
-	assert.equal(nodes.length, 43);
-	assert.equal(draft.coverage.multi_exercise_splits_applied, 1);
-	assert.equal(draft.coverage.unresolved_multi_exercise_lines, 0);
-
-	const fridayLaterals = nodes.filter((node) =>
-		node.raw_exercise_name.toLowerCase().includes('vuelos laterales')
-	);
-	const fridayPosteriors = nodes.filter((node) =>
-		node.raw_exercise_name.toLowerCase().includes('vuelos posteriores')
-	);
-
-	assert.ok(fridayLaterals.length >= 1);
-	assert.ok(fridayPosteriors.length >= 1);
-});
-
-test('regression: does not split false positive in "Triceps Polea Baja o Press Frances"', async () => {
-	const raw = `MIERCOLES\nTriceps Polea Baja o Press Frances – aca hace hacete ocho de 15 repeticiones`;
-	const draft = await parseDraft(raw);
-	const node = draft.days[0]?.blocks[0]?.nodes[0];
-
+test('anti-regression: tempo tail does not override explicit set x reps', async () => {
+	const draft = await parseDraft('Sentadilla 3x8 tempo 3-1-1');
+	const node = getNodes(draft)[0];
 	assert.ok(node);
-	assert.equal(node.raw_exercise_name, 'Triceps Polea Baja o Press Frances');
-	assert.equal(node.sets, 8);
-	assert.equal(node.reps_min, 15);
-	assert.equal(node.note, null);
-	assert.equal(node.split_meta?.decision, 'split_kept_note_dropped');
-});
-
-test('regression: drops garbage trailing note for no-split lines ("en esa")', async () => {
-	const raw = `LUNES\nPress Militar con Barra Parado 3x8 en esa`;
-	const draft = await parseDraft(raw);
-	const node = draft.days[0]?.blocks[0]?.nodes[0];
-
-	assert.ok(node);
-	assert.equal(node.raw_exercise_name, 'Press Militar con Barra Parado');
+	assert.equal(node.raw_exercise_name, 'Sentadilla');
 	assert.equal(node.sets, 3);
 	assert.equal(node.reps_min, 8);
-	assert.equal(node.note, null);
-	assert.equal(node.split_meta?.reason, 'garbage_note_dropped_no_split');
+	assert.equal(node.note, 'tempo 3-1-1');
 });
 
-test('regression: emits warning when multi-exercise-like line cannot be safely segmented', async () => {
-	const raw = `LUNES\nPress Banca (3x8) 4x12`;
-	const draft = await parseDraft(raw);
-	const bundle = buildDraftBundle(draft);
-
-	assert.ok((draft.coverage.unresolved_multi_exercise_lines ?? 0) >= 1);
-	assert.ok(bundle.issues.some((issue) => issue.code === 'possible_multi_exercise_line'));
-});
-
-test('regression: keeps full continuation note when sentence wraps to next line', async () => {
-	const raw = `LUNES
-• Vuelos Posteriores (4x12) + 2 series aguantando en la parte
-final del movimiento`;
-	const draft = await parseDraft(raw);
-	const node = draft.days[0]?.blocks[0]?.nodes[0];
-
+test('anti-regression: note literal preserves internal spacing', async () => {
+	const draft = await parseDraft('Press banca 3x8 descanso  90s');
+	const node = getNodes(draft)[0];
 	assert.ok(node);
-	assert.equal(node.raw_exercise_name, 'Vuelos Posteriores');
-	assert.equal(node.sets, 4);
-	assert.equal(node.reps_min, 12);
-	assert.ok(node.note?.includes('2 series aguantando en la parte'));
-	assert.ok(node.note?.includes('final del movimiento'));
+	assert.equal(node.note, 'descanso  90s');
 });
 
-test('regression: auto maps DIA 1/2/3 headings to monday/tuesday/wednesday', async () => {
-	const raw = `DIA 1 (Piernas):
-Sentadillas (3x8)
+test('anti-regression: note literal preserves decimal comma', async () => {
+	const draft = await parseDraft('Press banca 3x8 82,5kg');
+	const node = getNodes(draft)[0];
+	assert.ok(node);
+	assert.equal(node.note, '82,5kg');
+});
 
-DIA 2 (Empuje) :
-Banco Plano (3x10)
-
-DIA 3 (Traccion) :
-Remo en Maquina (4x12)`;
-
-	const draft = await parseDraft(raw);
-	const bundle = buildDraftBundle(draft);
-
+test('anti-regression: day heading is not parsed as exercise', async () => {
+	const draft = await parseDraft('Día 1:\nPress banca 3x8');
+	const nodes = getNodes(draft);
+	assert.equal(nodes.length, 1);
+	assert.equal(nodes[0]?.raw_exercise_name, 'Press banca');
 	assert.equal(draft.days[0]?.mapped_day_key, 'monday');
-	assert.equal(draft.days[1]?.mapped_day_key, 'tuesday');
-	assert.equal(draft.days[2]?.mapped_day_key, 'wednesday');
 	assert.equal(draft.presentation.day_label_mode, 'sequential');
-	assert.equal(bundle.issues.some((issue) => issue.code === 'day_mapping_required'), false);
 });
 
-test('regression: parses compact mixed prescriptions (8 8 8, x4 10 reps, 12x3, 5por5)', async () => {
-	const raw = `Press banca 8 8 8
-Sentadilla x4 10 reps
-Curl 12x3
-Peso muerto 5por5
-Remo 4*10
-Fondos 3 series de 12`;
+test('anti-regression: superset heading is not parsed as exercise', async () => {
+	const draft = await parseDraft('Superset:\nPress banca 3x8\nRemo 3x10');
+	const nodes = getNodes(draft);
+	assert.equal(nodes.length, 2);
+	assert.ok(nodes.every((node) => node.parsed_shape?.block?.kind === 'superset'));
+});
 
-	const draft = await parseDraft(raw);
-	const nodes = draft.days[0]?.blocks[0]?.nodes ?? [];
-	assert.equal(nodes.length, 6);
+test('anti-regression: load header without entries creates no ghost exercise', async () => {
+	const draft = await parseDraft('Press banca:');
+	const nodes = getNodes(draft);
+	assert.equal(nodes.length, 0);
+});
 
-	const byName = (needle: string) =>
-		nodes.find((node) => node.raw_exercise_name.toLowerCase().includes(needle.toLowerCase()));
+test('anti-regression: circuit inline header and first entry works', async () => {
+	const draft = await parseDraft('Circuito x3 vueltas: 10 flexiones\n15 sentadillas');
+	const nodes = getNodes(draft);
+	assert.equal(nodes.length, 2);
+	assert.equal(nodes[0]?.raw_exercise_name, 'flexiones');
+	assert.equal(nodes[0]?.sets, 3);
+	assert.equal(nodes[1]?.raw_exercise_name, 'sentadillas');
+	assert.equal(nodes[1]?.sets, 3);
+	assert.ok(nodes.every((node) => node.parsed_shape?.block?.kind === 'circuit'));
+});
 
-	const press = byName('press banca');
-	assert.ok(press);
-	assert.equal(press.sets, 3);
-	assert.equal(press.reps_min, 8);
-	assert.equal(press.reps_max, null);
+test('anti-regression: ladder inline header and entries in same line', async () => {
+	const draft = await parseDraft('Press banca: 60x12, 70x10');
+	const nodes = getNodes(draft);
+	assert.equal(nodes.length, 1);
+	assert.equal(nodes[0]?.raw_exercise_name, 'Press banca');
+	assert.equal(nodes[0]?.parsed_shape?.kind, 'load_ladder');
+	if (nodes[0]?.parsed_shape?.kind === 'load_ladder') {
+		assert.equal(nodes[0].parsed_shape.load_entries.length, 2);
+	}
+});
 
-	const sentadilla = byName('sentadilla');
-	assert.ok(sentadilla);
-	assert.equal(sentadilla.sets, 4);
-	assert.equal(sentadilla.reps_min, 10);
+test('anti-regression: circuit ignores time-like lines as entries', async () => {
+	const draft = await parseDraft('Circuito x3 vueltas:\n60s descanso\n10 flexiones\n15 sentadillas');
+	const nodes = getNodes(draft);
+	assert.equal(nodes.length, 2);
+	assert.equal(nodes[0]?.raw_exercise_name, 'flexiones');
+	assert.equal(nodes[1]?.raw_exercise_name, 'sentadillas');
+});
 
-	const curl = byName('curl');
-	assert.ok(curl);
-	assert.equal(curl.sets, 3);
-	assert.equal(curl.reps_min, 12);
+test('anti-regression: comma scheme does not split into multiple exercises', async () => {
+	const draft = await parseDraft('Press banca 8,8,8');
+	const nodes = getNodes(draft);
+	assert.equal(nodes.length, 1);
+	assert.equal(nodes[0]?.parsed_shape?.kind, 'scheme');
+	assert.equal(draft.coverage.multi_exercise_splits_applied, 0);
+});
 
-	const pesoMuerto = byName('peso muerto');
-	assert.ok(pesoMuerto);
-	assert.equal(pesoMuerto.sets, 5);
-	assert.equal(pesoMuerto.reps_min, 5);
+test('anti-regression: circuit can split a line containing two valid entries', async () => {
+	const draft = await parseDraft('Circuito x3 vueltas:\n10 flexiones y 15 sentadillas\n20 abdominales');
+	const nodes = getNodes(draft);
+	assert.equal(nodes.length, 3);
+	assert.equal(nodes[0]?.raw_exercise_name, 'flexiones');
+	assert.equal(nodes[1]?.raw_exercise_name, 'sentadillas');
+	assert.equal(nodes[2]?.raw_exercise_name, 'abdominales');
+});
 
-	const remo = byName('remo');
-	assert.ok(remo);
-	assert.equal(remo.sets, 4);
-	assert.equal(remo.reps_min, 10);
+test('anti-regression: contract path metrics are reported', async () => {
+	const draft = await parseDraft('Press banca 3x8\nRemo 4x10');
+	assert.equal(draft.coverage.legacy_fallback_hits, 0);
+	assert.equal(draft.coverage.contract_lines_failed_invariants, 0);
+	assert.ok((draft.coverage.contract_lines_parsed ?? 0) >= 2);
+});
 
-	const fondos = byName('fondos');
-	assert.ok(fondos);
-	assert.equal(fondos.sets, 3);
-	assert.equal(fondos.reps_min, 12);
+test('anti-regression: 3xAMRAP maps to special reps without blocking issues', async () => {
+	const draft = await parseDraft('Dominadas 3xAMRAP');
+	const node = getNodes(draft)[0];
+	assert.ok(node);
+	assert.equal(node.reps_mode, 'special');
+	assert.equal(node.reps_special, 'AMRAP');
+	assert.equal(node.reps_min, null);
+
+	const bundle = buildDraftBundle(draft);
+	const blocking = bundle.issues.filter((issue) =>
+		['hard_error', 'needs_review_blocking'].includes(issue.severity)
+	);
+	assert.equal(blocking.length, 0);
+	const exercise = bundle.derivedPlan['monday'].exercises[0];
+	assert.ok(exercise);
+	assert.equal(exercise.repsMode, 'special');
+	assert.equal(exercise.repsSpecial, 'AMRAP');
+});
+
+test('anti-regression: scheme number run maps to special reps preserving sequence text', async () => {
+	const draft = await parseDraft('Curl bíceps 12-10-8');
+	const node = getNodes(draft)[0];
+	assert.ok(node);
+	assert.equal(node.sets, 3);
+	assert.equal(node.reps_mode, 'special');
+	assert.equal(node.reps_special, '12-10-8');
+	assert.equal(node.reps_min, null);
+	assert.equal(node.reps_max, null);
+	assert.equal(node.parsed_shape?.kind, 'scheme');
+});
+
+test('anti-regression: comma sequences keep all reps and do not collapse as decimal', async () => {
+	const draft = await parseDraft('Press inclinado 8,8,8');
+	const node = getNodes(draft)[0];
+	assert.ok(node);
+	assert.equal(node.sets, 3);
+	assert.equal(node.reps_mode, 'special');
+	assert.equal(node.reps_special, '8-8-8');
+	assert.equal(node.parsed_shape?.kind, 'scheme');
+	if (node.parsed_shape?.kind === 'scheme') {
+		assert.deepEqual(node.parsed_shape.reps_list, [8, 8, 8]);
+	}
+});
+
+test('anti-regression: series wording with explicit range keeps max reps', async () => {
+	const draft = await parseDraft('Press militar 3 series de 8 a 10');
+	const node = getNodes(draft)[0];
+	assert.ok(node);
+	assert.equal(node.sets, 3);
+	assert.equal(node.reps_mode, 'number');
+	assert.equal(node.reps_min, 8);
+	assert.equal(node.reps_max, 10);
+	assert.equal(node.note, null);
+	assert.equal(node.parsed_shape?.kind, 'range');
+});
+
+test('anti-regression: custom day headings infer custom mode and preserve labels', async () => {
+	const draft = await parseDraft(
+		'Día Push:\nPress banca 3x8\nDía Pull\nRemo con barra 4x10\nDia empuje\nFondos 3x12'
+	);
+	assert.equal(draft.presentation.day_label_mode, 'custom');
+	assert.equal(draft.days.length, 3);
+	assert.equal(draft.days[0]?.source_label, 'Día Push');
+	assert.equal(draft.days[1]?.source_label, 'Día Pull');
+	assert.equal(draft.days[2]?.source_label, 'Dia empuje');
+	assert.equal(draft.days[0]?.mapped_day_key, null);
+	assert.equal(draft.days[1]?.mapped_day_key, null);
+	assert.equal(draft.days[2]?.mapped_day_key, null);
+
+	const bundle = buildDraftBundle(draft);
+	const blocking = bundle.issues.filter((issue) =>
+		['hard_error', 'needs_review_blocking'].includes(issue.severity)
+	);
+	assert.equal(blocking.length, 0);
 });

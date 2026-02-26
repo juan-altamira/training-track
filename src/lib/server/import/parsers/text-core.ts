@@ -3,15 +3,31 @@ import type {
 	ImportDraftBlock,
 	ImportDraftDay,
 	ImportDraftNode,
-	ImportNameSplitConfidenceDelta,
-	ImportNameSplitMeta
+	ImportInferenceReason,
+	ImportShapeV1
 } from '$lib/import/types';
 import type { ParsedLine, ParserContext } from './types';
 import { IMPORT_DRAFT_VERSION } from '../constants';
-import { makeId, makeProvenance, mapSpanishWeekdayToKey, normalizeLine, toConfidence } from '../utils';
+import { makeId, makeProvenance, mapSpanishWeekdayToKey, toConfidence } from '../utils';
+import {
+	parseCircuitEntry,
+	parseContractCandidate,
+	parseLadderEntries,
+	splitCircuitSegments
+} from './contract-matchers';
+import { parseLegacyLine } from './legacy-matchers';
 
 const DAY_HEADING_REGEX =
-	/^(lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|d[ií]a\s*\d+|day\s*\d+)\b[:\-]?\s*(.*)?$/i;
+	/^(lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|d[ií]a\s*\d+|day\s*\d+)\b\s*:?\s*(.*)?$/iu;
+const CUSTOM_DAY_HEADING_REGEX = /^(d[ií]a|day)\s+([^:]+?)(?:\s*:\s*(.*))?$/iu;
+
+const SUPSERSET_HEADING_REGEX = /^superset(?:\s*(\d{1,2}))?\b\s*:?\s*(.*)?$/iu;
+const CIRCUIT_HEADING_REGEX =
+	/^circuito(?:\s*x?\s*(\d{1,2})\s*(?:vueltas?)?)?\b\s*:?\s*(.*)?$/iu;
+const LOAD_HEADER_REGEX = /^([^:]{2,80}):\s*(.*)$/u;
+
+const NOISE_LINE_REGEX =
+	/^(rutina|semana|objetivo|total|resumen|importar|paso\s*\d+|bloque\s*\d+)\b/iu;
 
 const INDEXED_DAY_TO_WEEKDAY = [
 	'monday',
@@ -23,1045 +39,219 @@ const INDEXED_DAY_TO_WEEKDAY = [
 	'sunday'
 ] as const;
 
-const NOISE_LINE_REGEX = /^(rutina|semana|objetivo|total|resumen|series?\s+de)\b/i;
-
-const EXERCISE_PATTERNS = [
-	/^(?:[A-Z]\d+\s*[\.\-\)]?\s*)?(.+?)\s*\(\s*(\d{1,2})\s*[xX]\s*(\d{1,3})(?:\s*[-–]\s*(\d{1,3}))?\s*\)(?:\s*(?:\||•|-)\s*(.*))?$/i,
-	/^(?:[A-Z]\d+\s*[\.\-\)]?\s*)?(.+?)\s*\(\s*(\d{1,2})\s*[xX*]\s*(\d{1,3})(?:\s*(?:[-–]|a|to|\/)\s*(\d{1,3}))?(?:\s*(?:repeticiones?|reps?))?\s*\)(?:\s*(?:\||•|-)\s*(.*))?$/i,
-	/^(?:[A-Z]\d+\s*[\.\-\)]?\s*)?(.+?)(?:\s*[:\-–\/]\s*|\s+)[xX]\s*(\d{1,2})\s*(\d{1,3})(?:\s*(?:[-–]|a|to|\/)\s*(\d{1,3}))?\s*(?:repeticiones?|reps?)?\b(?:\s*(?:\||•|-)\s*(.*))?$/i,
-	/^(?:[A-Z]\d+\s*[\.\-\)]?\s*)?(.+?)\s+(\d{1,2})\s*[xX]\s*(\d{1,3})(?:\s*[-–]\s*(\d{1,3}))?(?:\s*(?:\||•|-)\s*(.*))?$/i,
-	/^(?:[A-Z]\d+\s*[\.\-\)]?\s*)?(.+?)(?:\s*[:\-–\/]\s*|\s+)\(?\s*(\d{1,2})\s*[xX*]\s*(\d{1,3})(?:\s*(?:[-–]|a|to|\/)\s*(\d{1,3}))?\s*(?:repeticiones?|reps?)?\s*\)?\s*\/?(?:\s*(?:\||•|-)\s*(.*)|\s*(.*))?$/i,
-	/^(?:[A-Z]\d+\s*[\.\-\)]?\s*)?(.+?)(?:\s*[:\-–\/]\s*|\s+)\(?\s*(\d{1,2})\s*por\s*(\d{1,3})(?:\s*(?:[-–]|a|to|\/)\s*(\d{1,3}))?\s*(?:repeticiones?|reps?)?\s*\)?\s*\/?(?:\s*(?:\||•|-)\s*(.*)|\s*(.*))?$/i,
-	/^(?:[A-Z]\d+\s*[\.\-\)]?\s*)?(.+?)(?:\s*[:\-–\/]\s*|\s+)\(?\s*(\d{1,2})\s*series?\s*(?:de|x)?\s*(\d{1,3})(?:\s*(?:a|-|–|to|\/)\s*(\d{1,3}))?\s*(?:repeticiones?|reps?)?\s*\)?\s*\/?(?:\s*(.*))?$/i
-];
-
-const REPS_ONLY_PATTERNS = [
-	/^(?:[A-Z]\d+\s*[\.\-\)]?\s*)?(.+?)(?:\s*[:\-–]\s*|\s+)[xX*]\s*(\d{1,3})\s*(?:[-–]|a|to|\/)\s*(\d{1,3})(?:\s*(?:repeticiones?|reps?))?(?:\s*(?:\||•|-)\s*(.*))?$/i,
-	/^(?:[A-Z]\d+\s*[\.\-\)]?\s*)?(.+?)\s*[-–:]\s*(\d{1,3})\s*(?:[-–]|a|to|\/)\s*(\d{1,3})\s*(?:repeticiones?|reps?)\b(?:\s*(.*))?$/i,
-	/^(?:[A-Z]\d+\s*[\.\-\)]?\s*)?(.+?)\s+(\d{1,3})\s*(?:[-–]|a|to|\/)\s*(\d{1,3})\s*(?:repeticiones?|reps?)\b(?:\s*(.*))?$/i
-];
-
-const SETS_FIRST_PATTERNS = [
-	/^\(?\s*(\d{1,2})\s*series?\s*(?:x|de)?\s*(\d{1,3})(?:\s*(?:a|-|–|to|\/)\s*(\d{1,3}))?\s*(?:repeticiones?|reps?)?\s*\)?\s*(?:de|en)?\s+(.+)$/i,
-	/^\(?\s*(\d{1,2})\s*[xX*]\s*(\d{1,3})(?:\s*(?:a|-|–|to|\/)\s*(\d{1,3}))?\s*(?:repeticiones?|reps?)?\s*\)?\s*(?:de|en)?\s+(.+)$/i
-];
-
-const WORD_NUMBER_MAP: Record<string, number> = {
-	cero: 0,
-	un: 1,
-	uno: 1,
-	una: 1,
-	dos: 2,
-	tres: 3,
-	cuatro: 4,
-	cinco: 5,
-	seis: 6,
-	siete: 7,
-	ocho: 8,
-	nueve: 9,
-	diez: 10,
-	once: 11,
-	doce: 12,
-	trece: 13,
-	catorce: 14,
-	quince: 15,
-	dieciseis: 16,
-	dieciséis: 16,
-	diecisiete: 17,
-	dieciocho: 18,
-	diecinueve: 19,
-	veinte: 20
-};
-
-const WORD_SERIES_PATTERNS = [
-	/^(uno|una|un|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|dieciseis|dieciséis|diecisiete|dieciocho|diecinueve|veinte)\s+series?\s+de\s+(uno|una|un|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|dieciseis|dieciséis|diecisiete|dieciocho|diecinueve|veinte|\d{1,3})\s*(?:repeticiones?|reps?)?\s+(?:en|de)\s+(.+)$/i,
-	/^(.+?)\s+(uno|una|un|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|dieciseis|dieciséis|diecisiete|dieciocho|diecinueve|veinte|\d{1,2})\s+de\s+(\d{1,3})\s*(?:repeticiones?|reps?)\b(?:\s*(.*))?$/i
-];
-
-const PRESCRIPTION_SPAN_PATTERNS = [
-	/\d{1,2}\s*(?:[xX*]|por|series?\s*(?:de|x)?)\s*\d{1,3}(?:\s*(?:-|–|a|to|\/)\s*\d{1,3})?/gi,
-	/\b(?:uno|una|un|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|dieciseis|dieciséis|diecisiete|dieciocho|diecinueve|veinte)\s+series?\s+de\s+(?:uno|una|un|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|dieciseis|dieciséis|diecisiete|dieciocho|diecinueve|veinte|\d{1,3})\b/giu
-] as const;
-
-const STAGE_A_LINE_SPLIT_REGEX = /\)\s*(?=[A-Za-zÁÉÍÓÚÑáéíóúñ])/g;
-const STAGE_B_SEGMENT_MIN_LENGTH = 6;
-
-const COMMENT_TOKEN_SPLIT_REGEX =
-	/(?:^|[\s\-–:\/|])(nota|ac[aá]|ah[ií]|en\s+este|en\s+esta|en\s+esa|en\s+eso|hac[eé]te|tempo|descanso|rir|rpe|fallo|[uú]ltima)\b/i;
-
-const COMMENT_START_REGEX =
-	/^(?:nota\b|ac[aá]\b|ah[ií]\b|en\s+(?:este|esta|eso)\b|hac[eé]te\b|hace\b|hacer\b|realiza(?:r)?\b|manten(?:e|é)?\b|controla(?:r)?\b|evita(?:r)?\b|sub[ií]\b|baj[aá]\b|lento\b|r[aá]pido\b|tempo\b|descanso\b|rir\b|rpe\b|fallo\b|[uú]ltima\b|\d{1,2}\s*(?:series?|x)\b)/i;
-
-const DEICTIC_NOTE_TOKENS = new Set([
-	'en',
-	'este',
-	'esta',
-	'esa',
-	'eso',
-	'aca',
-	'ahi',
-	'aqui',
-	'esto',
-	'hacete',
-	'hace',
-	'hacer',
-	'realiza',
-	'realizar',
-	'ok',
-	'igual',
-	'x'
-]);
-
-const STRONG_COMMENT_SIGNAL_TOKENS = [
-	'hacete',
-	'hace',
-	'hacer',
-	'realiza',
-	'realizar',
-	'mantene',
-	'controla',
-	'evita',
-	'subi',
-	'baja',
-	'lento',
-	'rapido',
-	'excentrica',
-	'concentrica',
-	'tempo',
-	'pausa',
-	'descanso',
-	'rir',
-	'rpe',
-	'fallo',
-	'ultima'
-] as const;
-
-const VARIANT_KEYWORDS = [
-	'agarre',
-	'mancuerna',
-	'mancuernas',
-	'barra',
-	'inclinado',
-	'declinado',
-	'supino',
-	'prono',
-	'martillo',
-	'anillas',
-	'unilateral',
-	'maquina',
-	'maquinas',
-	'polea',
-	'banco',
-	'landmine',
-	't'
-] as const;
-
-const GENERIC_SINGLE_WORD_BLOCKLIST = new Set([
-	'press',
-	'remo',
-	'curl',
-	'vuelos',
-	'jalon',
-	'banco',
-	'sentadilla',
-	'prensa'
-]);
-
-const SINGLE_WORD_EXERCISE_LEXICON = new Set([
-	'gemelos',
-	'plancha',
-	'dominadas',
-	'burpees',
-	'abdominales',
-	'hiperextensiones'
-]);
-
-const SINGLE_WORD_EXERCISE_LEXICON_STRICT = new Set(['gemelos', 'plancha', 'dominadas', 'burpees']);
-
-const isLikelyNoteLine = (line: string) => /^(nota|note|rir|rpe|descanso|tempo)\b/i.test(line);
-
-const NOTE_CONTINUATION_TOKENS = new Set([
-	'final',
-	'parte',
-	'movimiento',
-	'tecnica',
-	'tecnica',
-	'controla',
-	'controlalo',
-	'controlala',
-	'mantene',
-	'manten',
-	'lento',
-	'lenta',
-	'lentas',
-	'rapido',
-	'rapida',
-	'rapidas',
-	'pausa',
-	'tempo',
-	'del',
-	'de',
-	'en',
-	'con',
-	'para',
-	'al'
-]);
-
-const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-const normalizeComparable = (value: string) =>
-	value
+const parseIndexedDayKey = (value: string): ImportDraftDay['mapped_day_key'] => {
+	const normalized = value
 		.normalize('NFD')
 		.replace(/\p{Diacritic}/gu, '')
-		.toLowerCase()
-		.replace(/[^\p{L}\p{N}\s]/gu, ' ')
-		.replace(/\s+/g, ' ')
-		.trim();
-
-const countWords = (value: string) => {
-	const normalized = normalizeComparable(value);
-	if (!normalized) return 0;
-	return normalized.split(' ').filter(Boolean).length;
+		.toLowerCase();
+	const match = normalized.match(/^(?:dia|day)\s*(\d{1,2})/u);
+	if (!match?.[1]) return null;
+	const index = Number.parseInt(match[1], 10);
+	if (!Number.isFinite(index) || index < 1) return null;
+	return INDEXED_DAY_TO_WEEKDAY[index - 1] ?? null;
 };
 
-const hasWholeToken = (normalized: string, token: string) =>
-	new RegExp(`(^|\\s)${escapeRegex(token)}(?=\\s|$)`).test(normalized);
-
-const hasStrongCommentSignal = (value: string) => {
-	const normalized = normalizeComparable(value);
-	if (!normalized) return false;
-	if (STRONG_COMMENT_SIGNAL_TOKENS.some((token) => hasWholeToken(normalized, token))) return true;
-	if (/\b(?:rir|rpe)\s*\d?\b/.test(normalized)) return true;
-	if (/\b\d+\s*(?:seg|s|min|mins)\b/.test(normalized)) return true;
-	return false;
+type LineUnit = {
+	id: string;
+	parent_id?: string;
+	raw: string;
+	line_index: number;
+	source_page?: number;
+	source_kind: 'input' | 'synthetic' | 'rollback';
+	skip_context_open?: boolean;
 };
 
-const hasVariantKeyword = (value: string) => {
-	const normalized = normalizeComparable(value);
-	if (!normalized) return false;
-	return VARIANT_KEYWORDS.some((token) => hasWholeToken(normalized, token));
+type ParserCounters = {
+	linesIn: number;
+	candidateLines: number;
+	parsedLines: number;
+	requiredFieldsCompleted: number;
+	linesWithPrescriptionDetected: number;
+	multiExerciseSplitsApplied: number;
+	unresolvedMultiExerciseLines: number;
+	contractLinesTotal: number;
+	contractLinesParsed: number;
+	contractLinesFailedInvariants: number;
+	legacyFallbackHits: number;
 };
 
-const sanitizeSourceRawName = (raw: string) =>
-	raw
-		.replace(/\s+/g, ' ')
-		.replace(/^[•●▪◦·\-\s:]+/, '')
-		.replace(/\s*[:\-–|]+$/, '')
-		.trim();
+type ParseOutcome = {
+	node: ImportDraftNode | null;
+	usedContract: boolean;
+	usedLegacy: boolean;
+	detectedPrescription: boolean;
+	failedInvariant: boolean;
+};
+
+type CircuitEntryResult =
+	| { kind: 'valid'; entries: Array<{ name: string; shape: ImportShapeV1 }> }
+	| { kind: 'noise' }
+	| { kind: 'invalid' };
+
+type ParseState =
+	| { kind: 'IDLE' }
+	| {
+			kind: 'PENDING_CIRCUIT';
+			headerUnitId: string;
+			headerText: string;
+			rounds: number;
+			blockId: string;
+			buffer: LineUnit[];
+			entries: Array<{ name: string; shape: ImportShapeV1 }>;
+		}
+	| {
+			kind: 'ACTIVE_CIRCUIT';
+			headerUnitId: string;
+			headerText: string;
+			rounds: number;
+			blockId: string;
+			invalidEntryStreak: number;
+		}
+	| {
+			kind: 'PENDING_LADDER';
+			headerUnitId: string;
+			headerText: string;
+			blockId: string;
+			buffer: LineUnit[];
+			entries: ReturnType<typeof parseLadderEntries>;
+		}
+	| {
+			kind: 'ACTIVE_LADDER';
+			headerUnitId: string;
+			headerText: string;
+			blockId: string;
+			entries: ReturnType<typeof parseLadderEntries>;
+		}
+	| {
+			kind: 'PENDING_SUPERSET';
+			headerUnitId: string;
+			headerText: string;
+			groupIndex: number;
+			blockId: string;
+		}
+	| {
+			kind: 'ACTIVE_SUPERSET';
+			headerUnitId: string;
+			headerText: string;
+			groupIndex: number;
+			blockId: string;
+		};
+
+const normalizeCompactWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim();
 
 const sanitizeExerciseName = (raw: string) =>
 	raw
+		.replace(/^[\s•●▪◦·*+\-:/.()]+/, '')
+		.replace(/[\s•●▪◦·*+\-:/.()]+$/, '')
 		.replace(/\s+/g, ' ')
-		.replace(/^[•●▪◦·\-\s:]+/, '')
-		.replace(/\s*[:\-–|/]+$/, '')
 		.trim();
 
-const sanitizeNote = (raw: string | null) => {
-	const value = (raw ?? '')
-		.trim()
-		.replace(/^[-–:|/()\s]+/, '')
-		.replace(/[-–:|/()\s]+$/, '')
-		.trim();
-	if (!value || /^[\W_]+$/.test(value)) return null;
-	if (/^(repeticiones?|reps?)\.?$/i.test(value)) return null;
+const sanitizeNote = (raw: string | null | undefined) => {
+	const value = (raw ?? '').trim();
+	if (!value) return null;
 	return value;
 };
 
-const appendNoteContinuation = (existing: string | null, continuation: string) => {
-	const left = sanitizeNote(existing);
-	const right = sanitizeNote(continuation);
-	if (!right) return left;
-	if (!left) return right;
-	return sanitizeNote(`${left} ${right}`);
-};
+const isBlank = (value: string) => value.trim().length === 0;
 
-const mapIndexedDayLabelToKey = (raw: string): ImportDraftDay['mapped_day_key'] => {
-	const normalized = raw
-		.normalize('NFD')
-		.replace(/\p{Diacritic}/gu, '')
-		.toLowerCase()
-		.trim();
-	const match = normalized.match(/^(?:dia|day)\s*(\d{1,2})\b/);
-	if (!match) return null;
-	const dayNumber = Number.parseInt(match[1] ?? '', 10);
-	if (!Number.isFinite(dayNumber) || dayNumber < 1) return null;
-	return INDEXED_DAY_TO_WEEKDAY[dayNumber - 1] ?? null;
-};
-
-const removeLineDecorators = (line: string) =>
-	line
-		.replace(/^[•●▪◦·*+\-\/]+\s*/, '')
-		.replace(/^\d+\s*[\.\-\)]\s*/, '')
-		.trim();
-
-const mergeNotes = (...parts: Array<string | null | undefined>) => {
-	const merged: string[] = [];
-	const seen = new Set<string>();
-
-	for (const part of parts) {
-		const cleaned = sanitizeNote(part ?? null);
-		if (!cleaned) continue;
-		const key = normalizeComparable(cleaned);
-		if (!key || seen.has(key)) continue;
-		seen.add(key);
-		merged.push(cleaned);
-	}
-
-	return merged.length > 0 ? merged.join('. ') : null;
-};
-
-type ParsedPrescription = {
-	sets: number | null;
-	repsMin: number | null;
-	repsMax: number | null;
-	repsText: string | null;
-};
-
-const stripRedundantPrescription = (note: string | null, prescription: ParsedPrescription) => {
-	let next = sanitizeNote(note);
-	if (!next) return null;
-
-	const { sets, repsMin, repsMax } = prescription;
-	if (sets && repsMin) {
-		const repsPart =
-			repsMax && repsMax > repsMin
-				? `${repsMin}\\s*(?:-|–|a|to|\\/)\\s*${repsMax}`
-				: `${repsMin}`;
-		const patterns = [
-			new RegExp(`\\b${sets}\\s*[xX*]\\s*${repsPart}(?:\\s*(?:repeticiones?|reps?))?\\b`, 'gi'),
-			new RegExp(`\\b${sets}\\s*series?\\s*(?:de|x)?\\s*${repsPart}(?:\\s*(?:repeticiones?|reps?))?\\b`, 'gi')
-		];
-		for (const pattern of patterns) {
-			next = next.replace(pattern, ' ');
-		}
-	}
-
-	next = next
-		.replace(/\s{2,}/g, ' ')
-		.replace(/\s+([,.;:])/g, '$1')
-		.replace(/^[-–:|/,.;\s]+/, '')
-		.replace(/[-–:|/,.;\s]+$/, '')
-		.trim();
-
-	return sanitizeNote(next);
-};
-
-const isGarbageNote = (note: string | null) => {
-	const cleaned = sanitizeNote(note);
-	if (!cleaned) return true;
-	const normalized = normalizeComparable(cleaned);
-	if (!normalized) return true;
-	if (/^(?:en\s+(?:este|esta|esa|eso)|ac[aa]|ahi|esto|eso|ok|igual|x)$/.test(normalized)) return true;
-	const tokens = normalized.split(' ').filter(Boolean);
-	if (tokens.length <= 4 && tokens.every((token) => DEICTIC_NOTE_TOKENS.has(token))) return true;
+const isNoiseLine = (value: string) => {
+	const trimmed = value.trim();
+	if (!trimmed) return true;
+	if (NOISE_LINE_REGEX.test(trimmed)) return true;
+	if (/^[-–—=]{3,}$/u.test(trimmed)) return true;
 	return false;
 };
 
-const hasSemanticInstructionSignal = (note: string) => {
-	const normalized = normalizeComparable(note);
-	if (!normalized) return false;
-	if (hasStrongCommentSignal(normalized)) return true;
-	if (/\b(?:exc|conc|tempo|pausa|descanso|tecnica|tecnica|controlado|controlada)\b/.test(normalized)) return true;
+const isCircuitCommentLine = (value: string) => {
+	const trimmed = value.trim();
+	if (!trimmed) return true;
+	if (/^descanso\b/iu.test(trimmed)) return true;
+	if (/^nota\b/iu.test(trimmed)) return true;
+	if (/^\d{1,2}:\d{2}\b/u.test(trimmed)) return true;
+	if (/^\d{1,3}\s*(?:s|seg|sec|min|m)\b/iu.test(trimmed)) return true;
 	return false;
 };
 
-const isLikelyNoteContinuationLine = (line: string, hasExistingNote: boolean) => {
-	if (!hasExistingNote) return false;
-	const cleaned = sanitizeNote(line);
-	if (!cleaned) return false;
-	if (isLikelyNoteLine(cleaned)) return false;
-	if (collectPrescriptionSpans(cleaned).length > 0) return false;
-
-	const startsLowercase = /^[a-záéíóúñ]/.test(cleaned);
-	const normalized = normalizeComparable(cleaned);
-	const tokens = normalized.split(' ').filter(Boolean);
-	const firstToken = tokens[0] ?? '';
-	const startsWithContinuationToken = NOTE_CONTINUATION_TOKENS.has(firstToken);
-
-	if (!startsLowercase && !startsWithContinuationToken && !hasStrongCommentSignal(cleaned)) return false;
-	if (tokens.length <= 1 && !hasStrongCommentSignal(cleaned)) return false;
-
-	return true;
+const toRepsText = (repsMin: number | null, repsMax: number | null) => {
+	if (!repsMin || repsMin <= 0) return null;
+	if (repsMax && repsMax > repsMin) return `${repsMin}-${repsMax}`;
+	return `${repsMin}`;
 };
 
-const confidencePenaltyByDelta = (delta: ImportNameSplitConfidenceDelta) => {
-	if (delta === 'low') return 0.22;
-	if (delta === 'medium') return 0.12;
-	return 0;
-};
-
-type NameSplitCandidate = {
-	name: string;
-	tail: string;
-	reason: string;
-	confidenceDelta: ImportNameSplitConfidenceDelta;
-};
-
-type NameSplitResult = {
-	applied: boolean;
-	name: string;
-	extraNote: string | null;
-	tailOriginal: string | null;
-	reason: string;
-	confidenceDelta: ImportNameSplitConfidenceDelta;
-	clearlyUseful: boolean;
-};
-
-const findNameSplitCandidate = (rawName: string): NameSplitCandidate | null => {
-	const source = sanitizeSourceRawName(rawName);
-	if (!source) return null;
-
-	for (const separatorPattern of [/^(.+?)\s*[-–:]\s+(.+)$/i, /^(.+?)\s*\/\s*(.+)$/i]) {
-		const match = source.match(separatorPattern);
-		if (!match) continue;
-		const name = sanitizeExerciseName(match[1] ?? '');
-		const tail = sanitizeNote(match[2] ?? null);
-		if (!name || !tail) continue;
-		if (!COMMENT_START_REGEX.test(tail) && !hasStrongCommentSignal(tail)) continue;
+const shapeToLegacyFields = (shape: ImportShapeV1) => {
+	if (shape.kind === 'fixed') {
 		return {
-			name,
-			tail,
-			reason: 'separator_comment',
-			confidenceDelta: 'medium'
+			sets: shape.sets,
+			repsMin: shape.reps_min,
+			repsMax: null,
+			repsText: toRepsText(shape.reps_min, null),
+			repsMode: 'number' as const,
+			repsSpecial: null as string | null
 		};
 	}
-
-	const tokenMatch = source.match(COMMENT_TOKEN_SPLIT_REGEX);
-	if (tokenMatch?.index !== undefined) {
-		const token = tokenMatch[1] ?? '';
-		const tokenStart = tokenMatch.index + tokenMatch[0].length - token.length;
-		if (tokenStart > 1) {
-			const name = sanitizeExerciseName(source.slice(0, tokenStart));
-			const tail = sanitizeNote(source.slice(tokenStart));
-			if (name && tail) {
-				return {
-					name,
-					tail,
-					reason: 'comment_token',
-					confidenceDelta: 'medium'
-				};
-			}
-		}
-	}
-
-	const parenthetical = source.match(/^(.+?)\s*\(([^()]*)\)\s*$/);
-	if (parenthetical) {
-		const name = sanitizeExerciseName(parenthetical[1] ?? '');
-		const tail = sanitizeNote(parenthetical[2] ?? null);
-		if (name && tail) {
-			const shouldKeepInName = hasVariantKeyword(tail) && !hasStrongCommentSignal(tail);
-			if (!shouldKeepInName && (COMMENT_START_REGEX.test(tail) || hasStrongCommentSignal(tail))) {
-				return {
-					name,
-					tail,
-					reason: 'parenthetical_instruction',
-					confidenceDelta: 'none'
-				};
-			}
-		}
-	}
-
-	return null;
-};
-
-const isSingleWordNameAccepted = (
-	name: string,
-	hasParsedPrescription: boolean,
-	splitHasStrongSignal: boolean
-) => {
-	const normalized = normalizeComparable(name);
-	if (!normalized || normalized.includes(' ')) return false;
-	if (GENERIC_SINGLE_WORD_BLOCKLIST.has(normalized)) return false;
-	const lexicon = hasParsedPrescription ? SINGLE_WORD_EXERCISE_LEXICON : SINGLE_WORD_EXERCISE_LEXICON_STRICT;
-	if (!lexicon.has(normalized)) return false;
-	if (!hasParsedPrescription && !splitHasStrongSignal) return false;
-	return true;
-};
-
-const isPlausibleExerciseName = (
-	candidateName: string,
-	sourceRawName: string,
-	hasParsedPrescription: boolean,
-	tail: string
-) => {
-	const cleanName = sanitizeExerciseName(candidateName);
-	const cleanWordCount = countWords(cleanName);
-	if (cleanWordCount >= 2) return true;
-	if (cleanWordCount !== 1) return false;
-
-	const splitHasStrongSignal = hasStrongCommentSignal(tail);
-	const oneWordAccepted = isSingleWordNameAccepted(cleanName, hasParsedPrescription, splitHasStrongSignal);
-	if (!oneWordAccepted) return false;
-
-	const sourceWordCount = countWords(sourceRawName);
-	if (sourceWordCount >= 3 && !hasParsedPrescription && !splitHasStrongSignal) return false;
-	return true;
-};
-
-const splitExerciseNameAndNote = (
-	rawName: string,
-	hasParsedPrescription: boolean
-): NameSplitResult => {
-	const source = sanitizeSourceRawName(rawName);
-	const candidate = findNameSplitCandidate(source);
-	if (!candidate) {
+	if (shape.kind === 'range') {
 		return {
-			applied: false,
-			name: source,
-			extraNote: null,
-			tailOriginal: null,
-			reason: 'no_split',
-			confidenceDelta: 'none',
-			clearlyUseful: false
+			sets: shape.sets,
+			repsMin: shape.reps_min,
+			repsMax: shape.reps_max,
+			repsText: toRepsText(shape.reps_min, shape.reps_max),
+			repsMode: 'number' as const,
+			repsSpecial: null as string | null
 		};
 	}
-
-	const namePlausible = isPlausibleExerciseName(
-		candidate.name,
-		source,
-		hasParsedPrescription,
-		candidate.tail
-	);
-	const splitHasStrongSignal = hasStrongCommentSignal(candidate.tail);
-	const clearlyUseful = namePlausible || splitHasStrongSignal;
-
+	if (shape.kind === 'scheme') {
+		const repsSpecial = shape.reps_list.join('-');
+		return {
+			sets: shape.sets,
+			repsMin: null,
+			repsMax: null,
+			repsText: repsSpecial,
+			repsMode: 'special' as const,
+			repsSpecial
+		};
+	}
+	if (shape.kind === 'amrap') {
+		return {
+			sets: shape.sets,
+			repsMin: null,
+			repsMax: null,
+			repsText: 'AMRAP',
+			repsMode: 'special' as const,
+			repsSpecial: 'AMRAP'
+		};
+	}
+	const repsValues = shape.load_entries.map((entry) => entry.reps);
+	const repsMin = Math.min(...repsValues);
+	const repsMax = Math.max(...repsValues);
 	return {
-		applied: true,
-		name: candidate.name,
-		extraNote: candidate.tail,
-		tailOriginal: candidate.tail,
-		reason: candidate.reason,
-		confidenceDelta: namePlausible ? candidate.confidenceDelta : 'low',
-		clearlyUseful
+		sets: shape.load_entries.length,
+		repsMin,
+		repsMax: repsMax > repsMin ? repsMax : null,
+		repsText: toRepsText(repsMin, repsMax > repsMin ? repsMax : null),
+		repsMode: 'number' as const,
+		repsSpecial: null as string | null
 	};
 };
 
-const resolveNameAndNote = (
-	rawName: string,
-	rawNote: string | null,
-	prescription: ParsedPrescription
-): { sourceRawName: string; name: string; note: string | null; splitMeta: ImportNameSplitMeta | null } | null => {
-	const sourceRawName = sanitizeSourceRawName(rawName);
-	if (!sourceRawName) return null;
-
-	const hasParsedPrescription = Boolean(
-		(prescription.sets && prescription.sets > 0) || (prescription.repsMin && prescription.repsMin > 0)
-	);
-
-	const split = splitExerciseNameAndNote(sourceRawName, hasParsedPrescription);
-	const parsedInlineNote = sanitizeNote(rawNote);
-
-	let name = sanitizeExerciseName(split.name || sourceRawName);
-	let note = stripRedundantPrescription(mergeNotes(split.extraNote, parsedInlineNote), prescription);
-	let splitMeta: ImportNameSplitMeta = {
-		decision: split.applied ? 'split_kept' : 'not_applied',
-		reason: split.reason,
-		confidence_delta: split.confidenceDelta,
-		tail_original: split.tailOriginal
-	};
-
-	if (split.applied && note && note.length > 120 && !hasSemanticInstructionSignal(note)) {
-		name = sanitizeExerciseName(sourceRawName);
-		note = stripRedundantPrescription(parsedInlineNote, prescription);
-		splitMeta = {
-			decision: 'split_reverted',
-			reason: 'low_signal_long_tail',
-			confidence_delta: 'low',
-			tail_original: split.tailOriginal
-		};
-	}
-
-	if (split.applied && isGarbageNote(note)) {
-		if (split.clearlyUseful) {
-			note = null;
-			splitMeta = {
-				decision: 'split_kept_note_dropped',
-				reason: 'garbage_note_dropped',
-				confidence_delta: split.confidenceDelta,
-				tail_original: mergeNotes(split.tailOriginal, parsedInlineNote)
-			};
-		} else {
-			name = sanitizeExerciseName(sourceRawName);
-			note = stripRedundantPrescription(parsedInlineNote, prescription);
-			splitMeta = {
-				decision: 'split_reverted',
-				reason: 'garbage_note_without_useful_split',
-				confidence_delta: 'low',
-				tail_original: split.tailOriginal
-			};
-		}
-	}
-
-	if (!split.applied && isGarbageNote(note)) {
-		note = null;
-		splitMeta = {
-			decision: 'not_applied',
-			reason: 'garbage_note_dropped_no_split',
-			confidence_delta: 'none',
-			tail_original: parsedInlineNote
-		};
-	}
-
-	if (!name) return null;
-
-	return {
-		sourceRawName,
-		name,
-		note,
-		splitMeta
-	};
-};
-
-const buildNode = (
-	parts: {
-		sourceRawName: string;
-		name: string;
-		sets: number | null;
-		repsMin: number | null;
-		repsMax: number | null;
-		note: string | null;
-		repsText: string | null;
-		splitMeta: ImportNameSplitMeta | null;
-	},
-	line: ParsedLine,
-	confidenceScore: number
-): ImportDraftNode => {
-	const splitPenalty = confidencePenaltyByDelta(parts.splitMeta?.confidence_delta ?? 'none');
-	const fieldConfidence = toConfidence(confidenceScore);
-	const nameConfidence = toConfidence(Math.max(0.3, confidenceScore - splitPenalty));
-	const noteConfidenceScore = Math.max(0.3, confidenceScore - 0.2 - splitPenalty / 2);
+const makeFieldMeta = (line: ParsedLine, confidenceScore: number, hasNote: boolean) => {
+	const confidence = toConfidence(confidenceScore);
 	const provenance = makeProvenance(line.text, line.lineIndex, line.sourcePage);
-
 	return {
-		id: makeId(),
-		source_raw_name: parts.sourceRawName,
-		raw_exercise_name: parts.name,
-		sets: parts.sets,
-		reps_text: parts.repsText,
-		reps_min: parts.repsMin,
-		reps_max: parts.repsMax,
-		note: parts.note,
-		split_meta: parts.splitMeta,
-		field_meta: {
-			day: { confidence: fieldConfidence, provenance },
-			name: { confidence: nameConfidence, provenance },
-			sets: { confidence: fieldConfidence, provenance },
-			reps: { confidence: fieldConfidence, provenance },
-			note: parts.note
-				? {
-						confidence: toConfidence(noteConfidenceScore),
-						provenance
-					}
-				: null
-		}
+		day: { confidence, provenance },
+		name: { confidence, provenance },
+		sets: { confidence, provenance },
+		reps: { confidence, provenance },
+		note: hasNote
+			? {
+					confidence: toConfidence(Math.max(0.35, confidenceScore - 0.2)),
+					provenance
+			  }
+			: null
 	};
 };
-
-const parseExerciseLine = (line: ParsedLine, confidenceFloor: number): ImportDraftNode | null => {
-	const normalized = removeLineDecorators(normalizeLine(line.text));
-
-	const toRange = (minRaw: number, maxRaw: number | null) => {
-		const hasRange = maxRaw && Number.isFinite(maxRaw);
-		const rangeMin = hasRange ? Math.min(minRaw, maxRaw) : minRaw;
-		const rangeMax = hasRange ? Math.max(minRaw, maxRaw) : minRaw;
-		return {
-			rangeMin,
-			rangeMax,
-			repsMax: hasRange && rangeMax > rangeMin ? rangeMax : null,
-			repsText: hasRange && rangeMax > rangeMin ? `${rangeMin}-${rangeMax}` : `${rangeMin}`
-		};
-	};
-
-	const shouldSwapCompactRepsBySets = (
-		setsCandidate: number,
-		repsCandidate: number,
-		repsMaxCandidate: number | null,
-		matchedChunk: string
-	) => {
-		if (!Number.isFinite(setsCandidate) || !Number.isFinite(repsCandidate)) return false;
-		if (repsMaxCandidate && Number.isFinite(repsMaxCandidate)) return false;
-		if (/\b(?:series?|repeticiones?|reps?|por)\b/i.test(matchedChunk)) return false;
-		if (setsCandidate <= repsCandidate) return false;
-		if (setsCandidate < 6) return false;
-		if (repsCandidate < 2 || repsCandidate > 8) return false;
-		return true;
-	};
-
-	const createNodeFromRaw = (
-		rawName: string,
-		rawNote: string | null,
-		prescription: ParsedPrescription,
-		score: number
-	) => {
-		const resolved = resolveNameAndNote(rawName, rawNote, prescription);
-		if (!resolved) return null;
-		return buildNode(
-			{
-				sourceRawName: resolved.sourceRawName,
-				name: resolved.name,
-				sets: prescription.sets,
-				repsMin: prescription.repsMin,
-				repsMax: prescription.repsMax,
-				note: resolved.note,
-				repsText: prescription.repsText,
-				splitMeta: resolved.splitMeta
-			},
-			line,
-			score
-		);
-	};
-
-	for (const pattern of EXERCISE_PATTERNS) {
-		const match = normalized.match(pattern);
-		if (!match) continue;
-		let sets = Number.parseInt(match[2] ?? '', 10);
-		let repsMin = Number.parseInt(match[3] ?? '', 10);
-		const repsMaxRaw = match[4] ? Number.parseInt(match[4], 10) : null;
-		if (!Number.isFinite(sets) || !Number.isFinite(repsMin)) return null;
-
-		const matchedChunk = match[0] ?? normalized;
-		if (shouldSwapCompactRepsBySets(sets, repsMin, repsMaxRaw, matchedChunk)) {
-			const previousSets = sets;
-			sets = repsMin;
-			repsMin = previousSets;
-		}
-
-		const { rangeMin, repsMax, repsText } = toRange(repsMin, repsMaxRaw);
-
-		return createNodeFromRaw(
-			match[1] ?? '',
-			sanitizeNote(match[5] ?? match[6] ?? null),
-			{
-				sets,
-				repsMin: rangeMin,
-				repsMax,
-				repsText
-			},
-			confidenceFloor
-		);
-	}
-
-	for (const pattern of SETS_FIRST_PATTERNS) {
-		const match = normalized.match(pattern);
-		if (!match) continue;
-		const sets = Number.parseInt(match[1] ?? '', 10);
-		const repsMin = Number.parseInt(match[2] ?? '', 10);
-		const repsMaxRaw = match[3] ? Number.parseInt(match[3], 10) : null;
-		if (!Number.isFinite(sets) || !Number.isFinite(repsMin)) return null;
-		const { rangeMin, repsMax, repsText } = toRange(repsMin, repsMaxRaw);
-
-		return createNodeFromRaw(
-			match[4] ?? '',
-			null,
-			{
-				sets,
-				repsMin: rangeMin,
-				repsMax,
-				repsText
-			},
-			Math.max(0.65, confidenceFloor - 0.05)
-		);
-	}
-
-	for (const pattern of REPS_ONLY_PATTERNS) {
-		const match = normalized.match(pattern);
-		if (!match) continue;
-		const repsMin = Number.parseInt(match[2] ?? '', 10);
-		const repsMaxRaw = Number.parseInt(match[3] ?? '', 10);
-		if (!Number.isFinite(repsMin) || !Number.isFinite(repsMaxRaw)) return null;
-		const { rangeMin, repsMax, repsText } = toRange(repsMin, repsMaxRaw);
-
-		return createNodeFromRaw(
-			match[1] ?? '',
-			sanitizeNote(match[4] ?? null),
-			{
-				sets: null,
-				repsMin: rangeMin,
-				repsMax,
-				repsText
-			},
-			Math.max(0.6, confidenceFloor - 0.1)
-		);
-	}
-
-	for (const pattern of WORD_SERIES_PATTERNS) {
-		const match = normalized.match(pattern);
-		if (!match) continue;
-
-		if (pattern === WORD_SERIES_PATTERNS[0]) {
-			const setsWord = (match[1] ?? '').toLowerCase();
-			const repsRaw = (match[2] ?? '').toLowerCase();
-			const sets = WORD_NUMBER_MAP[setsWord] ?? Number.parseInt(setsWord, 10);
-			const repsMin =
-				WORD_NUMBER_MAP[repsRaw] ??
-				(Number.isFinite(Number.parseInt(repsRaw, 10)) ? Number.parseInt(repsRaw, 10) : NaN);
-			if (!Number.isFinite(sets) || !Number.isFinite(repsMin)) return null;
-
-			return createNodeFromRaw(
-				match[3] ?? '',
-				null,
-				{
-					sets,
-					repsMin,
-					repsMax: null,
-					repsText: `${repsMin}`
-				},
-				Math.max(0.55, confidenceFloor - 0.2)
-			);
-		}
-
-		const setsRaw = (match[2] ?? '').toLowerCase();
-		const repsMin = Number.parseInt(match[3] ?? '', 10);
-		const sets = WORD_NUMBER_MAP[setsRaw] ?? Number.parseInt(setsRaw, 10);
-		if (!Number.isFinite(sets) || !Number.isFinite(repsMin)) return null;
-
-		return createNodeFromRaw(
-			match[1] ?? '',
-			sanitizeNote(match[4] ?? null),
-			{
-				sets,
-				repsMin,
-				repsMax: null,
-				repsText: `${repsMin}`
-			},
-			Math.max(0.55, confidenceFloor - 0.2)
-		);
-	}
-
-	const repeatedRepScheme = normalized.match(
-		/^(?:[A-Z]\d+\s*[\.\-\)]?\s*)?(.+?)\s+((?:\d{1,3}\s+){1,5}\d{1,3})(?:\s*(?:\||•|-)\s*(.*))?$/i
-	);
-	if (
-		repeatedRepScheme &&
-		!/[xX*]/.test(normalized) &&
-		!/\b(?:series?|repeticiones?|reps?|por)\b/i.test(normalized)
-	) {
-		const schemeValues = (repeatedRepScheme[2] ?? '')
-			.trim()
-			.split(/\s+/)
-			.map((value) => Number.parseInt(value, 10))
-			.filter((value) => Number.isFinite(value) && value > 0 && value <= 99);
-		if (schemeValues.length >= 2) {
-			const sets = schemeValues.length;
-			const repsMin = Math.min(...schemeValues);
-			const repsMax = Math.max(...schemeValues);
-			const repsText = repsMax > repsMin ? `${repsMin}-${repsMax}` : `${repsMin}`;
-			return createNodeFromRaw(
-				repeatedRepScheme[1] ?? '',
-				sanitizeNote(repeatedRepScheme[3] ?? null),
-				{
-					sets,
-					repsMin,
-					repsMax: repsMax > repsMin ? repsMax : null,
-					repsText
-				},
-				Math.max(0.55, confidenceFloor - 0.2)
-			);
-		}
-	}
-
-	return null;
-};
-
-type PrescriptionSpan = {
-	start: number;
-	end: number;
-};
-
-type CandidateLineSplit = {
-	segments: ParsedLine[];
-	linesWithPrescriptionDetected: number;
-	splitAppliedCount: number;
-	unresolvedMultiExerciseLine: boolean;
-};
-
-const collectPrescriptionSpans = (line: string): PrescriptionSpan[] => {
-	const spans: PrescriptionSpan[] = [];
-	for (const pattern of PRESCRIPTION_SPAN_PATTERNS) {
-		const regex = new RegExp(pattern.source, pattern.flags);
-		let match: RegExpExecArray | null = null;
-		while ((match = regex.exec(line)) !== null) {
-			const value = match[0] ?? '';
-			if (!value) {
-				if (regex.lastIndex === match.index) regex.lastIndex += 1;
-				continue;
-			}
-			spans.push({ start: match.index, end: match.index + value.length });
-			if (regex.lastIndex === match.index) regex.lastIndex += 1;
-		}
-	}
-
-	if (spans.length === 0) return [];
-	const sorted = spans
-		.filter((span) => span.end > span.start)
-		.sort((a, b) => (a.start === b.start ? a.end - b.end : a.start - b.start));
-
-	const merged: PrescriptionSpan[] = [];
-	for (const span of sorted) {
-		const last = merged[merged.length - 1];
-		if (!last) {
-			merged.push({ ...span });
-			continue;
-		}
-		if (span.start <= last.end) {
-			last.end = Math.max(last.end, span.end);
-			continue;
-		}
-		merged.push({ ...span });
-	}
-
-	return merged;
-};
-
-const isPlausibleSegmentName = (segment: string): boolean => {
-	const normalized = removeLineDecorators(normalizeLine(segment));
-	if (!normalized) return false;
-	const spans = collectPrescriptionSpans(normalized);
-	if (spans.length === 0) return false;
-	const prefix = sanitizeExerciseName(normalized.slice(0, spans[0].start));
-	if (!prefix) return false;
-	if (COMMENT_START_REGEX.test(prefix)) return false;
-
-	const wordCount = countWords(prefix);
-	if (wordCount >= 2) return true;
-	if (wordCount === 1) return isSingleWordNameAccepted(prefix, true, false);
-	return false;
-};
-
-const splitByPositions = (line: string, positions: number[]): string[] => {
-	if (positions.length === 0) return [line];
-	const uniqueSorted = Array.from(new Set(positions))
-		.filter((position) => position > 0 && position < line.length)
-		.sort((a, b) => a - b);
-	if (uniqueSorted.length === 0) return [line];
-
-	const chunks: string[] = [];
-	let cursor = 0;
-	for (const position of uniqueSorted) {
-		const chunk = line.slice(cursor, position).trim();
-		if (chunk) chunks.push(chunk);
-		cursor = position;
-	}
-	const tail = line.slice(cursor).trim();
-	if (tail) chunks.push(tail);
-	return chunks;
-};
-
-const areValidSplitSegments = (segments: string[]): boolean => {
-	if (segments.length < 2) return false;
-	for (const segment of segments) {
-		if (segment.length < STAGE_B_SEGMENT_MIN_LENGTH) return false;
-		const spanCount = collectPrescriptionSpans(segment).length;
-		if (spanCount < 1) return false;
-		if (!isPlausibleSegmentName(segment)) return false;
-	}
-	return true;
-};
-
-const attemptStageASplit = (line: string): string[] | null => {
-	const splitPositions: number[] = [];
-	const regex = new RegExp(STAGE_A_LINE_SPLIT_REGEX.source, STAGE_A_LINE_SPLIT_REGEX.flags);
-	let match: RegExpExecArray | null = null;
-	while ((match = regex.exec(line)) !== null) {
-		splitPositions.push(match.index + 1);
-		if (regex.lastIndex === match.index) regex.lastIndex += 1;
-	}
-	if (splitPositions.length === 0) return null;
-
-	const segments = splitByPositions(line, splitPositions);
-	if (!areValidSplitSegments(segments)) return null;
-	return segments;
-};
-
-const attemptStageBSplit = (line: string): string[] | null => {
-	const spans = collectPrescriptionSpans(line);
-	if (spans.length < 2) return null;
-
-	const splitPositions: number[] = [];
-	for (let i = 1; i < spans.length; i += 1) {
-		const previous = spans[i - 1];
-		const current = spans[i];
-		if (current.start <= previous.end) continue;
-		const between = line.slice(previous.end, current.start);
-		if (!between.trim()) continue;
-
-		const trailingNameMatch = between.match(
-			/([A-Za-zÁÉÍÓÚÑáéíóúñ][A-Za-zÁÉÍÓÚÑáéíóúñ0-9]*(?:\s+[A-Za-zÁÉÍÓÚÑáéíóúñ0-9][A-Za-zÁÉÍÓÚÑáéíóúñ0-9]*){1,})\s*$/u
-		);
-		if (!trailingNameMatch || trailingNameMatch.index === undefined) continue;
-
-		const splitPos = previous.end + trailingNameMatch.index;
-		if (splitPos <= 0 || splitPos >= line.length) continue;
-		splitPositions.push(splitPos);
-	}
-
-	if (splitPositions.length === 0) return null;
-
-	const segments = splitByPositions(line, splitPositions);
-	if (!areValidSplitSegments(segments)) return null;
-	return segments;
-};
-
-const splitMultiExerciseLine = (sourceLine: ParsedLine): CandidateLineSplit => {
-	const normalized = removeLineDecorators(normalizeLine(sourceLine.text));
-	if (!normalized) {
-		return {
-			segments: [],
-			linesWithPrescriptionDetected: 0,
-			splitAppliedCount: 0,
-			unresolvedMultiExerciseLine: false
-		};
-	}
-
-	const spans = collectPrescriptionSpans(normalized);
-	const hasPrescription = spans.length > 0;
-	if (spans.length < 2) {
-		return {
-			segments: [{ ...sourceLine, text: normalized }],
-			linesWithPrescriptionDetected: hasPrescription ? 1 : 0,
-			splitAppliedCount: 0,
-			unresolvedMultiExerciseLine: false
-		};
-	}
-
-	const stageASegments = attemptStageASplit(normalized);
-	if (stageASegments) {
-		return {
-			segments: stageASegments.map((segment) => ({ ...sourceLine, text: segment })),
-			linesWithPrescriptionDetected: 1,
-			splitAppliedCount: stageASegments.length - 1,
-			unresolvedMultiExerciseLine: false
-		};
-	}
-
-	const stageBSegments = attemptStageBSplit(normalized);
-	if (stageBSegments) {
-		return {
-			segments: stageBSegments.map((segment) => ({ ...sourceLine, text: segment })),
-			linesWithPrescriptionDetected: 1,
-			splitAppliedCount: stageBSegments.length - 1,
-			unresolvedMultiExerciseLine: false
-		};
-	}
-
-	return {
-		segments: [{ ...sourceLine, text: normalized }],
-		linesWithPrescriptionDetected: 1,
-		splitAppliedCount: 0,
-		unresolvedMultiExerciseLine: true
-	};
-};
-
-const createDay = (sourceLabel: string, mapped: string | null): ImportDraftDay => ({
-	id: makeId(),
-	source_label: sourceLabel,
-	display_label: null,
-	mapped_day_key: mapped,
-	blocks: []
-});
 
 const ensureSingleBlock = (day: ImportDraftDay): ImportDraftBlock => {
-	const existing = day.blocks[0];
+	const existing = day.blocks.find((block) => block.block_type === 'single');
 	if (existing) return existing;
 	const block: ImportDraftBlock = {
 		id: makeId(),
@@ -1072,104 +262,744 @@ const ensureSingleBlock = (day: ImportDraftDay): ImportDraftBlock => {
 	return block;
 };
 
+const ensureBlockById = (
+	day: ImportDraftDay,
+	blockType: ImportDraftBlock['block_type'],
+	blockId: string
+): ImportDraftBlock => {
+	const existing = day.blocks.find((block) => block.id === blockId);
+	if (existing) return existing;
+	const created: ImportDraftBlock = {
+		id: blockId,
+		block_type: blockType,
+		nodes: []
+	};
+	day.blocks.push(created);
+	return created;
+};
+
+const createDay = (sourceLabel: string, mapped: string | null): ImportDraftDay => ({
+	id: makeId(),
+	source_label: sourceLabel,
+	display_label: null,
+	mapped_day_key: mapped,
+	blocks: []
+});
+
+const mapDayHeading = (
+	line: string
+): {
+	mapped: ImportDraftDay['mapped_day_key'];
+	label: string;
+	rest: string;
+	kind: 'weekday' | 'indexed' | 'custom';
+} | null => {
+	const heading = line.trim().match(DAY_HEADING_REGEX);
+	if (heading) {
+		const token = normalizeCompactWhitespace(heading[1] ?? '');
+		const rest = (heading[2] ?? '').trim();
+		const mappedWeekday = mapSpanishWeekdayToKey(token);
+		const mappedIndexed = mappedWeekday ? null : parseIndexedDayKey(token);
+		if (mappedWeekday || mappedIndexed) {
+			return {
+				mapped: mappedWeekday ?? mappedIndexed,
+				label: token,
+				rest,
+				kind: mappedWeekday ? 'weekday' : 'indexed'
+			};
+		}
+	}
+	const custom = line.trim().match(CUSTOM_DAY_HEADING_REGEX);
+	if (!custom) return null;
+	const prefix = normalizeCompactWhitespace(custom[1] ?? '');
+	const customLabel = normalizeCompactWhitespace(custom[2] ?? '');
+	if (!customLabel) return null;
+	return {
+		mapped: null,
+		label: normalizeCompactWhitespace(`${prefix} ${customLabel}`),
+		rest: (custom[3] ?? '').trim(),
+		kind: 'custom'
+	};
+};
+
+const parseSupersetHeading = (line: string) => {
+	const match = line.trim().match(SUPSERSET_HEADING_REGEX);
+	if (!match) return null;
+	const index = match[1] ? Number.parseInt(match[1], 10) : null;
+	return {
+		index: Number.isFinite(index) && index ? index : 1,
+		rest: (match[2] ?? '').trim(),
+		headerText: line.trim()
+	};
+};
+
+const parseCircuitHeading = (line: string) => {
+	const match = line.trim().match(CIRCUIT_HEADING_REGEX);
+	if (!match) return null;
+	const roundsParsed = match[1] ? Number.parseInt(match[1], 10) : null;
+	const rounds = Number.isFinite(roundsParsed) && roundsParsed && roundsParsed > 0 ? roundsParsed : 1;
+	return {
+		rounds,
+		rest: (match[2] ?? '').trim(),
+		headerText: line.trim()
+	};
+};
+
+const parseLoadHeading = (line: string) => {
+	const match = line.trim().match(LOAD_HEADER_REGEX);
+	if (!match) return null;
+	const header = sanitizeExerciseName(match[1] ?? '');
+	if (!header) return null;
+	if (/^(?:hoy\s+hacemos|despues|después|finalizamos\s+con|hoy)$/iu.test(header)) return null;
+	if (mapDayHeading(header)) return null;
+	if (parseCircuitHeading(header)) return null;
+	if (parseSupersetHeading(header)) return null;
+	return {
+		headerText: header,
+		rest: (match[2] ?? '').trim()
+	};
+};
+
+const splitGlobalMultiExerciseLine = (
+	line: string,
+	counters: ParserCounters
+): { segments: string[]; unresolved: boolean } => {
+	const raw = line.trim();
+	if (!raw) return { segments: [], unresolved: false };
+	const compact = normalizeCompactWhitespace(raw);
+	if (/\b\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\b/u.test(compact)) {
+		return { segments: [raw], unresolved: false };
+	}
+	if (
+		/\b\d+(?:[.,]\d+)?\s*(?:kg|lb|lbs)?\s*[xX*]\s*\d+\s*,\s*\d+(?:[.,]\d+)?\s*(?:kg|lb|lbs)?\s*[xX*]\s*\d+/u.test(
+			compact
+		)
+	) {
+		return { segments: [raw], unresolved: false };
+	}
+	if (/\btempo\b/iu.test(compact) && /\b\d\s*-\s*\d\s*-\s*\d\b/u.test(compact)) {
+		return { segments: [raw], unresolved: false };
+	}
+
+	const stageA = raw
+		.split(/\)\s*(?=[A-Za-zÁÉÍÓÚÑáéíóúñ])/u)
+		.map((segment) => segment.trim())
+		.filter(Boolean);
+	if (stageA.length > 1) {
+		const valid = stageA.every((segment) => parseContractCandidate(segment).candidate || parseLegacyLine(segment));
+		if (valid) {
+			counters.multiExerciseSplitsApplied += stageA.length - 1;
+			return { segments: stageA, unresolved: false };
+		}
+	}
+
+	for (const separator of [/\s+y\s+/iu, /\s*;\s*/u]) {
+		const segments = raw
+			.split(separator)
+			.map((segment) => segment.trim())
+			.filter(Boolean);
+		if (segments.length < 2) continue;
+		const valid = segments.every((segment) => parseContractCandidate(segment).candidate || parseLegacyLine(segment));
+		if (valid) {
+			counters.multiExerciseSplitsApplied += segments.length - 1;
+			return { segments, unresolved: false };
+		}
+	}
+
+	const prescriptions = compact.match(/\d{1,2}\s*(?:x|X|\*|por)\s*\d{1,3}/gu) ?? [];
+	if (prescriptions.length >= 2) {
+		counters.unresolvedMultiExerciseLines += 1;
+		return { segments: [raw], unresolved: true };
+	}
+	return { segments: [raw], unresolved: false };
+};
+
+const assertCandidateInvariants = (
+	rawLine: string,
+	candidate: ReturnType<typeof parseContractCandidate>['candidate']
+) => {
+	if (!candidate) return true;
+	if (candidate.nameSpanStart < 0) return false;
+	if (candidate.nameSpanEnd < candidate.nameSpanStart) return false;
+	if (candidate.structureEndOffset < candidate.nameSpanEnd) return false;
+	if (candidate.structureEndOffset > rawLine.length) return false;
+	if (candidate.noteStartOffset < candidate.nameSpanEnd) return false;
+	if (candidate.noteStartOffset > rawLine.length) return false;
+	return true;
+};
+
+const makeNodeFromContractCandidate = (
+	line: ParsedLine,
+	rawSegment: string,
+	candidate: NonNullable<ReturnType<typeof parseContractCandidate>['candidate']>,
+	blockContext: ImportShapeV1['block'] | null,
+	path: 'contract' | 'legacy'
+): ImportDraftNode => {
+	const shape = blockContext
+		? {
+				...candidate.parsedShape,
+				block: blockContext
+		  }
+		: candidate.parsedShape;
+	const { sets, repsMin, repsMax, repsText, repsMode, repsSpecial } = shapeToLegacyFields(shape);
+	const note = sanitizeNote(rawSegment.slice(candidate.noteStartOffset));
+	const name = sanitizeExerciseName(candidate.rawExerciseName);
+	return {
+		id: makeId(),
+		source_raw_name: name,
+		raw_exercise_name: name,
+		sets: sets ?? null,
+		reps_mode: repsMode,
+		reps_text: repsText,
+		reps_min: repsMin ?? null,
+		reps_max: repsMax ?? null,
+		reps_special: repsSpecial,
+		note,
+		parsed_shape: shape,
+		split_meta: null,
+		field_meta: makeFieldMeta(line, path === 'contract' ? 0.9 : 0.65, Boolean(note)),
+		debug: {
+			path,
+			struct_tokens_used_count: candidate.structTokensUsed.length
+		}
+	};
+};
+
+const makeNodeFromRawShape = (
+	line: ParsedLine,
+	rawSegment: string,
+	name: string,
+	shape: ImportShapeV1,
+	path: 'contract' | 'legacy'
+): ImportDraftNode => {
+	const { sets, repsMin, repsMax, repsText, repsMode, repsSpecial } = shapeToLegacyFields(shape);
+	return {
+		id: makeId(),
+		source_raw_name: name,
+		raw_exercise_name: name,
+		sets: sets ?? null,
+		reps_mode: repsMode,
+		reps_text: repsText,
+		reps_min: repsMin ?? null,
+		reps_max: repsMax ?? null,
+		reps_special: repsSpecial,
+		note: null,
+		parsed_shape: shape,
+		split_meta: null,
+		field_meta: makeFieldMeta(line, path === 'contract' ? 0.9 : 0.65, false),
+		debug: {
+			path,
+			struct_tokens_used_count: 0
+		}
+	};
+};
+
+const hasRequiredNodeFields = (node: ImportDraftNode) => {
+	if (!node.raw_exercise_name || !node.sets) return false;
+	if (node.reps_mode === 'special') {
+		return Boolean((node.reps_special ?? '').trim());
+	}
+	return Boolean(node.reps_min && node.reps_text);
+};
+
+const parseLineToNode = (
+	line: ParsedLine,
+	rawSegment: string,
+	counters: ParserCounters,
+	blockContext: ImportShapeV1['block'] | null
+): ParseOutcome => {
+	counters.candidateLines += 1;
+	counters.contractLinesTotal += 1;
+	const contract = parseContractCandidate(rawSegment);
+	if (contract.candidate) {
+		const isValid = assertCandidateInvariants(rawSegment, contract.candidate);
+		if (!isValid) {
+			counters.contractLinesFailedInvariants += 1;
+			if (process.env.NODE_ENV !== 'production') {
+				throw new Error(`contract matcher invariant failure on line: ${rawSegment}`);
+			}
+			const noteOnlyNode: ImportDraftNode = {
+				id: makeId(),
+				source_raw_name: sanitizeExerciseName(rawSegment),
+				raw_exercise_name: sanitizeExerciseName(rawSegment),
+				sets: null,
+				reps_mode: 'number',
+				reps_text: null,
+				reps_min: null,
+				reps_max: null,
+				reps_special: null,
+				note: sanitizeNote(rawSegment),
+				parsed_shape: null,
+				split_meta: null,
+				field_meta: makeFieldMeta(line, 0.45, true),
+				debug: {
+					path: 'contract',
+					struct_tokens_used_count: 0
+				}
+			};
+			return {
+				node: noteOnlyNode,
+				usedContract: true,
+				usedLegacy: false,
+			detectedPrescription: false,
+			failedInvariant: true
+		};
+	}
+		const node = makeNodeFromContractCandidate(line, rawSegment, contract.candidate, blockContext, 'contract');
+		counters.contractLinesParsed += 1;
+		counters.parsedLines += 1;
+		counters.linesWithPrescriptionDetected += 1;
+		if (hasRequiredNodeFields(node)) {
+			counters.requiredFieldsCompleted += 1;
+		}
+		return {
+			node,
+			usedContract: true,
+			usedLegacy: false,
+			detectedPrescription: true,
+			failedInvariant: false
+		};
+	}
+
+	const legacy = parseLegacyLine(rawSegment);
+	if (legacy) {
+		counters.legacyFallbackHits += 1;
+		counters.parsedLines += 1;
+		counters.linesWithPrescriptionDetected += 1;
+		const blockShape = blockContext ? { ...legacy.shape, block: blockContext } : legacy.shape;
+		const node = makeNodeFromRawShape(line, rawSegment, legacy.name, blockShape, 'legacy');
+		node.note = sanitizeNote(rawSegment.slice(legacy.structureEndOffset));
+		node.field_meta.note = node.note ? makeFieldMeta(line, 0.55, true).note : null;
+		if (hasRequiredNodeFields(node)) {
+			counters.requiredFieldsCompleted += 1;
+		}
+		return {
+			node,
+			usedContract: false,
+			usedLegacy: true,
+			detectedPrescription: true,
+			failedInvariant: false
+		};
+	}
+
+	return {
+		node: null,
+		usedContract: false,
+		usedLegacy: false,
+		detectedPrescription: false,
+		failedInvariant: false
+	};
+};
+
+const rollbackPendingContext = (queue: LineUnit[], buffered: LineUnit[]) => {
+	for (let i = buffered.length - 1; i >= 0; i -= 1) {
+		const unit = buffered[i];
+		if (!unit) continue;
+		queue.unshift({
+			...unit,
+			source_kind: 'rollback',
+			skip_context_open: true
+		});
+	}
+};
+
+const parseCircuitLine = (
+	rawLine: string,
+	rounds: number
+): CircuitEntryResult => {
+	const trimmed = rawLine.trim();
+	if (!trimmed) return { kind: 'noise' };
+	if (isCircuitCommentLine(trimmed)) return { kind: 'noise' };
+	const segments = splitCircuitSegments(trimmed);
+	if (segments.length === 0) return { kind: 'noise' };
+
+	const entries: Array<{ name: string; shape: ImportShapeV1 }> = [];
+	for (const segment of segments) {
+		const parsed = parseCircuitEntry(segment);
+		if (!parsed) {
+			return { kind: 'invalid' };
+		}
+		let shape = parsed.shape;
+		if (shape.kind === 'fixed' && shape.inference_reasons?.includes('circuit_grouped')) {
+			shape = {
+				...shape,
+				sets: rounds,
+				evidence: 'heuristic',
+				inference_reasons: Array.from(new Set([...(shape.inference_reasons ?? []), 'circuit_grouped']))
+			};
+		}
+		entries.push({ name: parsed.name, shape });
+	}
+	return { kind: 'valid', entries };
+};
+
+const maybeInlineUnit = (baseUnit: LineUnit, inlineText: string): LineUnit | null => {
+	const value = inlineText.trim();
+	if (!value) return null;
+	return {
+		id: makeId(),
+		parent_id: baseUnit.id,
+		raw: value,
+		line_index: baseUnit.line_index,
+		source_page: baseUnit.source_page,
+		source_kind: 'synthetic',
+		skip_context_open: true
+	};
+};
+
 export const parseLinesToDraft = (lines: ParsedLine[], context: ParserContext): ImportDraft => {
-	const degradeLayout = context.degradeConfidenceForLayout === true;
-	const baseConfidence = degradeLayout ? 0.62 : 0.9;
+	const counters: ParserCounters = {
+		linesIn: 0,
+		candidateLines: 0,
+		parsedLines: 0,
+		requiredFieldsCompleted: 0,
+		linesWithPrescriptionDetected: 0,
+		multiExerciseSplitsApplied: 0,
+		unresolvedMultiExerciseLines: 0,
+		contractLinesTotal: 0,
+		contractLinesParsed: 0,
+		contractLinesFailedInvariants: 0,
+		legacyFallbackHits: 0
+	};
 
 	const days: ImportDraftDay[] = [];
 	const fallbackDay = createDay('Día 1', 'monday');
 	days.push(fallbackDay);
 	let currentDay = fallbackDay;
-	let lastNode: ImportDraftNode | null = null;
 
-	let linesIn = 0;
-	let candidateLines = 0;
-	let parsedLines = 0;
-	let requiredFieldsCompleted = 0;
-	let linesWithPrescriptionDetected = 0;
-	let multiExerciseSplitsApplied = 0;
-	let unresolvedMultiExerciseLines = 0;
+	let state: ParseState = { kind: 'IDLE' };
+	const reopenedContextHeaders = new Set<string>();
 	let indexedDayHeadingsDetected = 0;
 	let weekDayHeadingsDetected = 0;
+	let customDayHeadingsDetected = 0;
 
-	for (const sourceLine of lines) {
-		const normalized = removeLineDecorators(normalizeLine(sourceLine.text));
-		if (!normalized) continue;
+	const queue: LineUnit[] = lines.map((line) => ({
+		id: makeId(),
+		raw: line.text,
+		line_index: line.lineIndex,
+		source_page: line.sourcePage,
+		source_kind: 'input'
+	}));
 
-		const heading = normalized.match(DAY_HEADING_REGEX);
-		if (heading) {
-			const headingLabel = normalized;
-			const headingToken = heading[1] ?? '';
-			const mappedWeekday = mapSpanishWeekdayToKey(headingToken);
-			const mappedIndexed = mappedWeekday ? null : mapIndexedDayLabelToKey(headingToken);
-			const mapped = mappedWeekday ?? mappedIndexed ?? (null as ImportDraftDay['mapped_day_key']);
-			if (mappedWeekday) {
-				weekDayHeadingsDetected += 1;
-			} else if (mappedIndexed) {
-				indexedDayHeadingsDetected += 1;
+	while (queue.length > 0) {
+		const unit = queue.shift();
+		if (!unit) break;
+		const rawLine = unit.raw;
+		const trimmed = rawLine.trim();
+
+		const line: ParsedLine = {
+			text: rawLine,
+			lineIndex: unit.line_index,
+			sourcePage: unit.source_page
+		};
+
+		if (isBlank(trimmed)) {
+			if (state.kind === 'ACTIVE_SUPERSET') {
+				state = { kind: 'IDLE' };
 			}
-			const nextDay = createDay(headingLabel, mapped);
-			days.push(nextDay);
-			currentDay = nextDay;
-			lastNode = null;
+			if (state.kind === 'PENDING_SUPERSET') {
+				state = { kind: 'IDLE' };
+			}
 			continue;
 		}
 
-		if (NOISE_LINE_REGEX.test(normalized)) {
-			continue;
-		}
+		const dayHeading = mapDayHeading(trimmed);
+		const circuitHeading = !unit.skip_context_open ? parseCircuitHeading(trimmed) : null;
+		const supersetHeading = !unit.skip_context_open ? parseSupersetHeading(trimmed) : null;
+		const loadHeading = !unit.skip_context_open ? parseLoadHeading(trimmed) : null;
 
-		linesIn += 1;
+		if (state.kind === 'PENDING_CIRCUIT' || state.kind === 'ACTIVE_CIRCUIT') {
+			if (dayHeading || circuitHeading || supersetHeading || loadHeading) {
+				if (state.kind === 'PENDING_CIRCUIT') {
+					rollbackPendingContext(queue, state.buffer);
+				}
+				state = { kind: 'IDLE' };
+				queue.unshift(unit);
+				continue;
+			}
 
-		const splitResult = splitMultiExerciseLine(sourceLine);
-		linesWithPrescriptionDetected += splitResult.linesWithPrescriptionDetected;
-		multiExerciseSplitsApplied += splitResult.splitAppliedCount;
-		if (splitResult.unresolvedMultiExerciseLine) {
-			unresolvedMultiExerciseLines += 1;
-		}
-
-		for (const splitLine of splitResult.segments) {
-			const splitNormalized = splitLine.text;
-			candidateLines += 1;
-
-			const parsedNode = parseExerciseLine(splitLine, baseConfidence);
-			if (parsedNode) {
-				const block = ensureSingleBlock(currentDay);
-				block.nodes.push(parsedNode);
-				lastNode = parsedNode;
-				parsedLines += 1;
-				if (
-					parsedNode.raw_exercise_name &&
-					parsedNode.sets &&
-					parsedNode.reps_min &&
-					parsedNode.reps_text
-				) {
-					requiredFieldsCompleted += 1;
+			const parsed = parseCircuitLine(trimmed, state.rounds);
+			if (parsed.kind === 'valid') {
+				const block = ensureBlockById(currentDay, 'circuit', state.blockId);
+				for (const entry of parsed.entries) {
+					const shape: ImportShapeV1 = {
+						...entry.shape,
+						block: {
+							kind: 'circuit',
+							rounds: state.rounds,
+							header_text: state.headerText,
+							header_unit_id: state.headerUnitId
+						}
+					};
+					const node = makeNodeFromRawShape(line, trimmed, entry.name, shape, 'contract');
+					block.nodes.push(node);
+					counters.candidateLines += 1;
+					counters.contractLinesTotal += 1;
+					counters.contractLinesParsed += 1;
+					counters.parsedLines += 1;
+					counters.linesWithPrescriptionDetected += 1;
+					if (hasRequiredNodeFields(node)) {
+						counters.requiredFieldsCompleted += 1;
+					}
+				}
+				if (state.kind === 'PENDING_CIRCUIT') {
+					if (block.nodes.length >= 2) {
+						state = {
+							kind: 'ACTIVE_CIRCUIT',
+							headerUnitId: state.headerUnitId,
+							headerText: state.headerText,
+							rounds: state.rounds,
+							blockId: state.blockId,
+							invalidEntryStreak: 0
+						};
+					} else {
+						state.entries.push(...parsed.entries);
+						state.buffer.push(unit);
+					}
+				} else {
+					state.invalidEntryStreak = 0;
 				}
 				continue;
 			}
 
-			if (lastNode && isLikelyNoteLine(splitNormalized)) {
-				lastNode.note = mergeNotes(lastNode.note, splitNormalized);
-				if (lastNode.note) {
-					lastNode.field_meta.note = {
-						confidence: toConfidence(Math.max(0.4, baseConfidence - 0.25)),
-						provenance: makeProvenance(sourceLine.text, sourceLine.lineIndex, sourceLine.sourcePage)
+			if (parsed.kind === 'noise') {
+				if (state.kind === 'PENDING_CIRCUIT') {
+					state.buffer.push(unit);
+				}
+				continue;
+			}
+
+			if (state.kind === 'PENDING_CIRCUIT') {
+				state.buffer.push(unit);
+				if (state.entries.length < 2) {
+					rollbackPendingContext(queue, state.buffer);
+					state = { kind: 'IDLE' };
+					continue;
+				}
+				state = {
+					kind: 'ACTIVE_CIRCUIT',
+					headerUnitId: state.headerUnitId,
+					headerText: state.headerText,
+					rounds: state.rounds,
+					blockId: state.blockId,
+					invalidEntryStreak: 1
+				};
+				continue;
+			}
+
+			state.invalidEntryStreak += 1;
+			if (state.invalidEntryStreak >= 2) {
+				state = { kind: 'IDLE' };
+				queue.unshift({ ...unit, skip_context_open: true, source_kind: 'rollback' });
+			}
+			continue;
+		}
+
+		if (state.kind === 'PENDING_LADDER' || state.kind === 'ACTIVE_LADDER') {
+			if (dayHeading || circuitHeading || supersetHeading || loadHeading) {
+				if (state.kind === 'PENDING_LADDER') {
+					rollbackPendingContext(queue, state.buffer);
+					state = { kind: 'IDLE' };
+					queue.unshift(unit);
+					continue;
+				}
+				const finalizedShape: ImportShapeV1 = {
+					version: 1,
+					kind: 'load_ladder',
+					load_entries: state.entries.map((entry) => ({
+						weight: entry.weight,
+						reps: entry.reps,
+						unit: entry.unit
+					})),
+					evidence: 'heuristic',
+					inference_reasons: ['ladder_grouped']
+				};
+				const block = ensureBlockById(currentDay, 'single', state.blockId);
+				const node = makeNodeFromRawShape(line, state.headerText, state.headerText, finalizedShape, 'contract');
+				block.nodes.push(node);
+				counters.parsedLines += 1;
+				counters.linesWithPrescriptionDetected += 1;
+				counters.contractLinesTotal += 1;
+				counters.contractLinesParsed += 1;
+				counters.candidateLines += 1;
+				if (hasRequiredNodeFields(node)) {
+					counters.requiredFieldsCompleted += 1;
+				}
+				state = { kind: 'IDLE' };
+				queue.unshift(unit);
+				continue;
+			}
+
+			const entries = parseLadderEntries(trimmed);
+			if (entries.length > 0) {
+				if (state.kind === 'PENDING_LADDER') {
+					state.buffer.push(unit);
+					state.entries.push(...entries);
+					if (state.entries.length >= 2) {
+						state = {
+							kind: 'ACTIVE_LADDER',
+							headerUnitId: state.headerUnitId,
+							headerText: state.headerText,
+							blockId: state.blockId,
+							entries: state.entries
+						};
+					}
+				} else {
+					state.entries.push(...entries);
+				}
+				continue;
+			}
+
+			if (state.kind === 'PENDING_LADDER') {
+				state.buffer.push(unit);
+				rollbackPendingContext(queue, state.buffer);
+				state = { kind: 'IDLE' };
+				continue;
+			}
+
+			state = { kind: 'IDLE' };
+			queue.unshift({ ...unit, skip_context_open: true, source_kind: 'rollback' });
+			continue;
+		}
+
+		if (state.kind === 'PENDING_SUPERSET' || state.kind === 'ACTIVE_SUPERSET') {
+			if (dayHeading || circuitHeading || supersetHeading || loadHeading) {
+				state = { kind: 'IDLE' };
+				queue.unshift(unit);
+				continue;
+			}
+
+			const result = parseLineToNode(
+				line,
+				trimmed,
+				counters,
+				{
+					kind: 'superset',
+					group_id: state.headerUnitId,
+					index: state.groupIndex,
+					header_text: state.headerText,
+					header_unit_id: state.headerUnitId
+				}
+			);
+
+			if (result.node) {
+				const block = ensureBlockById(currentDay, 'superset', state.blockId);
+				block.nodes.push(result.node);
+				if (state.kind === 'PENDING_SUPERSET') {
+					state = {
+						kind: 'ACTIVE_SUPERSET',
+						headerUnitId: state.headerUnitId,
+						headerText: state.headerText,
+						groupIndex: state.groupIndex,
+						blockId: state.blockId
 					};
 				}
 				continue;
 			}
 
-			if (lastNode && isLikelyNoteContinuationLine(splitNormalized, Boolean(lastNode.note))) {
-				lastNode.note = appendNoteContinuation(lastNode.note, splitNormalized);
-				if (lastNode.note) {
-					lastNode.field_meta.note = {
-						confidence: toConfidence(Math.max(0.4, baseConfidence - 0.25)),
-						provenance: makeProvenance(sourceLine.text, sourceLine.lineIndex, sourceLine.sourcePage)
-					};
-				}
+			if (isNoiseLine(trimmed)) {
+				continue;
 			}
+			if (state.kind === 'ACTIVE_SUPERSET') {
+				continue;
+			}
+			state = { kind: 'IDLE' };
+			continue;
 		}
+
+			if (dayHeading) {
+				const mapped = dayHeading.mapped;
+				if (dayHeading.kind === 'weekday') weekDayHeadingsDetected += 1;
+				if (dayHeading.kind === 'indexed') indexedDayHeadingsDetected += 1;
+				if (dayHeading.kind === 'custom') customDayHeadingsDetected += 1;
+				const nextDay = createDay(dayHeading.label, mapped);
+				days.push(nextDay);
+				currentDay = nextDay;
+			state = { kind: 'IDLE' };
+			const inline = maybeInlineUnit(unit, dayHeading.rest);
+			if (inline) queue.unshift(inline);
+			continue;
+		}
+
+		if (isNoiseLine(trimmed)) {
+			continue;
+		}
+
+		if (circuitHeading && !reopenedContextHeaders.has(unit.id)) {
+			reopenedContextHeaders.add(unit.id);
+			state = {
+				kind: 'PENDING_CIRCUIT',
+				headerUnitId: unit.id,
+				headerText: circuitHeading.headerText,
+				rounds: circuitHeading.rounds,
+				blockId: makeId(),
+				buffer: [],
+				entries: []
+			};
+			const inline = maybeInlineUnit(unit, circuitHeading.rest);
+			if (inline) queue.unshift(inline);
+			continue;
+		}
+
+		if (supersetHeading && !reopenedContextHeaders.has(unit.id)) {
+			reopenedContextHeaders.add(unit.id);
+			state = {
+				kind: 'PENDING_SUPERSET',
+				headerUnitId: unit.id,
+				headerText: supersetHeading.headerText,
+				groupIndex: supersetHeading.index,
+				blockId: makeId()
+			};
+			const inline = maybeInlineUnit(unit, supersetHeading.rest);
+			if (inline) queue.unshift(inline);
+			continue;
+		}
+
+		if (loadHeading && !reopenedContextHeaders.has(unit.id)) {
+			reopenedContextHeaders.add(unit.id);
+			state = {
+				kind: 'PENDING_LADDER',
+				headerUnitId: unit.id,
+				headerText: loadHeading.headerText,
+				blockId: makeId(),
+				buffer: [],
+				entries: []
+			};
+			const inline = maybeInlineUnit(unit, loadHeading.rest);
+			if (inline) queue.unshift(inline);
+			continue;
+		}
+
+		counters.linesIn += 1;
+		const split = splitGlobalMultiExerciseLine(trimmed, counters);
+		for (const segment of split.segments) {
+			const outcome = parseLineToNode(line, segment, counters, null);
+			if (!outcome.node) continue;
+			const block = ensureSingleBlock(currentDay);
+			block.nodes.push(outcome.node);
+		}
+	}
+
+	if (state.kind === 'ACTIVE_LADDER') {
+		const block = ensureBlockById(currentDay, 'single', state.blockId);
+		const node = makeNodeFromRawShape(
+			{ text: state.headerText, lineIndex: 0, sourcePage: undefined },
+			state.headerText,
+			state.headerText,
+			{
+				version: 1,
+				kind: 'load_ladder',
+				load_entries: state.entries.map((entry) => ({
+					weight: entry.weight,
+					reps: entry.reps,
+					unit: entry.unit
+				})),
+				evidence: 'heuristic',
+				inference_reasons: ['ladder_grouped']
+			},
+			'contract'
+		);
+		block.nodes.push(node);
 	}
 
 	const compactDays = days.filter((day) => day.blocks.some((block) => block.nodes.length > 0));
@@ -1178,10 +1008,14 @@ export const parseLinesToDraft = (lines: ParsedLine[], context: ParserContext): 
 		(acc, day) => acc + day.blocks.reduce((sum, block) => sum + block.nodes.length, 0),
 		0
 	);
-	const parseableRatio = candidateLines > 0 ? parsedLines / candidateLines : 0;
-	const requiredFieldsRatio = parsedLines > 0 ? requiredFieldsCompleted / parsedLines : 0;
+	const parseableRatio = counters.candidateLines > 0 ? counters.parsedLines / counters.candidateLines : 0;
+	const requiredFieldsRatio = counters.parsedLines > 0 ? counters.requiredFieldsCompleted / counters.parsedLines : 0;
 	const inferredPresentationMode =
-		indexedDayHeadingsDetected > 0 && weekDayHeadingsDetected === 0 ? 'sequential' : 'weekday';
+		customDayHeadingsDetected > 0
+			? 'custom'
+			: indexedDayHeadingsDetected > 0 && weekDayHeadingsDetected === 0
+				? 'sequential'
+				: 'weekday';
 
 	return {
 		version: IMPORT_DRAFT_VERSION,
@@ -1192,16 +1026,20 @@ export const parseLinesToDraft = (lines: ParsedLine[], context: ParserContext): 
 		coverage: {
 			days_detected: effectiveDays.length,
 			exercises_parsed: exercisesParsed,
-			candidate_lines: candidateLines,
-			parsed_lines: parsedLines,
+			candidate_lines: counters.candidateLines,
+			parsed_lines: counters.parsedLines,
 			parseable_ratio: parseableRatio,
 			required_fields_ratio: requiredFieldsRatio,
-			lines_in: linesIn,
-			lines_after_split: candidateLines,
-			lines_with_prescription_detected: linesWithPrescriptionDetected,
+			lines_in: counters.linesIn,
+			lines_after_split: counters.candidateLines,
+			lines_with_prescription_detected: counters.linesWithPrescriptionDetected,
 			exercise_nodes_out: exercisesParsed,
-			multi_exercise_splits_applied: multiExerciseSplitsApplied,
-			unresolved_multi_exercise_lines: unresolvedMultiExerciseLines
+			multi_exercise_splits_applied: counters.multiExerciseSplitsApplied,
+			unresolved_multi_exercise_lines: counters.unresolvedMultiExerciseLines,
+			contract_lines_total: counters.contractLinesTotal,
+			contract_lines_parsed: counters.contractLinesParsed,
+			contract_lines_failed_invariants: counters.contractLinesFailedInvariants,
+			legacy_fallback_hits: counters.legacyFallbackHits
 		},
 		presentation: {
 			day_label_mode: inferredPresentationMode

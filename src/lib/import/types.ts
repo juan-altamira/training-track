@@ -97,15 +97,84 @@ export type ImportNameSplitMeta = {
 	tail_original: string | null;
 };
 
+export const IMPORT_INFERENCE_REASON = [
+	'narrative_prefix_removed',
+	'reps_x_series_reordered',
+	'dash_series_assumed',
+	'circuit_grouped',
+	'ladder_grouped',
+	'superset_grouped'
+] as const;
+
+export type ImportInferenceReason = (typeof IMPORT_INFERENCE_REASON)[number];
+
+export type ImportLoadLadderEntry = {
+	weight: number;
+	reps: number;
+	unit: 'kg' | 'lb' | null;
+};
+
+export type ImportParsedBlockContext =
+	| {
+			kind: 'circuit';
+			rounds?: number;
+			header_text: string;
+			header_unit_id: string;
+	  }
+	| {
+			kind: 'superset';
+			group_id?: string;
+			index?: number;
+			header_text: string;
+			header_unit_id: string;
+	  };
+
+type ImportShapeCommon = {
+	version: 1;
+	evidence: 'explicit' | 'heuristic';
+	inference_reasons?: ImportInferenceReason[];
+	block?: ImportParsedBlockContext;
+};
+
+export type ImportShapeV1 =
+	| (ImportShapeCommon & {
+			kind: 'fixed';
+			sets: number;
+			reps_min: number;
+			reps_max?: null;
+	  })
+	| (ImportShapeCommon & {
+			kind: 'range';
+			sets: number;
+			reps_min: number;
+			reps_max: number;
+	  })
+	| (ImportShapeCommon & {
+			kind: 'scheme';
+			sets: number;
+			reps_list: number[];
+	  })
+	| (ImportShapeCommon & {
+			kind: 'amrap';
+			sets: number;
+	  })
+	| (ImportShapeCommon & {
+			kind: 'load_ladder';
+			load_entries: ImportLoadLadderEntry[];
+	  });
+
 export type ImportDraftNode = {
 	id: string;
 	source_raw_name: string;
 	raw_exercise_name: string;
 	sets: number | null;
+	reps_mode: 'number' | 'special';
 	reps_text: string | null;
 	reps_min: number | null;
 	reps_max: number | null;
+	reps_special: string | null;
 	note: string | null;
+	parsed_shape?: ImportShapeV1 | null;
 	split_meta: ImportNameSplitMeta | null;
 	field_meta: {
 		day: ImportNodeFieldMeta;
@@ -113,6 +182,10 @@ export type ImportDraftNode = {
 		sets: ImportNodeFieldMeta;
 		reps: ImportNodeFieldMeta;
 		note: ImportNodeFieldMeta | null;
+	};
+	debug?: {
+		path: 'contract' | 'legacy';
+		struct_tokens_used_count: number;
 	};
 };
 
@@ -149,6 +222,10 @@ export type ImportDraft = {
 		exercise_nodes_out?: number;
 		multi_exercise_splits_applied?: number;
 		unresolved_multi_exercise_lines?: number;
+		contract_lines_total?: number;
+		contract_lines_parsed?: number;
+		contract_lines_failed_invariants?: number;
+		legacy_fallback_hits?: number;
 	};
 	presentation: {
 		day_label_mode: RoutineDayLabelMode;

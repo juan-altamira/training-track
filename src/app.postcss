@@ -12,3 +12,15 @@ body {
 	min-height: 100vh;
 	background-color: #0d0f14;
 }
+
+/* Hide native number input spinners globally */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+
+input[type='number'] {
+	-moz-appearance: textfield;
+	appearance: textfield;
+}

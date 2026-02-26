@@ -815,18 +815,23 @@
 				{#if plan[selectedDay].exercises.length === 0}
 					<p class="text-base text-slate-400">Sin ejercicios. Agregá uno.</p>
 				{:else}
-					{#each plan[selectedDay].exercises as exercise, index (exercise.id)}
-						<div class="rounded-lg border border-slate-800 bg-[#111423] p-3 md:p-4 shadow-sm">
-							<div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-2">
-								<p class="text-base font-semibold text-slate-100">Ejercicio {index + 1}</p>
+						{#each plan[selectedDay].exercises as exercise, index (exercise.id)}
+							<div class="relative rounded-lg border border-slate-800 bg-[#111423] p-3 md:p-4 shadow-sm">
+								<div class="pr-12">
+									<p class="text-base font-semibold text-slate-100">Ejercicio {index + 1}</p>
+								</div>
 								<button
-									class="rounded border border-red-700 bg-red-900/40 px-2.5 py-1.5 text-sm text-red-200 hover:bg-red-900/60 w-full md:w-auto"
+									type="button"
+									title="Eliminar ejercicio"
+									aria-label="Eliminar ejercicio"
+									class="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-700/70 bg-transparent text-red-300 transition-colors hover:bg-red-900/30 hover:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/50"
 									onclick={() => removeExercise(selectedDay, exercise.id)}
 								>
-									Quitar
+									<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7h16m-6 0V5.5a1.5 1.5 0 0 0-3 0V7m-4 0 .7 11.2A2 2 0 0 0 9.7 20h4.6a2 2 0 0 0 2-1.8L17 7M10 10.5v6M14 10.5v6" />
+									</svg>
 								</button>
-							</div>
-								<div class="mt-3">
+									<div class="mt-3">
 								<label class="block text-sm font-medium text-slate-300">
 									Nombre
 									<input

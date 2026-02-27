@@ -91,7 +91,10 @@ export const deriveRoutinePlanFromDraft = (
 			const firstBlockContext =
 				block.nodes.find((node) => node.parsed_shape?.block)?.parsed_shape?.block ?? null;
 			const blockType: 'normal' | 'circuit' =
-				firstBlockContext?.kind === 'circuit' || block.block_type === 'circuit'
+				firstBlockContext?.kind === 'circuit' ||
+				firstBlockContext?.kind === 'superset' ||
+				block.block_type === 'circuit' ||
+				block.block_type === 'superset'
 					? 'circuit'
 					: 'normal';
 			const blockId =
@@ -114,6 +117,10 @@ export const deriveRoutinePlanFromDraft = (
 					: null;
 
 			block.nodes.forEach((node, nodeIndex) => {
+				const exerciseBlockId =
+					blockType === 'circuit'
+						? blockId
+						: `${blockId}-${node.id || `${blockIndex + 1}-${nodeIndex + 1}`}`;
 				const exerciseName = node.raw_exercise_name?.trim() ?? '';
 				const shape = node.parsed_shape ?? null;
 				const sets = node.sets ?? 0;
@@ -191,7 +198,7 @@ export const deriveRoutinePlanFromDraft = (
 					showRange:
 						repsMode === 'number' && Boolean(repsMax && repsMin && repsMax > repsMin),
 					blockType,
-					blockId,
+					blockId: exerciseBlockId,
 					blockOrder: blockIndex,
 					blockLabel,
 					circuitRounds,

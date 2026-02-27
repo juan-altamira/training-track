@@ -10,6 +10,16 @@ import type {
 	RoutineUiMeta
 } from './types';
 
+export type RoutineEditorBlock = {
+	key: string;
+	type: RoutineBlockType;
+	id: string;
+	label: string;
+	order: number;
+	rounds: number | null;
+	exercises: RoutineExercise[];
+};
+
 export const WEEK_DAYS: RoutineDay[] = [
 	{ key: 'monday', label: 'Lunes', exercises: [] },
 	{ key: 'tuesday', label: 'Martes', exercises: [] },
@@ -200,6 +210,9 @@ export const getRoutineExerciseBlockType = (exercise: RoutineExercise): RoutineB
 	return 'normal';
 };
 
+export const getRoutineExerciseBlockId = (exercise: RoutineExercise) =>
+	(exercise.blockId ?? '').trim() || exercise.id;
+
 const normalizeCircuitRounds = (exercise: RoutineExercise) => {
 	const raw =
 		typeof exercise.circuitRounds === 'number' && Number.isFinite(exercise.circuitRounds)
@@ -325,6 +338,7 @@ const normalizeDayExercises = (
 	regenerateIds: boolean
 ): RoutineExercise[] => {
 	const blockOrderByKey = new Map<string, number>();
+	const seenNormalBlockIds = new Map<string, number>();
 	const normalized: RoutineExercise[] = [];
 
 	for (let idx = 0; idx < exercises.length; idx += 1) {
@@ -334,7 +348,13 @@ const normalizeDayExercises = (
 		const repsMode: RoutineRepsMode =
 			ex.repsMode === 'special' && repsSpecial ? 'special' : 'number';
 		const blockType = getRoutineExerciseBlockType(ex);
-		const baseBlockId = (ex.blockId ?? '').trim() || `block-${dayKey}-${id}`;
+		const rawBlockId = (ex.blockId ?? '').trim() || `block-${dayKey}-${id}`;
+		const repeatedNormalBlockCount = seenNormalBlockIds.get(rawBlockId) ?? 0;
+		const baseBlockId =
+			blockType === 'normal' && repeatedNormalBlockCount > 0 ? `${rawBlockId}-${id}` : rawBlockId;
+		if (blockType === 'normal') {
+			seenNormalBlockIds.set(rawBlockId, repeatedNormalBlockCount + 1);
+		}
 		const blockKey = `${blockType}:${baseBlockId}`;
 		const blockOrder = blockOrderByKey.has(blockKey) ? (blockOrderByKey.get(blockKey) ?? 0) : blockOrderByKey.size;
 		if (!blockOrderByKey.has(blockKey)) {
@@ -379,6 +399,50 @@ export const normalizePlan = (plan?: RoutinePlan | null, regenerateIds = false):
 		}
 	}
 	return base;
+};
+
+export const buildRoutineEditorBlocks = (
+	dayKey: string,
+	exercises: RoutineExercise[]
+): RoutineEditorBlock[] => {
+	const blocks: RoutineEditorBlock[] = [];
+	const byKey = new Map<string, RoutineEditorBlock>();
+
+	for (const exercise of exercises) {
+		const type = getRoutineExerciseBlockType(exercise);
+		const id = getRoutineExerciseBlockId(exercise);
+		const key = `${type}:${id}`;
+
+		if (!byKey.has(key)) {
+			const order = blocks.length;
+			const label = sanitizeBlockLabel(exercise.blockLabel, `Bloque ${order + 1}`);
+			const rounds =
+				type === 'circuit'
+					? Math.max(
+							1,
+							Math.min(
+								99,
+								Math.floor(
+									Number(
+										typeof exercise.circuitRounds === 'number' &&
+										Number.isFinite(exercise.circuitRounds)
+											? exercise.circuitRounds
+											: getTargetSets(exercise) || 3
+									) || 3
+								)
+							)
+						)
+					: null;
+
+			const block: RoutineEditorBlock = { key, type, id, label, order, rounds, exercises: [] };
+			byKey.set(key, block);
+			blocks.push(block);
+		}
+
+		byKey.get(key)?.exercises.push(exercise);
+	}
+
+	return blocks;
 };
 
 export const normalizeProgress = (

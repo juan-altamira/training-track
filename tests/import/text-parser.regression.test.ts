@@ -54,11 +54,11 @@ test('anti-regression: day heading is not parsed as exercise', async () => {
 	assert.equal(draft.presentation.day_label_mode, 'sequential');
 });
 
-test('anti-regression: superset heading is not parsed as exercise', async () => {
+test('anti-regression: superset heading uses same grouping as circuito', async () => {
 	const draft = await parseDraft('Superset:\nPress banca 3x8\nRemo 3x10');
 	const nodes = getNodes(draft);
 	assert.equal(nodes.length, 2);
-	assert.ok(nodes.every((node) => node.parsed_shape?.block?.kind === 'superset'));
+	assert.ok(nodes.every((node) => node.parsed_shape?.block?.kind === 'circuit'));
 });
 
 test('anti-regression: load header without entries creates no ghost exercise', async () => {
@@ -195,4 +195,67 @@ test('anti-regression: custom day headings infer custom mode and preserve labels
 		['hard_error', 'needs_review_blocking'].includes(issue.severity)
 	);
 	assert.equal(blocking.length, 0);
+});
+
+test('anti-regression: narrative prefix removal cleans common coaching intros', async () => {
+	const draft = await parseDraft(
+		'Hoy arrancamos con press banca 3x8\nArrancamos con dominadas 3xAMRAP\nEmpeza con sentadilla 5por5\nMetele a remo con barra 4x6'
+	);
+	const nodes = getNodes(draft);
+	assert.equal(nodes.length, 4);
+	assert.deepEqual(
+		nodes.map((node) => node.raw_exercise_name),
+		['press banca', 'dominadas', 'sentadilla', 'remo con barra']
+	);
+	assert.equal(nodes[0]?.sets, 3);
+	assert.equal(nodes[1]?.reps_special, 'AMRAP');
+	assert.equal(nodes[2]?.sets, 5);
+	assert.equal(nodes[3]?.sets, 4);
+});
+
+test('anti-regression: narrative prefix removal does not force a worse parse when original line is better', async () => {
+	const draft = await parseDraft('Hacemos press banca 3x8');
+	const node = getNodes(draft)[0];
+	assert.ok(node);
+	assert.equal(node.raw_exercise_name, 'press banca');
+	assert.equal(node.sets, 3);
+	assert.equal(node.reps_min, 8);
+});
+
+test('anti-regression: narrative prefix removal does not invent an exercise from warmup text', async () => {
+	const draft = await parseDraft('Hace movilidad 10 min');
+	const nodes = getNodes(draft);
+	assert.equal(nodes.length, 0);
+});
+
+test('anti-regression: adapter keeps all normal exercises from a multi-node day block visible in plan', async () => {
+	const draft = await parseDraft(
+		'Día Push:\nPress banca 3x8 82,5kg\nPress inclinado 8,8,8\nFondos 3xAMRAP descanso 90s\n\nDía Pull:\nRemo con barra 4x6\nDominadas 3xAMRAP\nFace pull 3 x 12\n\nDía Piernas:\nSentadilla 5por5\nPrensa 12-10-8-6\nPeso muerto rumano 3x8-10'
+	);
+	const bundle = buildDraftBundle(draft);
+
+	assert.equal(bundle.derivedPlan.monday.exercises.length, 3);
+	assert.equal(bundle.derivedPlan.tuesday.exercises.length, 3);
+	assert.equal(bundle.derivedPlan.wednesday.exercises.length, 3);
+
+	assert.deepEqual(
+		bundle.derivedPlan.monday.exercises.map((exercise) => exercise.name),
+		['Press banca', 'Press inclinado', 'Fondos']
+	);
+	assert.deepEqual(
+		bundle.derivedPlan.tuesday.exercises.map((exercise) => exercise.name),
+		['Remo con barra', 'Dominadas', 'Face pull']
+	);
+	assert.deepEqual(
+		bundle.derivedPlan.wednesday.exercises.map((exercise) => exercise.name),
+		['Sentadilla', 'Prensa', 'Peso muerto rumano']
+	);
+
+	const mondayBlockIds = new Set(bundle.derivedPlan.monday.exercises.map((exercise) => exercise.blockId));
+	const tuesdayBlockIds = new Set(bundle.derivedPlan.tuesday.exercises.map((exercise) => exercise.blockId));
+	const wednesdayBlockIds = new Set(bundle.derivedPlan.wednesday.exercises.map((exercise) => exercise.blockId));
+
+	assert.equal(mondayBlockIds.size, 3);
+	assert.equal(tuesdayBlockIds.size, 3);
+	assert.equal(wednesdayBlockIds.size, 3);
 });

@@ -70,8 +70,8 @@ test.describe('Smoke /r/[clientCode]', () => {
 			timeout: 10000
 		});
 
-		await page.click('button.reset-btn:has-text("Reiniciar contadores")');
-		await page.click('button.btn.danger:has-text("Confirmar")');
+		await page.getByTestId('reset-week-button').click();
+		await page.getByTestId('reset-week-confirm').click();
 		await page.reload();
 		await openDayUntilExpanded(page, 'Lunes');
 		await expect(page.locator('.exercise-card').first().locator('.sets-done')).toHaveText('0', {

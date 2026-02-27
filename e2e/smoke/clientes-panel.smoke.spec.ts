@@ -22,7 +22,7 @@ test.describe('Smoke /clientes', () => {
 		await expect(page).toHaveURL(/\/clientes\/[a-f0-9-]+$/, { timeout: 20000 });
 		await expect(page.locator('h1')).toContainText(name);
 
-		await page.click('button:has-text("Volver al panel")');
+		await page.getByTestId('back-to-panel').click();
 		await expect(page).toHaveURL(/\/clientes(\?.*)?$/, { timeout: 20000 });
 		await expect(page.locator(`text=${name}`).first()).toBeVisible({ timeout: 10000 });
 	});

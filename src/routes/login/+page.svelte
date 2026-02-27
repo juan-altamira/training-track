@@ -2,7 +2,7 @@
 import { goto, invalidateAll } from '$app/navigation';
 import { supabaseClient } from '$lib/supabaseClient';
 
-let mode = $state<'login' | 'register'>('login');
+let authMode = $state<'login' | 'register'>('login');
 let email = $state('');
 let password = $state('');
 let confirmPassword = $state('');
@@ -10,6 +10,16 @@ let message = $state('');
 let error = $state('');
 let loading = $state(false);
 let showPassword = $state(false);
+
+const setMode = (nextMode: 'login' | 'register') => {
+	authMode = nextMode;
+	error = '';
+	message = '';
+};
+
+const togglePasswordVisibility = () => {
+	showPassword = !showPassword;
+};
 
 const resolveAccessError = (reason: string | undefined) => {
 	if (reason === 'expired') {
@@ -138,8 +148,8 @@ const register = async () => {
 	loading = false;
 };
 
-const handleSubmit = () => {
-	if (mode === 'login') {
+	const handleSubmit = () => {
+	if (authMode === 'login') {
 		login();
 	} else {
 		register();
@@ -152,7 +162,7 @@ const handleSubmit = () => {
 		<div class="mb-6 text-center space-y-2">
 			<h1 class="text-3xl font-extrabold tracking-tight">
 				<span class="bg-gradient-to-r from-emerald-300 via-cyan-300 to-slate-100 bg-clip-text text-transparent">
-					{mode === 'login' ? 'Ingreso de entrenadores' : 'Crear cuenta'}
+					{authMode === 'login' ? 'Ingreso de entrenadores' : 'Crear cuenta'}
 				</span>
 			</h1>
 		</div>
@@ -161,15 +171,15 @@ const handleSubmit = () => {
 			<div class="flex rounded-full border border-slate-700 bg-[#151827] p-1 text-sm font-medium">
 				<button
 					type="button"
-					class={`rounded-full px-5 py-2 transition ${mode === 'login' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
-					onclick={() => { mode = 'login'; error = ''; message = ''; }}
+					class={`rounded-full px-5 py-2 transition ${authMode === 'login' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+					onclick={() => setMode('login')}
 				>
 					Ingresar
 				</button>
 				<button
 					type="button"
-					class={`rounded-full px-5 py-2 transition ${mode === 'register' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
-					onclick={() => { mode = 'register'; error = ''; message = ''; }}
+					class={`rounded-full px-5 py-2 transition ${authMode === 'register' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+					onclick={() => setMode('register')}
 				>
 					Crear cuenta
 				</button>
@@ -195,22 +205,22 @@ const handleSubmit = () => {
 					<input
 						type={showPassword ? 'text' : 'password'}
 						class="w-full rounded-xl border border-slate-700 bg-[#151827] px-4 py-3 pr-16 text-lg text-slate-100 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 placeholder:text-slate-500"
-						placeholder={mode === 'register' ? 'Creá una contraseña segura' : '••••••••'}
+						placeholder={authMode === 'register' ? 'Creá una contraseña segura' : '••••••••'}
 						required
 						bind:value={password}
-						autocomplete={mode === 'register' ? 'new-password' : 'current-password'}
+						autocomplete={authMode === 'register' ? 'new-password' : 'current-password'}
 					/>
 					<button
 						type="button"
 						class="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg px-3 py-2 text-sm text-slate-400 transition hover:text-slate-200 hover:bg-slate-700/50"
-						onclick={() => (showPassword = !showPassword)}
+						onclick={togglePasswordVisibility}
 					>
 						{showPassword ? 'Ocultar' : 'Ver'}
 					</button>
 				</div>
 			</label>
 
-			{#if mode === 'register'}
+			{#if authMode === 'register'}
 				<label class="block text-base font-medium text-slate-200">
 					Confirmar contraseña
 					<input
@@ -244,23 +254,23 @@ const handleSubmit = () => {
 
 			<button
 				type="submit"
-				disabled={loading || !email || !password || (mode === 'register' && !confirmPassword)}
+				disabled={loading || !email || !password || (authMode === 'register' && !confirmPassword)}
 				class="mt-2 w-full rounded-xl bg-emerald-600 px-4 py-3 text-lg font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
 			>
 				{#if loading}
-					{mode === 'register' ? 'Creando cuenta...' : 'Ingresando...'}
+					{authMode === 'register' ? 'Creando cuenta...' : 'Ingresando...'}
 				{:else}
-					{mode === 'register' ? 'Crear cuenta' : 'Ingresar'}
+					{authMode === 'register' ? 'Crear cuenta' : 'Ingresar'}
 				{/if}
 			</button>
 
-			{#if mode === 'login'}
+			{#if authMode === 'login'}
 				<p class="text-center text-sm text-slate-400">
 					<a href="/reset" class="text-emerald-300 hover:underline font-semibold">¿Olvidaste tu contraseña?</a>
 				</p>
 			{:else}
 				<p class="text-center text-sm text-slate-400">
-					<button type="button" class="text-emerald-300 hover:underline font-semibold" onclick={() => (mode = 'login')}>
+					<button type="button" class="text-emerald-300 hover:underline font-semibold" onclick={() => setMode('login')}>
 						¿Ya tenés cuenta? Ingresá
 					</button>
 				</p>

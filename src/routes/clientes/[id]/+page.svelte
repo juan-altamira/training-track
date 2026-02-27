@@ -2,17 +2,22 @@
 	import { DAY_FEEDBACK_MOOD_LABEL, DAY_FEEDBACK_PAIN_LABEL, type DayFeedbackByDay, type DayFeedbackMood, type DayFeedbackPain } from '$lib/dayFeedback';
 	import {
 		WEEK_DAYS,
+		type RoutineEditorBlock,
+		buildRoutineEditorBlocks,
 		formatPrescriptionLong,
 		getDisplayDays,
+		getRoutineExerciseBlockId,
 		getRoutineExerciseBlockType,
 		getRoutineExerciseRepsMode,
-		parseRoutineRepsInput,
 		getTargetSets,
+		parseRoutineRepsInput,
 		normalizePlan,
 		normalizeRoutineUiMeta,
 		sanitizeCustomLabel
 	} from '$lib/routines';
 	import RoutineImportPanel from '$lib/components/RoutineImportPanel.svelte';
+	import { buildImportedRoutineUiMeta, indexImportIssuesForEditor, type ImportEditorFieldKey, type ImportEditorIssueIndex } from '$lib/import/editor-session';
+	import type { ImportDraft, ImportIssue, ImportStats } from '$lib/import/types';
 	import type {
 		OtherClientRow,
 		ProgressState,
@@ -39,12 +44,15 @@
 	let blockInlineWarnings = $state<Record<string, string>>({});
 	let dayInlineWarnings = $state<Record<string, string>>({});
 	let blockModeDrafts = $state<Record<string, RoutineExercise[]>>({});
+	let importReviewSession = $state<ImportReviewSession | null>(null);
 	let statusMessage = $state('');
 	let clientStatus = $state(data.client.status as 'active' | 'archived');
 	let showDeleteConfirm = $state(false);
 	let deleteConfirmText = $state('');
 	let showArchiveConfirm = $state(false);
 	let showResetConfirm = $state(false);
+	let showDiscardImportConfirm = $state(false);
+	let showImportPublishConfirm = $state(false);
 	let copiedLink = $state(false);
 	let showCopyModal = $state(false);
 	let selectedSource = $state('');
@@ -200,14 +208,18 @@
 		exercise: RoutineExercise;
 		deletedIndex: number;
 	};
-	type EditorExerciseBlock = {
-		key: string;
-		type: RoutineBlockType;
-		id: string;
-		label: string;
-		order: number;
-		rounds: number | null;
-		exercises: RoutineExercise[];
+
+	type ImportReviewSession = {
+		jobId: string;
+		snapshot: {
+			plan: RoutinePlan;
+			uiMeta: Required<RoutineUiMeta>;
+			routineVersion: number;
+		};
+		draft: ImportDraft;
+		issues: ImportIssue[];
+		stats: ImportStats | null;
+		issueIndex: ImportEditorIssueIndex;
 	};
 
 	type ExerciseFieldKey = 'name' | 'sets' | 'reps';
@@ -325,8 +337,7 @@
 	const getExerciseRepsMode = (exercise: RoutineExercise) => getRoutineExerciseRepsMode(exercise);
 	const getExerciseBlockType = (exercise: RoutineExercise): RoutineBlockType =>
 		getRoutineExerciseBlockType(exercise);
-	const getExerciseBlockId = (exercise: RoutineExercise) =>
-		(exercise.blockId ?? '').trim() || exercise.id;
+	const getExerciseBlockId = (exercise: RoutineExercise) => getRoutineExerciseBlockId(exercise);
 	const getExerciseBlockKey = (exercise: RoutineExercise) =>
 		`${getExerciseBlockType(exercise)}:${getExerciseBlockId(exercise)}`;
 	const getBlockModeDraftKey = (
@@ -449,45 +460,176 @@
 
 	const getExercisePreview = (exercise: RoutineExercise) => formatPrescriptionLong(exercise);
 
-	const getEditorBlocks = (dayKey: string): EditorExerciseBlock[] => {
-		const dayExercises = plan[dayKey]?.exercises ?? [];
-		const blocks: EditorExerciseBlock[] = [];
-		const byKey = new Map<string, EditorExerciseBlock>();
-
-		for (const exercise of dayExercises) {
-			const type = getExerciseBlockType(exercise);
-			const id = getExerciseBlockId(exercise);
-			const key = `${type}:${id}`;
-			if (!byKey.has(key)) {
-				const order = blocks.length;
-				const label = sanitizeBlockLabelLocal(exercise.blockLabel, `Bloque ${order + 1}`);
-				const rounds =
-					type === 'circuit'
-						? Math.max(
-								1,
-								Math.min(
-									99,
-									Math.floor(
-										Number(
-											typeof exercise.circuitRounds === 'number' && Number.isFinite(exercise.circuitRounds)
-												? exercise.circuitRounds
-												: getTargetSets(exercise) || 3
-										) || 3
-									)
-								)
-							)
-						: null;
-				const block: EditorExerciseBlock = { key, type, id, label, order, rounds, exercises: [] };
-				byKey.set(key, block);
-				blocks.push(block);
-			}
-			byKey.get(key)?.exercises.push(exercise);
-		}
-
-		return blocks;
+	const clearEditorValidationState = () => {
+		feedback = '';
+		showValidationErrors = false;
+		blockInlineWarnings = {};
+		dayInlineWarnings = {};
+		exerciseInlineErrors = {};
+		blockFieldInlineErrors = {};
 	};
 
-	const getCircuitBlockNote = (block: EditorExerciseBlock) => {
+	const startImportReviewSession = (payload: {
+		jobId: string;
+		plan: RoutinePlan;
+		uiMeta: RoutineUiMeta;
+		draft: ImportDraft;
+		issues: ImportIssue[];
+		stats: ImportStats | null;
+	}) => {
+		const plainPlan = JSON.parse(JSON.stringify(payload.plan)) as RoutinePlan;
+		const plainDraft = JSON.parse(JSON.stringify(payload.draft)) as ImportDraft;
+		const plainIssues = JSON.parse(JSON.stringify(payload.issues)) as ImportIssue[];
+		const plainStats = payload.stats
+			? (JSON.parse(JSON.stringify(payload.stats)) as ImportStats)
+			: null;
+		const currentPlanSnapshot = normalizePlan(JSON.parse(JSON.stringify(plan)) as RoutinePlan);
+		const currentUiMetaSnapshot = normalizeRoutineUiMeta(
+			JSON.parse(JSON.stringify(uiMeta)) as RoutineUiMeta
+		);
+		const nextPlan = normalizePlan(plainPlan);
+		const nextUiMeta = normalizeRoutineUiMeta(payload.uiMeta ?? null);
+		const nextIssueIndex = indexImportIssuesForEditor(plainDraft, nextPlan, plainIssues);
+		importReviewSession = {
+			jobId: payload.jobId,
+			snapshot: {
+				plan: currentPlanSnapshot,
+				uiMeta: currentUiMetaSnapshot,
+				routineVersion
+			},
+			draft: plainDraft,
+			issues: plainIssues,
+			stats: plainStats,
+			issueIndex: nextIssueIndex
+		};
+		plan = nextPlan;
+		uiMeta = buildImportedRoutineUiMeta(payload.draft, nextUiMeta);
+		blockModeDrafts = {};
+		resetDeleteUndoBatch();
+		clearEditorValidationState();
+		showImportPanel = false;
+		const firstDayWithExercises = WEEK_DAYS.find((day) => (plan[day.key]?.exercises?.length ?? 0) > 0)?.key;
+		if (firstDayWithExercises) {
+			selectedDay = firstDayWithExercises;
+		}
+		statusMessage = 'Importación cargada en el editor. Revisá los puntos marcados antes de publicar.';
+		setTimeout(() => {
+			statusMessage = '';
+		}, 3500);
+	};
+
+	const discardImportReviewSession = () => {
+		if (!importReviewSession) return;
+		plan = normalizePlan(structuredClone(importReviewSession.snapshot.plan));
+		uiMeta = normalizeRoutineUiMeta(structuredClone(importReviewSession.snapshot.uiMeta));
+		routineVersion = importReviewSession.snapshot.routineVersion;
+		importReviewSession = null;
+		blockModeDrafts = {};
+		resetDeleteUndoBatch();
+		clearEditorValidationState();
+		statusMessage = 'Se descartó la importación y se restauró el estado anterior.';
+		setTimeout(() => {
+			statusMessage = '';
+		}, 3000);
+	};
+
+	const isImportFieldResolved = (
+		exercise: RoutineExercise | undefined,
+		field: ImportEditorFieldKey
+	) => {
+		if (!exercise) return false;
+		if (field === 'name') {
+			return Boolean(exercise.name?.trim()) && exercise.name.length <= MAX_EXERCISE_NAME_LENGTH;
+		}
+		if (field === 'sets') {
+			return getTargetSets(exercise) > 0;
+		}
+		if (getExerciseRepsMode(exercise) === 'special') {
+			return field !== 'reps' || Boolean(getExerciseSpecialReps(exercise));
+		}
+		if (field === 'reps') {
+			if (!exercise.repsMin || exercise.repsMin <= 0) return false;
+			if (
+				exercise.showRange &&
+				(exercise.repsMax ?? 0) > 0 &&
+				(exercise.repsMax ?? 0) < (exercise.repsMin ?? 0)
+			) {
+				return false;
+			}
+		}
+		return true;
+	};
+
+	const isImportBlockFieldResolved = (
+		field: 'rounds',
+		rounds: number | null
+	) => {
+		if (field === 'rounds') return Boolean(rounds && rounds > 0);
+		return true;
+	};
+
+	const getImportedExerciseIssue = (
+		dayKey: string,
+		exercise: RoutineExercise,
+		field: ImportEditorFieldKey
+	): ImportIssue | null => {
+		if (!importReviewSession) return null;
+		const issues = importReviewSession.issueIndex.fieldIssues[`${dayKey}::${exercise.id}::${field}`] ?? [];
+		if (issues.length === 0) return null;
+		return isImportFieldResolved(exercise, field) ? null : issues[0];
+	};
+
+	const getImportedBlockFieldIssue = (
+		dayKey: string,
+		blockKey: string,
+		field: 'rounds',
+		rounds: number | null
+	): ImportIssue | null => {
+		if (!importReviewSession) return null;
+		const issues =
+			importReviewSession.issueIndex.blockFieldIssues[`${dayKey}::${blockKey}::${field}`] ?? [];
+		if (issues.length === 0) return null;
+		return isImportBlockFieldResolved(field, rounds) ? null : issues[0];
+	};
+
+	const getImportedBlockIssues = (dayKey: string, blockKey: string) =>
+		importReviewSession?.issueIndex.blockIssues[`${dayKey}::${blockKey}`] ?? [];
+
+	const getImportedBlockIssue = (dayKey: string, blockKey: string): ImportIssue | null =>
+		getImportedBlockIssues(dayKey, blockKey)[0] ?? null;
+
+	const getImportedDayIssues = (dayKey: string) =>
+		importReviewSession?.issueIndex.dayIssues[dayKey] ?? [];
+
+	const getImportedGlobalIssues = () => importReviewSession?.issueIndex.globalIssues ?? [];
+
+	const getImportedDayIssueCount = (dayKey: string) => {
+		if (!importReviewSession) return 0;
+		let total = getImportedDayIssues(dayKey).length;
+		for (const exercise of plan[dayKey]?.exercises ?? []) {
+			if (getImportedExerciseIssue(dayKey, exercise, 'name')) total += 1;
+			if (getImportedExerciseIssue(dayKey, exercise, 'sets')) total += 1;
+			if (getImportedExerciseIssue(dayKey, exercise, 'reps')) total += 1;
+		}
+		for (const block of getEditorBlocks(dayKey)) {
+			if (getImportedBlockFieldIssue(dayKey, block.key, 'rounds', block.rounds)) total += 1;
+			total += getImportedBlockIssues(dayKey, block.key).length;
+		}
+		return total;
+	};
+
+	const getImportReviewCount = () => {
+		if (!importReviewSession) return 0;
+		return (
+			getImportedGlobalIssues().length +
+			WEEK_DAYS.reduce((total, day) => total + getImportedDayIssueCount(day.key), 0)
+		);
+	};
+
+	const getEditorBlocks = (dayKey: string) =>
+		buildRoutineEditorBlocks(dayKey, plan[dayKey]?.exercises ?? []);
+
+	const getCircuitBlockNote = (block: RoutineEditorBlock) => {
 		if (block.type !== 'circuit') return '';
 		const firstWithNote = block.exercises.find((exercise) => (exercise.note ?? '').trim().length > 0);
 		return firstWithNote?.note ?? '';
@@ -1114,27 +1256,14 @@
 	};
 
 	const applyImportedRoutineUpdate = (payload: {
-		action: 'commit' | 'rollback';
+		jobId: string;
 		plan: RoutinePlan;
-		uiMeta: RoutineUiMeta | null;
-		routineVersion: number;
+		uiMeta: RoutineUiMeta;
+		draft: ImportDraft;
+		issues: ImportIssue[];
+		stats: ImportStats | null;
 	}) => {
-		resetDeleteUndoBatch();
-		plan = normalizePlan(structuredClone(payload.plan));
-		blockModeDrafts = {};
-		blockInlineWarnings = {};
-		dayInlineWarnings = {};
-		exerciseInlineErrors = {};
-		blockFieldInlineErrors = {};
-		uiMeta = normalizeRoutineUiMeta(payload.uiMeta ?? null);
-		routineVersion = payload.routineVersion;
-		statusMessage =
-			payload.action === 'rollback'
-				? 'Importación revertida. Vista actualizada.'
-				: 'Importación aplicada. Vista actualizada.';
-		setTimeout(() => {
-			statusMessage = '';
-		}, 2500);
+		startImportReviewSession(payload);
 	};
 
 	const copyRoutine = async () => {
@@ -1184,12 +1313,10 @@
 		}
 	};
 
-	const saveRoutine = async () => {
-		saving = true;
+	const validateRoutineBeforeSave = () => {
 		feedback = '';
 		showValidationErrors = true;
-		
-		// Validar todos los días antes de guardar
+
 		for (const day of WEEK_DAYS) {
 			const exercises = plan[day.key].exercises;
 			if (exercises.length === 0) continue;
@@ -1199,34 +1326,29 @@
 				if (!ex.name || ex.name.trim() === '') {
 					feedback = `${displayLabel}: Hay ejercicios sin nombre. Completá el nombre antes de guardar.`;
 					feedbackType = 'warning';
-					saving = false;
-					return;
+					return false;
 				}
 				if (ex.name.length > MAX_EXERCISE_NAME_LENGTH) {
 					feedback = `${displayLabel}: El nombre "${ex.name.slice(0, 20)}..." es demasiado largo.`;
 					feedbackType = 'warning';
-					saving = false;
-					return;
+					return false;
 				}
 					const sets = getTargetSets(ex);
 					if (sets === 0) {
 						feedback = `${displayLabel}: "${ex.name}" no tiene series o vueltas válidas.`;
 						feedbackType = 'warning';
-						saving = false;
-						return;
+						return false;
 				}
 				if (getExerciseRepsMode(ex) === 'special') {
 					if (!getExerciseSpecialReps(ex)) {
 						feedback = `${displayLabel}: "${ex.name}" necesita una indicación en repeticiones especiales.`;
 						feedbackType = 'warning';
-						saving = false;
-						return;
+						return false;
 					}
 				} else if (!ex.repsMin || ex.repsMin <= 0) {
 					feedback = `${displayLabel}: "${ex.name}" no tiene repeticiones válidas.`;
 					feedbackType = 'warning';
-					saving = false;
-					return;
+					return false;
 				}
 				if (
 					getExerciseRepsMode(ex) === 'number' &&
@@ -1234,12 +1356,20 @@
 					(ex.repsMax ?? 0) > 0 &&
 					(ex.repsMax ?? 0) < (ex.repsMin ?? 0)
 				) {
-					saving = false;
-					return;
+					return false;
 				}
 			}
 		}
-		
+		return true;
+	};
+
+	const performSaveRoutine = async () => {
+		saving = true;
+		if (!validateRoutineBeforeSave()) {
+			saving = false;
+			return;
+		}
+
 		const formData = new FormData();
 		formData.set('plan', JSON.stringify(plan));
 		formData.set('ui_meta', JSON.stringify(uiMeta));
@@ -1260,11 +1390,21 @@
 			dayInlineWarnings = {};
 			exerciseInlineErrors = {};
 			blockFieldInlineErrors = {};
+			importReviewSession = null;
 		} else {
 			feedback = 'No pudimos guardar la rutina';
 			feedbackType = 'error';
 		}
 		saving = false;
+	};
+
+	const saveRoutine = async () => {
+		if (!validateRoutineBeforeSave()) return;
+		if (importReviewSession) {
+			showImportPublishConfirm = true;
+			return;
+		}
+		await performSaveRoutine();
 	};
 
 	const resetProgress = async () => {
@@ -1475,6 +1615,7 @@
 					<div class="flex">
 						<button
 							type="button"
+							data-testid="import-panel-toggle"
 							class="w-full rounded-2xl border border-cyan-700/40 bg-gradient-to-r from-[#1a2747] to-[#173861] px-5 py-3 text-left text-base font-semibold text-cyan-50 shadow-lg shadow-cyan-900/30 transition hover:-translate-y-0.5 hover:shadow-cyan-900/50 hover:brightness-110"
 							aria-expanded={showImportPanel}
 							onclick={() => (showImportPanel = !showImportPanel)}
@@ -1497,7 +1638,7 @@
 							clientId={data.client.id}
 							initialRoutineVersion={routineVersion}
 							initialUiMeta={uiMeta}
-							onRoutineApplied={applyImportedRoutineUpdate}
+							onImportReady={applyImportedRoutineUpdate}
 						/>
 					{/if}
 				</div>
@@ -1510,6 +1651,34 @@
 
 			<section class="mt-16 md:mt-[5.5rem] grid gap-6 lg:grid-cols-[2fr,1fr]">
 				<div class="order-3 min-w-0 lg:order-1 space-y-6 rounded-2xl border border-slate-800 bg-[#0f111b] p-4 md:p-6 shadow-lg shadow-black/30">
+				{#if importReviewSession}
+					<div class="rounded-2xl border border-cyan-700/45 bg-gradient-to-r from-cyan-950/45 to-[#14243a] px-4 py-3 text-slate-100">
+						<div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+							<div class="space-y-1">
+								<p class="text-sm font-semibold text-cyan-100">
+									Rutina generada automáticamente. Revisá los puntos marcados antes de publicar.
+								</p>
+								<p class="text-xs text-slate-300">
+									{getImportReviewCount() > 0
+										? `${getImportReviewCount()} punto(s) para revisar en la rutina.`
+										: 'No se detectaron problemas bloqueantes, pero conviene revisar antes de publicar.'}
+								</p>
+								{#if getImportedGlobalIssues().length > 0}
+									<p class="text-xs text-amber-200">{getImportedGlobalIssues()[0]?.message}</p>
+								{/if}
+							</div>
+							<div class="flex flex-wrap items-center gap-2">
+								<button
+									type="button"
+									class="rounded-xl border border-amber-600/60 bg-amber-950/25 px-3 py-2 text-xs font-semibold text-amber-100 transition hover:bg-amber-900/35"
+									onclick={() => (showDiscardImportConfirm = true)}
+								>
+									Descartar importación
+								</button>
+							</div>
+						</div>
+					</div>
+				{/if}
 				<div class="flex justify-center pt-5 pb-6 md:pt-6 md:pb-7">
 					<h2 class="text-center text-4xl font-serif font-semibold uppercase tracking-[0.18em] text-slate-50">RUTINA</h2>
 				</div>
@@ -1601,8 +1770,10 @@
 					<div class="pt-8 md:pt-0">
 						<div class="flex flex-wrap gap-2">
 								{#each displayDays(selectedDay) as day}
+									{@const importDayIssueCount = getImportedDayIssueCount(day.dayKey)}
 									<button
 										type="button"
+										data-testid={`routine-day-tab-${day.dayKey}`}
 										class={`whitespace-nowrap rounded-full px-4 py-2 text-base border ${
 											selectedDay === day.dayKey
 												? 'bg-[#16223d] text-white border-cyan-300/90 shadow-[0_0_0_1px_rgba(103,232,249,0.6)]'
@@ -1612,8 +1783,15 @@
 										}`}
 									onclick={() => (selectedDay = day.dayKey)}
 								>
-								{day.displayLabel}
-							</button>
+									<span class="inline-flex items-center gap-2">
+										<span>{day.displayLabel}</span>
+										{#if importDayIssueCount > 0}
+											<span class="rounded-full border border-amber-500/50 bg-amber-900/35 px-2 py-0.5 text-[11px] font-semibold text-amber-200">
+												{importDayIssueCount}
+											</span>
+										{/if}
+									</span>
+								</button>
 						{/each}
 						</div>
 					</div>
@@ -1634,6 +1812,12 @@
 						/>
 					</label>
 				{/if}
+
+				{#if importReviewSession && getImportedDayIssues(selectedDay).length > 0}
+					<p class="mt-3 rounded-lg border border-amber-700/50 bg-amber-900/25 px-3 py-2 text-sm text-amber-100">
+						{getImportedDayIssues(selectedDay)[0]?.message}
+					</p>
+				{/if}
 			</div>
 
 			<div class="space-y-3 rounded-xl border border-slate-800 bg-[#0b0d14] p-3 md:p-5">
@@ -1644,7 +1828,9 @@
 						{#if block.type === 'circuit'}
 							{@const blockWarning = blockInlineWarnings[`${selectedDay}::${block.key}`]}
 							{@const roundsError = getBlockRoundsUiError(selectedDay, block.key, block.rounds)}
-							<div class="rounded-xl border border-cyan-900/40 bg-gradient-to-b from-[#101a2d] to-[#0f1626] p-3 md:p-4 shadow-sm">
+							{@const importedBlockIssue = getImportedBlockIssue(selectedDay, block.key)}
+							{@const importedRoundsIssue = getImportedBlockFieldIssue(selectedDay, block.key, 'rounds', block.rounds)}
+							<div class="rounded-xl border {(blockWarning || roundsError) ? 'border-amber-500/50' : (importedBlockIssue || importedRoundsIssue) ? 'border-amber-700/40' : 'border-cyan-900/40'} bg-gradient-to-b from-[#101a2d] to-[#0f1626] p-3 md:p-4 shadow-sm">
 								<div class="mb-5 flex items-start justify-between gap-3">
 									<div class="inline-flex shrink-0 rounded-lg border border-slate-700 bg-[#101423] p-1">
 										<button
@@ -1682,7 +1868,7 @@
 												type="number"
 												min="1"
 											max="99"
-											class="mt-2 w-full rounded-lg border {roundsError ? 'border-red-500/80' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
+											class="mt-2 w-full rounded-lg border {roundsError ? 'border-red-500/80' : importedRoundsIssue ? 'border-amber-500/60' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
 											value={block.rounds ?? 3}
 											placeholder="Ej: 3"
 											oninput={(event) =>
@@ -1695,6 +1881,8 @@
 										/>
 											{#if roundsError}
 												<p class="mt-1 text-xs text-red-400">{roundsError}</p>
+											{:else if importedRoundsIssue}
+												<p class="mt-1 text-xs text-amber-300">{importedRoundsIssue.message}</p>
 											{/if}
 										</label>
 											<label class="mt-7 block w-full max-w-full text-sm font-medium text-slate-300 md:max-w-xl">
@@ -1725,6 +1913,8 @@
 											{#each block.exercises as exercise (exercise.id)}
 												{@const nameError = getExerciseFieldUiError(selectedDay, exercise, 'name')}
 												{@const repsError = getExerciseFieldUiError(selectedDay, exercise, 'reps')}
+												{@const importedNameIssue = getImportedExerciseIssue(selectedDay, exercise, 'name')}
+												{@const importedRepsIssue = getImportedExerciseIssue(selectedDay, exercise, 'reps')}
 												<div class="relative rounded-lg border border-slate-800/70 bg-[#0e1423] px-3 py-3">
 													<div class="grid gap-3 pr-12 md:grid-cols-[minmax(0,1fr)_minmax(0,12rem)_2.25rem] md:items-start md:pr-0">
 														<div>
@@ -1732,7 +1922,7 @@
 																Nombre
 															</p>
 															<input
-																class="w-full rounded-lg border {nameError ? 'border-red-500/80' : 'border-slate-600/90'} bg-[#16203a] px-3 py-2.5 text-[1.05rem] font-semibold tracking-tight text-slate-50 placeholder:text-slate-500 shadow-sm focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
+																class="w-full rounded-lg border {nameError ? 'border-red-500/80' : importedNameIssue ? 'border-amber-500/60' : 'border-slate-600/90'} bg-[#16203a] px-3 py-2.5 text-[1.05rem] font-semibold tracking-tight text-slate-50 placeholder:text-slate-500 shadow-sm focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
 															value={exercise.name}
 															placeholder="Ej: Flexiones"
 															oninput={(event) => {
@@ -1744,6 +1934,8 @@
 														/>
 														{#if nameError}
 															<p class="mt-1 text-xs text-red-400">{nameError}</p>
+														{:else if importedNameIssue}
+															<p class="mt-1 text-xs text-amber-300">{importedNameIssue.message}</p>
 															{/if}
 														</div>
 														<div>
@@ -1753,13 +1945,15 @@
 															<input
 																type="text"
 																maxlength={MAX_SPECIAL_REPS_LENGTH}
-															class="w-full rounded-lg border {repsError ? 'border-red-500/80' : 'border-slate-700'} bg-[#151827] px-3 py-2.5 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
+															class="w-full rounded-lg border {repsError ? 'border-red-500/80' : importedRepsIssue ? 'border-amber-500/60' : 'border-slate-700'} bg-[#151827] px-3 py-2.5 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
 															value={getExerciseRepsInputValue(exercise)}
 															placeholder="Ej: 10, 8-10, 30 segundos, AMRAP, al fallo"
 															oninput={(event) => setExerciseRepsValue(selectedDay, exercise.id, (event.currentTarget as HTMLInputElement).value)}
 														/>
 														{#if repsError}
 															<p class="mt-1 text-xs text-red-400">{repsError}</p>
+														{:else if importedRepsIssue}
+															<p class="mt-1 text-xs text-amber-300">{importedRepsIssue.message}</p>
 														{/if}
 													</div>
 														<button
@@ -1782,6 +1976,10 @@
 									<p class="mt-4 rounded-lg border border-amber-700/50 bg-amber-900/35 px-3 py-2 text-sm text-amber-200">
 										{blockWarning}
 									</p>
+								{:else if importedBlockIssue}
+									<p class="mt-4 rounded-lg border border-amber-700/50 bg-amber-900/25 px-3 py-2 text-sm text-amber-100">
+										{importedBlockIssue.message}
+									</p>
 								{/if}
 
 								<button
@@ -1801,7 +1999,11 @@
 							{@const nameError = getExerciseFieldUiError(selectedDay, exercise, 'name')}
 							{@const setsError = getExerciseFieldUiError(selectedDay, exercise, 'sets')}
 							{@const repsError = getExerciseFieldUiError(selectedDay, exercise, 'reps')}
-							<div class="rounded-lg border border-slate-800 bg-[#111423] p-3 md:p-4 shadow-sm">
+							{@const importedBlockIssue = getImportedBlockIssue(selectedDay, block.key)}
+							{@const importedNameIssue = getImportedExerciseIssue(selectedDay, exercise, 'name')}
+							{@const importedSetsIssue = getImportedExerciseIssue(selectedDay, exercise, 'sets')}
+							{@const importedRepsIssue = getImportedExerciseIssue(selectedDay, exercise, 'reps')}
+							<div class="rounded-lg border {(blockWarning || nameError || setsError || repsError) ? 'border-amber-500/50' : (importedBlockIssue || importedNameIssue || importedSetsIssue || importedRepsIssue) ? 'border-amber-700/40' : 'border-slate-800'} bg-[#111423] p-3 md:p-4 shadow-sm">
 								<div>
 									<div class="mb-7 flex items-start justify-between gap-3">
 										<div class="mt-1 inline-flex shrink-0 rounded-lg border border-slate-700 bg-[#101423] p-1">
@@ -1835,7 +2037,8 @@
 										<label class="block">
 											<span class="sr-only">Nombre del ejercicio</span>
 											<input
-												class="w-full rounded-lg border {nameError ? 'border-red-500/80' : 'border-slate-500/95'} bg-[#1a243a] px-4 py-[1.1rem] text-[1.2rem] font-semibold tracking-tight text-slate-50 placeholder:text-slate-500 shadow-sm focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
+												data-testid="exercise-name-input"
+												class="w-full rounded-lg border {nameError ? 'border-red-500/80' : importedNameIssue ? 'border-amber-500/60' : 'border-slate-500/95'} bg-[#1a243a] px-4 py-[1.1rem] text-[1.2rem] font-semibold tracking-tight text-slate-50 placeholder:text-slate-500 shadow-sm focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
 												value={exercise.name}
 												placeholder="Ej: Sentadilla"
 											oninput={(event) => {
@@ -1847,6 +2050,8 @@
 											/>
 											{#if nameError}
 												<p class="mt-1 text-xs text-red-400">{nameError}</p>
+											{:else if importedNameIssue}
+												<p class="mt-1 text-xs text-amber-300">{importedNameIssue.message}</p>
 											{/if}
 										</label>
 
@@ -1857,7 +2062,7 @@
 													type="number"
 													min="1"
 													max="99"
-													class="mt-3 w-full rounded-lg border {setsError ? 'border-red-500/80' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700 md:mt-2"
+													class="mt-3 w-full rounded-lg border {setsError ? 'border-red-500/80' : importedSetsIssue ? 'border-amber-500/60' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700 md:mt-2"
 													value={exercise.totalSets ?? ''}
 													placeholder="Ej: 4"
 												oninput={(event) =>
@@ -1870,6 +2075,8 @@
 												/>
 												{#if setsError}
 													<p class="mt-1 text-xs text-red-400">{setsError}</p>
+												{:else if importedSetsIssue}
+													<p class="mt-1 text-xs text-amber-300">{importedSetsIssue.message}</p>
 												{/if}
 											</label>
 
@@ -1881,7 +2088,7 @@
 													<input
 														type="text"
 														maxlength={MAX_SPECIAL_REPS_LENGTH}
-														class="w-full rounded-lg border {repsError ? 'border-red-500/80' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
+														class="w-full rounded-lg border {repsError ? 'border-red-500/80' : importedRepsIssue ? 'border-amber-500/60' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
 														value={getExerciseRepsInputValue(exercise)}
 														placeholder="Ej: 10, 8-10, 30 segundos, AMRAP, al fallo"
 														oninput={(event) =>
@@ -1893,10 +2100,9 @@
 													/>
 													{#if repsError}
 														<p class="text-xs text-red-400">{repsError}</p>
+													{:else if importedRepsIssue}
+														<p class="text-xs text-amber-300">{importedRepsIssue.message}</p>
 													{/if}
-													<p class="text-xs text-slate-400">
-														Se verá así: {getExercisePreview(exercise) || '...'}
-													</p>
 												</div>
 											</div>
 									</div>
@@ -1920,6 +2126,10 @@
 										<p class="mt-4 rounded-lg border border-amber-700/50 bg-amber-900/35 px-3 py-2 text-sm text-amber-200">
 											{blockWarning}
 										</p>
+									{:else if importedBlockIssue}
+										<p class="mt-4 rounded-lg border border-amber-700/50 bg-amber-900/25 px-3 py-2 text-sm text-amber-100">
+											{importedBlockIssue.message}
+										</p>
 									{/if}
 								</div>
 							</div>
@@ -1935,6 +2145,7 @@
 
 				<div class={`grid grid-cols-1 gap-3 ${hasAnyExercise() ? 'sm:grid-cols-3' : 'sm:grid-cols-1'}`}>
 					<button
+						data-testid="add-exercise-button"
 						class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-3 text-base font-medium text-slate-100 hover:bg-[#1b1f30] disabled:opacity-50 disabled:cursor-not-allowed"
 						onclick={() => addExercise(selectedDay)}
 						type="button"
@@ -2265,6 +2476,75 @@
 						}}
 					>
 						Resetear progreso
+					</button>
+				</div>
+			</div>
+		</div>
+	{/if}
+
+	{#if showDiscardImportConfirm && importReviewSession}
+		<div class="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm px-4">
+			<div class="w-full max-w-md rounded-2xl border border-slate-800 bg-[#0f111b] p-6 shadow-2xl shadow-black/40 text-slate-100">
+				<div class="space-y-3">
+					<h2 class="text-xl font-semibold text-amber-200">Descartar importación</h2>
+					<p class="text-sm text-slate-300">
+						Se van a eliminar todos los cambios generados por la importación y vas a volver al estado anterior.
+					</p>
+				</div>
+				<div class="mt-5 flex items-center justify-end gap-3">
+					<button
+						type="button"
+						class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-2 text-slate-200 hover:bg-[#1b1f30]"
+						onclick={() => (showDiscardImportConfirm = false)}
+					>
+						Cancelar
+					</button>
+					<button
+						type="button"
+						class="rounded-lg border border-amber-500/50 bg-amber-900/60 px-4 py-2 text-amber-100 hover:bg-amber-900/80"
+						onclick={() => {
+							showDiscardImportConfirm = false;
+							discardImportReviewSession();
+						}}
+					>
+						Descartar importación
+					</button>
+				</div>
+			</div>
+		</div>
+	{/if}
+
+	{#if showImportPublishConfirm && importReviewSession}
+		<div class="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm px-4">
+			<div class="w-full max-w-md rounded-2xl border border-slate-800 bg-[#0f111b] p-6 shadow-2xl shadow-black/40 text-slate-100">
+				<div class="space-y-3">
+					<h2 class="text-xl font-semibold text-cyan-100">Publicar cambios importados</h2>
+					<p class="text-sm text-slate-300">
+						Vas a publicar la rutina generada desde la importación. Confirmá que ya revisaste los puntos marcados.
+					</p>
+					{#if getImportReviewCount() > 0}
+						<p class="text-xs text-amber-200">
+							Quedan {getImportReviewCount()} punto(s) marcados para revisar.
+						</p>
+					{/if}
+				</div>
+				<div class="mt-5 flex items-center justify-end gap-3">
+					<button
+						type="button"
+						class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-2 text-slate-200 hover:bg-[#1b1f30]"
+						onclick={() => (showImportPublishConfirm = false)}
+					>
+						Cancelar
+					</button>
+					<button
+						type="button"
+						class="rounded-lg border border-cyan-500/50 bg-cyan-900/60 px-4 py-2 text-cyan-50 hover:bg-cyan-900/80"
+						onclick={async () => {
+							showImportPublishConfirm = false;
+							await performSaveRoutine();
+						}}
+					>
+						Publicar igual
 					</button>
 				</div>
 			</div>

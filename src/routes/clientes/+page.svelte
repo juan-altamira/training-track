@@ -834,58 +834,42 @@
 																<input type="hidden" name="trainer_email" value={trainer.email} />
 																<input type="hidden" name="idempotency_key" value="" />
 																<input type="hidden" name="reason" value="" />
-																	<div class="grid grid-cols-2 gap-6">
-																		<div class="relative">
-																			<select
-																				name="operation"
-																				value={subscriptionDraft.operation}
+																		<div class="grid grid-cols-2 gap-6">
+																			<div>
+																				<select
+																					name="operation"
+																					value={subscriptionDraft.operation}
 																				on:change={(event) =>
 																					setOwnerSubscriptionDraft(rowKey, {
 																						operation: toDraftOperation(
 																							(event.currentTarget as HTMLSelectElement).value
 																						)
 																					})}
-																				class="custom-select w-full rounded-lg border border-slate-700 bg-[#151827] px-3 py-2.5 pr-10 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
-																			>
-																				<option value="add">Sumar</option>
-																				<option value="remove">Quitar</option>
-																			</select>
-																			<svg
-																				class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-																				viewBox="0 0 20 20"
-																				fill="none"
-																				aria-hidden="true"
-																			>
-																				<path d="M6 8l4 4 4-4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"></path>
-																			</svg>
-																		</div>
-																		<div class="relative">
-																			<select
-																				name="months"
-																				value={subscriptionDraft.months}
+																					class="custom-select w-full rounded-lg border border-slate-700 bg-[#151827] px-3 py-2.5 pr-10 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+																				>
+																					<option value="add">Sumar</option>
+																					<option value="remove">Quitar</option>
+																				</select>
+																			</div>
+																			<div>
+																				<select
+																					name="months"
+																					value={subscriptionDraft.months}
 																				on:change={(event) =>
 																					setOwnerSubscriptionDraft(rowKey, {
 																						months: parseDraftMonths(
 																							(event.currentTarget as HTMLSelectElement).value
 																						)
 																					})}
-																				class="custom-select w-full rounded-lg border border-slate-700 bg-[#151827] px-3 py-2.5 pr-10 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
-																			>
-																				{#each DURATION_OPTIONS as durationOption}
-																					<option value={durationOption}>
-																						{formatDurationLabel(durationOption)}
-																					</option>
-																				{/each}
-																			</select>
-																			<svg
-																				class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-																				viewBox="0 0 20 20"
-																				fill="none"
-																				aria-hidden="true"
-																			>
-																				<path d="M6 8l4 4 4-4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"></path>
-																			</svg>
-																		</div>
+																					class="custom-select w-full rounded-lg border border-slate-700 bg-[#151827] px-3 py-2.5 pr-10 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+																				>
+																					{#each DURATION_OPTIONS as durationOption}
+																						<option value={durationOption}>
+																							{formatDurationLabel(durationOption)}
+																						</option>
+																					{/each}
+																				</select>
+																			</div>
 																		{#if removalAdjustment}
 																			<p class={`col-span-2 text-xs ${
 																				highRiskRemoval ? 'text-red-200' : 'text-amber-200'
@@ -1301,8 +1285,23 @@
 		appearance: none;
 		-webkit-appearance: none;
 		-moz-appearance: none;
-		background-image: none;
+		padding-right: 2.5rem;
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M5 7.5L10 12.5L15 7.5' stroke='%23cbd5e1' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+		background-repeat: no-repeat;
+		background-position: right 0.8rem center;
+		background-size: 0.9rem 0.9rem;
 		color-scheme: dark;
+		transition:
+			border-color 140ms ease,
+			box-shadow 140ms ease,
+			background-color 140ms ease;
+	}
+	.custom-select:hover {
+		border-color: rgb(100 116 139 / 0.9);
+		background-color: rgb(26 32 48);
+	}
+	.custom-select:focus {
+		box-shadow: 0 0 0 3px rgb(16 185 129 / 0.16);
 	}
 	.custom-select::-ms-expand {
 		display: none;

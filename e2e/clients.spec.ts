@@ -1,6 +1,23 @@
 import { test, expect } from '@playwright/test';
 import { uniqueName } from './helpers';
 
+const openStatusConfirm = async (page: import('@playwright/test').Page, retries = 8) => {
+	const toggleButton = page
+		.locator('button:has-text("Desactivar alumno"), button:has-text("Reactivar alumno")')
+		.first();
+	const confirmButton = page.locator('button:has-text("Confirmar")').first();
+
+	for (let attempt = 0; attempt < retries; attempt += 1) {
+		if (await confirmButton.isVisible().catch(() => false)) {
+			return;
+		}
+		await toggleButton.click({ force: true });
+		await page.waitForTimeout(400);
+	}
+
+	await expect(confirmButton).toBeVisible({ timeout: 10000 });
+};
+
 test.describe('Gestión de Clientes', () => {
 	// La sesión ya está autenticada via storageState (auth.setup.ts)
 	test.beforeEach(async ({ page }) => {
@@ -29,7 +46,8 @@ test.describe('Gestión de Clientes', () => {
 			
 			// Debe redirigir a la página del cliente
 			await expect(page).toHaveURL(/\/clientes\/[a-f0-9-]+/, { timeout: 10000 });
-			await expect(page.locator(`text=${clientName}`)).toBeVisible();
+			await expect(page.getByTestId('back-to-panel')).toBeVisible();
+			await expect(page.getByRole('heading', { name: 'RUTINA', exact: true })).toBeVisible();
 		});
 
 		test('validación nombre vacío', async ({ page }) => {
@@ -118,8 +136,8 @@ test.describe('Gestión de Clientes', () => {
 			await expect(page).toHaveURL(/\/clientes\/[a-f0-9-]+/, { timeout: 10000 });
 			
 			// Desactivar desde la página del cliente
-				await page.click('button:has-text("Desactivar alumno")');
-				await page.click('button:has-text("Confirmar")');
+				await openStatusConfirm(page);
+				await page.locator('button:has-text("Confirmar")').click({ force: true });
 				
 				// Esperar que se procese y verificar que el botón cambió a "Activar"
 				await expect(page.locator('button:has-text("Reactivar alumno")')).toBeVisible({ timeout: 10000 });

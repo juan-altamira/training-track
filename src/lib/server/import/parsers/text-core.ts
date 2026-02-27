@@ -21,7 +21,8 @@ const DAY_HEADING_REGEX =
 	/^(lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|d[ií]a\s*\d+|day\s*\d+)\b\s*:?\s*(.*)?$/iu;
 const CUSTOM_DAY_HEADING_REGEX = /^(d[ií]a|day)\s+([^:]+?)(?:\s*:\s*(.*))?$/iu;
 
-const SUPSERSET_HEADING_REGEX = /^superset(?:\s*(\d{1,2}))?\b\s*:?\s*(.*)?$/iu;
+const SUPERSET_HEADING_REGEX =
+	/^(?:superset|super\s*set|superserie|super\s*serie|serie\s+gigante)(?:\s*(?:x\s*(\d{1,2})|(\d{1,2})\s*vueltas?|#?\s*(\d{1,2})))?\b\s*:?\s*(.*)?$/iu;
 const CIRCUIT_HEADING_REGEX =
 	/^circuito(?:\s*x?\s*(\d{1,2})\s*(?:vueltas?)?)?\b\s*:?\s*(.*)?$/iu;
 const LOAD_HEADER_REGEX = /^([^:]{2,80}):\s*(.*)$/u;
@@ -123,20 +124,6 @@ type ParseState =
 			headerText: string;
 			blockId: string;
 			entries: ReturnType<typeof parseLadderEntries>;
-		}
-	| {
-			kind: 'PENDING_SUPERSET';
-			headerUnitId: string;
-			headerText: string;
-			groupIndex: number;
-			blockId: string;
-		}
-	| {
-			kind: 'ACTIVE_SUPERSET';
-			headerUnitId: string;
-			headerText: string;
-			groupIndex: number;
-			blockId: string;
 		};
 
 const normalizeCompactWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim();
@@ -340,12 +327,14 @@ const mapDayHeading = (
 };
 
 const parseSupersetHeading = (line: string) => {
-	const match = line.trim().match(SUPSERSET_HEADING_REGEX);
+	const match = line.trim().match(SUPERSET_HEADING_REGEX);
 	if (!match) return null;
-	const index = match[1] ? Number.parseInt(match[1], 10) : null;
+	const roundsRaw = match[1] ?? match[2] ?? null;
+	const roundsParsed = roundsRaw ? Number.parseInt(roundsRaw, 10) : null;
+	const rounds = Number.isFinite(roundsParsed) && roundsParsed && roundsParsed > 0 ? roundsParsed : 1;
 	return {
-		index: Number.isFinite(index) && index ? index : 1,
-		rest: (match[2] ?? '').trim(),
+		rounds,
+		rest: (match[4] ?? '').trim(),
 		headerText: line.trim()
 	};
 };
@@ -711,12 +700,6 @@ export const parseLinesToDraft = (lines: ParsedLine[], context: ParserContext): 
 		};
 
 		if (isBlank(trimmed)) {
-			if (state.kind === 'ACTIVE_SUPERSET') {
-				state = { kind: 'IDLE' };
-			}
-			if (state.kind === 'PENDING_SUPERSET') {
-				state = { kind: 'IDLE' };
-			}
 			continue;
 		}
 
@@ -894,51 +877,6 @@ export const parseLinesToDraft = (lines: ParsedLine[], context: ParserContext): 
 			continue;
 		}
 
-		if (state.kind === 'PENDING_SUPERSET' || state.kind === 'ACTIVE_SUPERSET') {
-			if (dayHeading || circuitHeading || supersetHeading || loadHeading) {
-				state = { kind: 'IDLE' };
-				queue.unshift(unit);
-				continue;
-			}
-
-			const result = parseLineToNode(
-				line,
-				trimmed,
-				counters,
-				{
-					kind: 'superset',
-					group_id: state.headerUnitId,
-					index: state.groupIndex,
-					header_text: state.headerText,
-					header_unit_id: state.headerUnitId
-				}
-			);
-
-			if (result.node) {
-				const block = ensureBlockById(currentDay, 'superset', state.blockId);
-				block.nodes.push(result.node);
-				if (state.kind === 'PENDING_SUPERSET') {
-					state = {
-						kind: 'ACTIVE_SUPERSET',
-						headerUnitId: state.headerUnitId,
-						headerText: state.headerText,
-						groupIndex: state.groupIndex,
-						blockId: state.blockId
-					};
-				}
-				continue;
-			}
-
-			if (isNoiseLine(trimmed)) {
-				continue;
-			}
-			if (state.kind === 'ACTIVE_SUPERSET') {
-				continue;
-			}
-			state = { kind: 'IDLE' };
-			continue;
-		}
-
 			if (dayHeading) {
 				const mapped = dayHeading.mapped;
 				if (dayHeading.kind === 'weekday') weekDayHeadingsDetected += 1;
@@ -977,11 +915,14 @@ export const parseLinesToDraft = (lines: ParsedLine[], context: ParserContext): 
 		if (supersetHeading && !reopenedContextHeaders.has(unit.id)) {
 			reopenedContextHeaders.add(unit.id);
 			state = {
-				kind: 'PENDING_SUPERSET',
+				kind: 'PENDING_CIRCUIT',
 				headerUnitId: unit.id,
 				headerText: supersetHeading.headerText,
-				groupIndex: supersetHeading.index,
-				blockId: makeId()
+				rounds: supersetHeading.rounds,
+				blockId: makeId(),
+				blockNote: null,
+				buffer: [],
+				entries: []
 			};
 			const inline = maybeInlineUnit(unit, supersetHeading.rest);
 			if (inline) queue.unshift(inline);

@@ -12,10 +12,8 @@ test.describe('Rutinas - Crear y ver', () => {
 		await expect(page).toHaveURL(/\/clientes\/[a-f0-9-]+/, { timeout: 10000 });
 		
 		// Verificar elementos de la página de rutina
-		await expect(page.locator('h1')).toBeVisible();
-		await expect(page.locator('h2:has-text("Rutina")')).toBeVisible();
-		await expect(page.locator('button:has-text("+ Agregar ejercicio")')).toBeVisible();
-		await expect(page.locator('button:has-text("Guardar cambios")').first()).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'RUTINA', exact: true })).toBeVisible();
+		await expect(page.getByTestId('add-exercise-button')).toBeVisible();
 		await expect(page.locator('button:has-text("Lunes")')).toBeVisible();
 	});
 
@@ -27,9 +25,9 @@ test.describe('Rutinas - Crear y ver', () => {
 		await expect(page).toHaveURL(/\/clientes\/[a-f0-9-]+/, { timeout: 10000 });
 		
 		// Navegar entre días
-		await page.click('button:has-text("Martes")');
-		await page.click('button:has-text("Viernes")');
-		await page.click('button:has-text("Domingo")');
+		await page.locator('button:has-text("Martes")').click({ force: true });
+		await page.locator('button:has-text("Viernes")').click({ force: true });
+		await page.locator('button:has-text("Domingo")').click({ force: true });
 	});
 
 	test('volver al panel funciona', async ({ page }) => {
@@ -39,7 +37,7 @@ test.describe('Rutinas - Crear y ver', () => {
 		await page.click('button:has-text("Crear y generar link")');
 		await expect(page).toHaveURL(/\/clientes\/[a-f0-9-]+/, { timeout: 10000 });
 		
-		await page.click('text=Volver al panel');
+		await page.getByTestId('back-to-panel').click();
 		await expect(page).toHaveURL('/clientes');
 	});
 });

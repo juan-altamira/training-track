@@ -51,12 +51,40 @@ const normalizeWord = (value: string) =>
 		.toLowerCase();
 
 const narrativePrefixes: string[][] = [
+	['hoy', 'arrancamos', 'con'],
+	['arrancamos', 'con'],
+	['hoy', 'empezamos', 'con'],
+	['empezamos', 'con'],
 	['hoy', 'hacemos'],
-	['despues'],
-	['después'],
+	['hacemos'],
+	['hoy', 'metemos'],
+	['metemos'],
+	['hoy', 'le', 'damos', 'a'],
+	['le', 'damos', 'a'],
+	['vamos', 'con'],
+	['seguimos', 'con'],
+	['pasamos', 'a'],
+	['cerramos', 'con'],
+	['terminamos', 'con'],
 	['finalizamos', 'con'],
-	['despues', 'hacemos'],
-	['después', 'hacemos']
+	['arranca', 'con'],
+	['arranca'],
+	['empeza', 'con'],
+	['empeza'],
+	['metele', 'a'],
+	['metele'],
+	['hace'],
+	['mandale', 'a'],
+	['mandale'],
+	['dale', 'con'],
+	['dale', 'a'],
+	['anda', 'con'],
+	['ejecuta'],
+	['ejecuta', 'con'],
+	['hacete'],
+	['hacete', 'con'],
+	['despues'],
+	['despues', 'hacemos']
 ];
 
 const withHeuristic = (shape: ImportShapeV1, reason: ImportInferenceReason): ImportShapeV1 => {
@@ -595,6 +623,29 @@ const allMatchers = [
 	matchSchemeFromNumberRuns
 ] as const;
 
+const collectCandidates = (
+	rawLine: string,
+	tokens: LineToken[],
+	offset = 0,
+	inferenceReasons: ImportInferenceReason[] = []
+) => {
+	const candidates: ContractCandidate[] = [];
+	for (const matcher of allMatchers) {
+		const candidate = matcher(rawLine, tokens);
+		if (!candidate) continue;
+		const parsedShape = attachInferences(candidate.parsedShape, inferenceReasons);
+		candidates.push({
+			...candidate,
+			parsedShape,
+			nameSpanStart: candidate.nameSpanStart + offset,
+			nameSpanEnd: candidate.nameSpanEnd + offset,
+			structureEndOffset: candidate.structureEndOffset + offset,
+			noteStartOffset: candidate.noteStartOffset + offset
+		});
+	}
+	return candidates;
+};
+
 export type ContractParseResult = {
 	candidate: ContractCandidate | null;
 	tokens: LineToken[];
@@ -605,25 +656,16 @@ export const parseContractCandidate = (rawLine: string): ContractParseResult => 
 	const tokens = tokenizeLine(raw);
 	if (!raw || tokens.length === 0) return { candidate: null, tokens };
 
+	const candidates: ContractCandidate[] = collectCandidates(raw, tokens);
 	const prefix = applyNarrativePrefixRemoval(raw, tokens);
 	const workingLine = prefix.line.trim();
-	const workingTokens = tokenizeLine(workingLine);
-	if (!workingLine || workingTokens.length === 0) return { candidate: null, tokens };
-
-	const candidates: ContractCandidate[] = [];
-	for (const matcher of allMatchers) {
-		const candidate = matcher(workingLine, workingTokens);
-		if (!candidate) continue;
-		let nextShape = candidate.parsedShape;
-		nextShape = attachInferences(nextShape, prefix.inferenceReasons);
-		candidates.push({
-			...candidate,
-			parsedShape: nextShape,
-			nameSpanStart: candidate.nameSpanStart + prefix.offset,
-			nameSpanEnd: candidate.nameSpanEnd + prefix.offset,
-			structureEndOffset: candidate.structureEndOffset + prefix.offset,
-			noteStartOffset: candidate.noteStartOffset + prefix.offset
-		});
+	if (prefix.offset > 0 && workingLine.length > 0) {
+		const workingTokens = tokenizeLine(workingLine);
+		if (workingTokens.length > 0) {
+			candidates.push(
+				...collectCandidates(workingLine, workingTokens, prefix.offset, prefix.inferenceReasons)
+			);
+		}
 	}
 
 	if (candidates.length === 0) {
@@ -632,8 +674,12 @@ export const parseContractCandidate = (rawLine: string): ContractParseResult => 
 
 	candidates.sort((a, b) => {
 		if (a.priority !== b.priority) return b.priority - a.priority;
+		if (a.structureEndOffset !== b.structureEndOffset) return b.structureEndOffset - a.structureEndOffset;
+		if (a.rawExerciseName.length !== b.rawExerciseName.length) {
+			return a.rawExerciseName.length - b.rawExerciseName.length;
+		}
 		if (a.score !== b.score) return b.score - a.score;
-		return b.structureEndOffset - a.structureEndOffset;
+		return 0;
 	});
 
 	return {

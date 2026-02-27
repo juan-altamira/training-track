@@ -1,7 +1,21 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { requireTrainerSession } from '$lib/server/import/auth';
-import { getImportDraftForJob, getImportJobForTrainer } from '$lib/server/import/job-repo';
+import {
+	getImportDraftForJob,
+	getImportJobForTrainer,
+	saveImportDraftBundle
+} from '$lib/server/import/job-repo';
+import { buildDraftBundle } from '$lib/server/import/validation';
+import type { ImportDraftBundle, ImportDraft } from '$lib/import/types';
+
+const serializeBundle = (bundle: ImportDraftBundle) =>
+	JSON.stringify({
+		draft: bundle.draft,
+		issues: bundle.issues,
+		derivedPlan: bundle.derivedPlan,
+		stats: bundle.stats
+	});
 
 export const GET: RequestHandler = async (event) => {
 	const session = await requireTrainerSession(event);
@@ -12,6 +26,21 @@ export const GET: RequestHandler = async (event) => {
 	}
 
 	const draftRow = await getImportDraftForJob(job.id);
+	let currentBundle: ImportDraftBundle | null = null;
+	if (draftRow?.draft_json) {
+		const rebuiltBundle = buildDraftBundle(draftRow.draft_json as ImportDraft);
+		currentBundle = rebuiltBundle;
+		const persistedBundle: ImportDraftBundle = {
+			draft: (draftRow.draft_json as ImportDraft) ?? rebuiltBundle.draft,
+			issues: draftRow.issues_json ?? [],
+			derivedPlan: draftRow.derived_routineplan_json ?? rebuiltBundle.derivedPlan,
+			stats: draftRow.stats_json ?? rebuiltBundle.stats
+		};
+		if (serializeBundle(rebuiltBundle) !== serializeBundle(persistedBundle)) {
+			await saveImportDraftBundle(job.id, rebuiltBundle);
+		}
+	}
+
 	return json({
 		job: {
 			id: job.id,
@@ -32,9 +61,9 @@ export const GET: RequestHandler = async (event) => {
 			updated_at: job.updated_at,
 			expires_at: job.expires_at
 		},
-		draft: draftRow?.draft_json ?? null,
-		issues: draftRow?.issues_json ?? [],
-		stats: draftRow?.stats_json ?? null,
-		derived_plan: draftRow?.derived_routineplan_json ?? null
+		draft: currentBundle?.draft ?? draftRow?.draft_json ?? null,
+		issues: currentBundle?.issues ?? draftRow?.issues_json ?? [],
+		stats: currentBundle?.stats ?? draftRow?.stats_json ?? null,
+		derived_plan: currentBundle?.derivedPlan ?? draftRow?.derived_routineplan_json ?? null
 	});
 };

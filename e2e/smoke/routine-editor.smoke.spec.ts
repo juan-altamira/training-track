@@ -3,8 +3,8 @@ import { uniqueName } from '../helpers';
 import { cleanupRunAndAssert } from '../fixtures/cleanup';
 
 const ensureExerciseInputVisible = async (page: import('@playwright/test').Page, retries = 3) => {
-	const addExerciseButton = page.getByRole('button', { name: /Agregar ejercicio/i }).first();
-	const exerciseNameInput = page.locator('input[placeholder="Nuevo ejercicio"]').first();
+	const addExerciseButton = page.getByTestId('add-exercise-button');
+	const exerciseNameInput = page.getByTestId('exercise-name-input').first();
 
 	for (let attempt = 0; attempt < retries; attempt += 1) {
 		if (await exerciseNameInput.isVisible()) {
@@ -29,12 +29,23 @@ test.describe('Smoke /clientes/[id]', () => {
 		await page.click('button:has-text("Crear y generar link")');
 		await expect(page).toHaveURL(/\/clientes\/[a-f0-9-]+$/, { timeout: 20000 });
 
-		await ensureExerciseInputVisible(page);
-		await page.locator('input[placeholder="Nuevo ejercicio"]').first().fill('Sentadilla trasera');
-		await page.locator('input[placeholder="Ej: 4"]').first().fill('3');
+	await ensureExerciseInputVisible(page);
+	await page.getByTestId('exercise-name-input').first().fill('Sentadilla trasera');
+	await page.locator('input[placeholder="Ej: 4"]').first().fill('3');
+	await page
+		.locator('input[placeholder="Ej: 10, 8-10, 30 segundos, AMRAP, al fallo"]')
+		.first()
+		.fill('8');
 
-		await page.click('button:has-text("Guardar cambios")');
-		await expect(page.locator('text=Rutina guardada')).toBeVisible({ timeout: 10000 });
+	const waitForSave = page.waitForResponse(
+		(res) =>
+			res.request().method() === 'POST' &&
+			res.url().includes('?/saveRoutine') &&
+			res.status() === 200,
+		{ timeout: 15000 }
+	);
+	await page.getByRole('button', { name: /Publicar cambios/i }).first().click();
+	await waitForSave;
 
 		const openResetButton = page.getByRole('button', { name: 'Resetear progreso' }).first();
 		await openResetButton.scrollIntoViewIfNeeded();

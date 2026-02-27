@@ -15,7 +15,7 @@ test.describe('Panel de Clientes - UI', () => {
 	});
 
 	test('título del panel visible', async ({ page }) => {
-		await expect(page.locator('text=EN ESTE PANEL')).toBeVisible();
+		await expect(page.locator('text=Crear alumno')).toBeVisible();
 	});
 
 	test('formulario crear cliente completo', async ({ page }) => {
@@ -24,7 +24,7 @@ test.describe('Panel de Clientes - UI', () => {
 	});
 
 	test('buscador funciona', async ({ page }) => {
-		const searchInput = page.locator('input[placeholder="Buscar cliente"]');
+		const searchInput = page.locator('input[placeholder="Buscar alumno"]');
 		await searchInput.fill('test');
 		await page.waitForTimeout(300);
 		await searchInput.fill('');
@@ -49,12 +49,12 @@ test.describe('Navegación', () => {
 		await page.goto('/clientes');
 		await page.reload();
 		await expect(page).toHaveURL('/clientes');
-		await expect(page.locator('text=Crear cliente')).toBeVisible();
+		await expect(page.locator('text=Crear alumno')).toBeVisible();
 	});
 
 	test('validación cliente sin nombre', async ({ page }) => {
 		await page.goto('/clientes');
-		await page.fill('input[place holder="Ej: Ana Pérez"]', '');
+		await page.fill('input[placeholder="Ej: Ana Pérez"]', '');
 		await page.click('button:has-text("Crear y generar link")');
 		await page.waitForTimeout(500);
 		await expect(page).toHaveURL(/\/clientes$/);

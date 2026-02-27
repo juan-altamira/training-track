@@ -58,7 +58,7 @@ test.describe('Full data integrity', () => {
 		await page.goto('/clientes');
 		await expect(page.locator('input[placeholder="Buscar alumno"]')).toBeVisible({ timeout: 15000 });
 		await page.goto(`/clientes/${seeded.id}`);
-		await expect(page.locator('button:has-text("Volver al panel")')).toBeVisible({ timeout: 15000 });
+		await expect(page.getByTestId('back-to-panel')).toBeVisible({ timeout: 15000 });
 
 		const { data: afterClient } = await supabase
 			.from('clients')

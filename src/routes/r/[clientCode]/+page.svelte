@@ -963,7 +963,12 @@ import type { ProgressState, RoutineExercise, RoutinePlan, RoutineUiMeta } from 
 			{/each}
 		</div>
 
-		<button class="reset-btn" type="button" onclick={() => (showResetConfirm = true)}>
+		<button
+			class="reset-btn"
+			data-testid="reset-week-button"
+			type="button"
+			onclick={() => (showResetConfirm = true)}
+		>
 			Iniciar nueva semana
 		</button>
 		<p class="reset-help">
@@ -1026,7 +1031,12 @@ import type { ProgressState, RoutineExercise, RoutinePlan, RoutineUiMeta } from 
 						<button class="btn ghost" type="button" onclick={() => (showResetConfirm = false)}>
 							Cancelar
 						</button>
-						<button class="btn danger" type="button" onclick={resetProgress}>
+						<button
+							class="btn danger"
+							data-testid="reset-week-confirm"
+							type="button"
+							onclick={resetProgress}
+						>
 							Iniciar nueva semana
 						</button>
 					</div>

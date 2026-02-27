@@ -1,6 +1,57 @@
 import { test, expect } from '@playwright/test';
 import { TEST_USER, login, uniqueName } from './helpers';
 
+test.use({ storageState: { cookies: [], origins: [] } });
+
+const openRegisterMode = async (page: import('@playwright/test').Page, retries = 8) => {
+	const registerTab = page.locator('button[type="button"]').filter({ hasText: 'Crear cuenta' }).first();
+	const registerConfirmInput = page.locator('input[placeholder="Repetí tu contraseña"]');
+
+	for (let attempt = 0; attempt < retries; attempt += 1) {
+		if (await registerConfirmInput.isVisible()) {
+			return;
+		}
+		await registerTab.click({ force: true });
+		await page.waitForTimeout(400);
+	}
+
+	await expect(registerConfirmInput).toBeVisible({ timeout: 10000 });
+};
+
+const togglePasswordVisibility = async (
+	page: import('@playwright/test').Page,
+	expectedType: 'text' | 'password',
+	retries = 8
+) => {
+	const toggleButton = page.locator('button[type="button"]').filter({ hasText: expectedType === 'text' ? 'Ver' : 'Ocultar' }).first();
+	const passwordInput = page.locator('input[autocomplete="current-password"]');
+
+	for (let attempt = 0; attempt < retries; attempt += 1) {
+		if ((await passwordInput.getAttribute('type')) === expectedType) {
+			return;
+		}
+		await toggleButton.click({ force: true });
+		await page.waitForTimeout(250);
+	}
+
+	await expect(passwordInput).toHaveAttribute('type', expectedType, { timeout: 10000 });
+};
+
+const openLogoutConfirm = async (page: import('@playwright/test').Page, retries = 8) => {
+	const logoutButton = page.locator('button:has-text("Cerrar sesión")').first();
+	const confirmTitle = page.locator('#logout-confirm-title');
+
+	for (let attempt = 0; attempt < retries; attempt += 1) {
+		if (await confirmTitle.isVisible().catch(() => false)) {
+			return;
+		}
+		await logoutButton.click({ force: true });
+		await page.waitForTimeout(400);
+	}
+
+	await expect(confirmTitle).toContainText('Confirmar cierre de sesión', { timeout: 10000 });
+};
+
 test.describe('Autenticación', () => {
 	test.describe('Login', () => {
 		test('muestra página de login correctamente', async ({ page }) => {
@@ -18,19 +69,19 @@ test.describe('Autenticación', () => {
 			await expect(page.locator('h1')).toContainText('Ingreso de entrenadores');
 			
 			// Cambiar a registro
-			await page.click('button:has-text("Crear cuenta")');
+			await openRegisterMode(page);
 			await expect(page.locator('h1')).toContainText('Crear cuenta');
 			await expect(page.locator('input[placeholder="Repetí tu contraseña"]')).toBeVisible();
 			
 			// Volver a login
-			await page.click('button:has-text("Ingresar")');
+			await page.locator('button[type="button"]').filter({ hasText: 'Ingresar' }).first().click({ force: true });
 			await expect(page.locator('h1')).toContainText('Ingreso de entrenadores');
 		});
 
 		test('login exitoso redirige a /clientes', async ({ page }) => {
 			await login(page);
 			await expect(page).toHaveURL(/\/clientes/);
-			await expect(page.locator('text=Crear cliente')).toBeVisible();
+			await expect(page.locator('text=Crear alumno')).toBeVisible();
 		});
 
 		test('login fallido muestra error', async ({ page }) => {
@@ -43,16 +94,16 @@ test.describe('Autenticación', () => {
 
 		test('botón ver/ocultar contraseña funciona', async ({ page }) => {
 			await page.goto('/login');
-			const passwordInput = page.locator('input[type="password"]');
+			const passwordInput = page.locator('input[autocomplete="current-password"]');
 			await passwordInput.fill('mipassword');
 			
 			// Click en "Ver"
-			await page.click('button:has-text("Ver")');
-			await expect(page.locator('input[type="text"]')).toHaveValue('mipassword');
+			await togglePasswordVisibility(page, 'text');
+			await expect(passwordInput).toHaveValue('mipassword');
 			
 			// Click en "Ocultar"
-			await page.click('button:has-text("Ocultar")');
-			await expect(page.locator('input[type="password"]')).toHaveValue('mipassword');
+			await togglePasswordVisibility(page, 'password');
+			await expect(passwordInput).toHaveValue('mipassword');
 		});
 
 		test('link a recuperar contraseña funciona', async ({ page }) => {
@@ -65,7 +116,7 @@ test.describe('Autenticación', () => {
 	test.describe('Registro', () => {
 		test('validación de email muy largo', async ({ page }) => {
 			await page.goto('/login');
-			await page.click('button:has-text("Crear cuenta")');
+			await openRegisterMode(page);
 			
 			const longEmail = 'a'.repeat(101) + '@test.com';
 			await page.fill('input[type="email"]', longEmail);
@@ -78,7 +129,7 @@ test.describe('Autenticación', () => {
 
 		test('validación de contraseña muy corta', async ({ page }) => {
 			await page.goto('/login');
-			await page.click('button:has-text("Crear cuenta")');
+			await openRegisterMode(page);
 			
 			await page.fill('input[type="email"]', 'test@test.com');
 			await page.fill('input[placeholder="Creá una contraseña segura"]', '12345');
@@ -90,7 +141,7 @@ test.describe('Autenticación', () => {
 
 		test('validación de contraseña muy larga', async ({ page }) => {
 			await page.goto('/login');
-			await page.click('button:has-text("Crear cuenta")');
+			await openRegisterMode(page);
 			
 			const longPassword = 'a'.repeat(73);
 			await page.fill('input[type="email"]', 'test@test.com');
@@ -103,7 +154,7 @@ test.describe('Autenticación', () => {
 
 		test('validación de contraseñas no coinciden', async ({ page }) => {
 			await page.goto('/login');
-			await page.click('button:has-text("Crear cuenta")');
+			await openRegisterMode(page);
 			
 			await page.fill('input[type="email"]', 'test@test.com');
 			await page.fill('input[placeholder="Creá una contraseña segura"]', 'password123');
@@ -132,7 +183,8 @@ test.describe('Autenticación', () => {
 	test.describe('Logout', () => {
 		test('logout funciona correctamente', async ({ page }) => {
 			await login(page);
-			await page.click('button:has-text("Cerrar sesión")');
+			await openLogoutConfirm(page);
+			await page.click('button:has-text("Sí, cerrar sesión")');
 			await expect(page).toHaveURL(/\/login|\/$/);
 		});
 	});

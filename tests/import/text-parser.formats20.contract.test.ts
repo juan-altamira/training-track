@@ -133,7 +133,7 @@ test('contract format 12: superseries', async () => {
 	);
 	const nodes = nodesFrom(draft);
 	assert.equal(nodes.length, 4);
-	assert.ok(nodes.every((node) => node.parsed_shape?.block?.kind === 'superset'));
+	assert.ok(nodes.every((node) => node.parsed_shape?.block?.kind === 'circuit'));
 });
 
 test('contract format 13: con dias', async () => {

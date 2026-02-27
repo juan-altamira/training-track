@@ -335,7 +335,8 @@
 		mode: RoutineBlockType
 	) => `${dayKey}::${blockId}::${mode}`;
 
-	const cloneExercises = (exercises: RoutineExercise[]) => structuredClone(exercises);
+	const cloneExercises = (exercises: RoutineExercise[]) =>
+		exercises.map((exercise) => ({ ...exercise }));
 
 	const setBlockModeDraft = (
 		dayKey: string,

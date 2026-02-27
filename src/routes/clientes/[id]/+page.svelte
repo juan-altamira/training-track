@@ -2,10 +2,13 @@
 	import { DAY_FEEDBACK_MOOD_LABEL, DAY_FEEDBACK_PAIN_LABEL, type DayFeedbackByDay, type DayFeedbackMood, type DayFeedbackPain } from '$lib/dayFeedback';
 	import {
 		WEEK_DAYS,
-		formatSpecialRepsForDisplay,
+		formatPrescriptionLong,
 		getDisplayDays,
+		getRoutineExerciseBlockType,
 		getRoutineExerciseRepsMode,
+		parseRoutineRepsInput,
 		getTargetSets,
+		normalizePlan,
 		normalizeRoutineUiMeta,
 		sanitizeCustomLabel
 	} from '$lib/routines';
@@ -13,6 +16,7 @@
 	import type {
 		OtherClientRow,
 		ProgressState,
+		RoutineBlockType,
 		RoutineDayLabelMode,
 		RoutineExercise,
 		RoutinePlan,
@@ -23,7 +27,7 @@
 
 	let { data } = $props();
 
-	let plan: RoutinePlan = $state(structuredClone(data.plan));
+	let plan: RoutinePlan = $state(normalizePlan(structuredClone(data.plan)));
 	let progress: ProgressState = $state(structuredClone(data.progress));
 	let uiMeta: Required<RoutineUiMeta> = $state(normalizeRoutineUiMeta(data.uiMeta ?? null));
 	let routineVersion = $state(data.routineVersion ?? 1);
@@ -32,6 +36,9 @@
 	let feedback = $state('');
 	let feedbackType = $state<'success' | 'warning' | 'error'>('success');
 	let showValidationErrors = $state(false);
+	let blockInlineWarnings = $state<Record<string, string>>({});
+	let dayInlineWarnings = $state<Record<string, string>>({});
+	let blockModeDrafts = $state<Record<string, RoutineExercise[]>>({});
 	let statusMessage = $state('');
 	let clientStatus = $state(data.client.status as 'active' | 'archived');
 	let showDeleteConfirm = $state(false);
@@ -187,11 +194,125 @@
 
 	const MAX_EXERCISE_NAME_LENGTH = 100;
 	const MAX_SPECIAL_REPS_LENGTH = 80;
+	const MAX_BLOCK_LABEL_LENGTH = 40;
 	type DeletedExerciseBatchItem = {
 		dayKey: string;
 		exercise: RoutineExercise;
 		deletedIndex: number;
 	};
+	type EditorExerciseBlock = {
+		key: string;
+		type: RoutineBlockType;
+		id: string;
+		label: string;
+		order: number;
+		rounds: number | null;
+		exercises: RoutineExercise[];
+	};
+
+	type ExerciseFieldKey = 'name' | 'sets' | 'reps';
+	type BlockFieldKey = 'rounds';
+	type BlockValidationIssue =
+		| { kind: 'exercise'; exerciseId: string; field: ExerciseFieldKey; message: string }
+		| { kind: 'block'; field: BlockFieldKey; message: string };
+
+	const getBlockScopeKey = (dayKey: string, blockKey: string) => `${dayKey}::${blockKey}`;
+	const getExerciseFieldErrorKey = (dayKey: string, exerciseId: string, field: ExerciseFieldKey) =>
+		`${dayKey}::${exerciseId}::${field}`;
+	const getBlockFieldErrorKey = (dayKey: string, blockKey: string, field: BlockFieldKey) =>
+		`${dayKey}::${blockKey}::${field}`;
+
+	const setBlockInlineWarning = (dayKey: string, blockKey: string, message: string) => {
+		blockInlineWarnings = {
+			...blockInlineWarnings,
+			[getBlockScopeKey(dayKey, blockKey)]: message
+		};
+	};
+
+	const clearBlockInlineWarning = (dayKey: string, blockKey: string) => {
+		const key = getBlockScopeKey(dayKey, blockKey);
+		if (!(key in blockInlineWarnings)) return;
+		const next = { ...blockInlineWarnings };
+		delete next[key];
+		blockInlineWarnings = next;
+	};
+
+	const setDayInlineWarning = (dayKey: string, message: string) => {
+		dayInlineWarnings = { ...dayInlineWarnings, [dayKey]: message };
+	};
+
+	const clearDayInlineWarning = (dayKey: string) => {
+		if (!(dayKey in dayInlineWarnings)) return;
+		const next = { ...dayInlineWarnings };
+		delete next[dayKey];
+		dayInlineWarnings = next;
+	};
+
+	let exerciseInlineErrors = $state<Record<string, string>>({});
+	let blockFieldInlineErrors = $state<Record<string, string>>({});
+
+	const setExerciseInlineError = (
+		dayKey: string,
+		exerciseId: string,
+		field: ExerciseFieldKey,
+		message: string
+	) => {
+		exerciseInlineErrors = {
+			...exerciseInlineErrors,
+			[getExerciseFieldErrorKey(dayKey, exerciseId, field)]: message
+		};
+	};
+
+	const setBlockFieldInlineError = (
+		dayKey: string,
+		blockKey: string,
+		field: BlockFieldKey,
+		message: string
+	) => {
+		blockFieldInlineErrors = {
+			...blockFieldInlineErrors,
+			[getBlockFieldErrorKey(dayKey, blockKey, field)]: message
+		};
+	};
+
+	const clearInlineErrorsForBlock = (
+		dayKey: string,
+		blockKey: string,
+		exercises: RoutineExercise[]
+	) => {
+		const blockExerciseIds = exercises
+			.filter((exercise) => getExerciseBlockKey(exercise) === blockKey)
+			.map((exercise) => exercise.id);
+
+		if (blockExerciseIds.length > 0) {
+			const nextExerciseErrors = { ...exerciseInlineErrors };
+			for (const exerciseId of blockExerciseIds) {
+				delete nextExerciseErrors[getExerciseFieldErrorKey(dayKey, exerciseId, 'name')];
+				delete nextExerciseErrors[getExerciseFieldErrorKey(dayKey, exerciseId, 'sets')];
+				delete nextExerciseErrors[getExerciseFieldErrorKey(dayKey, exerciseId, 'reps')];
+			}
+			exerciseInlineErrors = nextExerciseErrors;
+		}
+
+		const blockFieldKey = getBlockFieldErrorKey(dayKey, blockKey, 'rounds');
+		if (blockFieldKey in blockFieldInlineErrors) {
+			const nextBlockFieldErrors = { ...blockFieldInlineErrors };
+			delete nextBlockFieldErrors[blockFieldKey];
+			blockFieldInlineErrors = nextBlockFieldErrors;
+		}
+	};
+
+	const getExerciseInlineError = (
+		dayKey: string,
+		exerciseId: string,
+		field: ExerciseFieldKey
+	): string | null => exerciseInlineErrors[getExerciseFieldErrorKey(dayKey, exerciseId, field)] ?? null;
+
+	const getBlockFieldInlineError = (
+		dayKey: string,
+		blockKey: string,
+		field: BlockFieldKey
+	): string | null => blockFieldInlineErrors[getBlockFieldErrorKey(dayKey, blockKey, field)] ?? null;
 
 	let deletedExercisesBatch = $state<DeletedExerciseBatchItem[]>([]);
 	let showDeleteUndoSnackbar = $state(false);
@@ -202,12 +323,198 @@
 	let deleteUndoSecondsLeft = $state(0);
 
 	const getExerciseRepsMode = (exercise: RoutineExercise) => getRoutineExerciseRepsMode(exercise);
+	const getExerciseBlockType = (exercise: RoutineExercise): RoutineBlockType =>
+		getRoutineExerciseBlockType(exercise);
+	const getExerciseBlockId = (exercise: RoutineExercise) =>
+		(exercise.blockId ?? '').trim() || exercise.id;
+	const getExerciseBlockKey = (exercise: RoutineExercise) =>
+		`${getExerciseBlockType(exercise)}:${getExerciseBlockId(exercise)}`;
+	const getBlockModeDraftKey = (
+		dayKey: string,
+		blockId: string,
+		mode: RoutineBlockType
+	) => `${dayKey}::${blockId}::${mode}`;
+
+	const cloneExercises = (exercises: RoutineExercise[]) => structuredClone(exercises);
+
+	const setBlockModeDraft = (
+		dayKey: string,
+		blockId: string,
+		mode: RoutineBlockType,
+		exercises: RoutineExercise[]
+	) => {
+		blockModeDrafts = {
+			...blockModeDrafts,
+			[getBlockModeDraftKey(dayKey, blockId, mode)]: cloneExercises(exercises)
+		};
+	};
+
+	const getBlockModeDraft = (
+		dayKey: string,
+		blockId: string,
+		mode: RoutineBlockType
+	): RoutineExercise[] | null => {
+		const cached = blockModeDrafts[getBlockModeDraftKey(dayKey, blockId, mode)];
+		if (!cached || cached.length === 0) return null;
+		return cloneExercises(cached);
+	};
+
+	const clearBlockModeDraftsForAnchor = (dayKey: string, blockId: string) => {
+		const normalKey = getBlockModeDraftKey(dayKey, blockId, 'normal');
+		const circuitKey = getBlockModeDraftKey(dayKey, blockId, 'circuit');
+		if (!(normalKey in blockModeDrafts) && !(circuitKey in blockModeDrafts)) return;
+		const next = { ...blockModeDrafts };
+		delete next[normalKey];
+		delete next[circuitKey];
+		blockModeDrafts = next;
+	};
+
+	const createEmptyExerciseForMode = (
+		dayKey: string,
+		blockId: string,
+		mode: RoutineBlockType,
+		blockOrder = 0
+	): RoutineExercise => ({
+		id: crypto.randomUUID(),
+		name: '',
+		scheme: '',
+		order: 0,
+		totalSets: undefined,
+		repsMin: undefined,
+		repsMax: null,
+		repsMode: 'number',
+		repsSpecial: null,
+		showRange: false,
+		blockType: mode,
+		blockId: blockId || `block-${dayKey}-${crypto.randomUUID()}`,
+		blockLabel: '',
+		blockOrder,
+		circuitRounds: mode === 'circuit' ? 3 : null,
+		note: ''
+	});
+
+	const sanitizeBlockLabelLocal = (value: string | null | undefined, fallback: string) => {
+		const cleaned = (value ?? '')
+			.replace(/[\u0000-\u001F\u007F]/g, '')
+			.trim()
+			.replace(/\s+/g, ' ')
+			.slice(0, MAX_BLOCK_LABEL_LENGTH);
+		return cleaned || fallback;
+	};
+
+	const normalizeDayExercisesForUi = (dayKey: string, exercises: RoutineExercise[]): RoutineExercise[] => {
+		const blockOrderByKey = new Map<string, number>();
+		return exercises.map((exercise, index) => {
+			const blockType = getExerciseBlockType(exercise);
+			const baseBlockId = (exercise.blockId ?? '').trim() || `block-${dayKey}-${exercise.id}`;
+			const blockKey = `${blockType}:${baseBlockId}`;
+			const blockOrder = blockOrderByKey.has(blockKey)
+				? (blockOrderByKey.get(blockKey) ?? 0)
+				: blockOrderByKey.size;
+			if (!blockOrderByKey.has(blockKey)) {
+				blockOrderByKey.set(blockKey, blockOrder);
+			}
+			const blockLabel = sanitizeBlockLabelLocal(exercise.blockLabel, `Bloque ${blockOrder + 1}`);
+			const circuitRounds =
+				blockType === 'circuit'
+					? Math.max(
+							1,
+							Math.min(
+								99,
+								Math.floor(
+									Number(
+										typeof exercise.circuitRounds === 'number' && Number.isFinite(exercise.circuitRounds)
+											? exercise.circuitRounds
+											: exercise.totalSets ?? 3
+									) || 3
+								)
+							)
+						)
+					: null;
+			return {
+				...exercise,
+				order: index,
+				blockType,
+				blockId: baseBlockId,
+				blockOrder,
+				blockLabel,
+				circuitRounds
+			};
+		});
+	};
 
 	const getExerciseSpecialReps = (exercise: RoutineExercise) =>
 		(exercise.repsSpecial ?? '').trim().slice(0, MAX_SPECIAL_REPS_LENGTH);
 
-	const getExerciseSpecialPreview = (exercise: RoutineExercise) =>
-		formatSpecialRepsForDisplay(getExerciseSpecialReps(exercise));
+	const getExercisePreview = (exercise: RoutineExercise) => formatPrescriptionLong(exercise);
+
+	const getEditorBlocks = (dayKey: string): EditorExerciseBlock[] => {
+		const dayExercises = plan[dayKey]?.exercises ?? [];
+		const blocks: EditorExerciseBlock[] = [];
+		const byKey = new Map<string, EditorExerciseBlock>();
+
+		for (const exercise of dayExercises) {
+			const type = getExerciseBlockType(exercise);
+			const id = getExerciseBlockId(exercise);
+			const key = `${type}:${id}`;
+			if (!byKey.has(key)) {
+				const order = blocks.length;
+				const label = sanitizeBlockLabelLocal(exercise.blockLabel, `Bloque ${order + 1}`);
+				const rounds =
+					type === 'circuit'
+						? Math.max(
+								1,
+								Math.min(
+									99,
+									Math.floor(
+										Number(
+											typeof exercise.circuitRounds === 'number' && Number.isFinite(exercise.circuitRounds)
+												? exercise.circuitRounds
+												: getTargetSets(exercise) || 3
+										) || 3
+									)
+								)
+							)
+						: null;
+				const block: EditorExerciseBlock = { key, type, id, label, order, rounds, exercises: [] };
+				byKey.set(key, block);
+				blocks.push(block);
+			}
+			byKey.get(key)?.exercises.push(exercise);
+		}
+
+		return blocks;
+	};
+
+	const getCircuitBlockNote = (block: EditorExerciseBlock) => {
+		if (block.type !== 'circuit') return '';
+		const firstWithNote = block.exercises.find((exercise) => (exercise.note ?? '').trim().length > 0);
+		return firstWithNote?.note ?? '';
+	};
+
+	const updateCircuitBlockNote = (dayKey: string, blockKey: string, value: string) => {
+		const exercises = plan[dayKey].exercises.map((exercise) =>
+			getExerciseBlockKey(exercise) === blockKey ? { ...exercise, note: value } : exercise
+		);
+		plan = {
+			...plan,
+			[dayKey]: {
+				...plan[dayKey],
+				exercises: normalizeDayExercisesForUi(dayKey, exercises)
+			}
+		};
+	};
+
+	const getExerciseRepsInputValue = (exercise: RoutineExercise) => {
+		if (getExerciseRepsMode(exercise) === 'special') {
+			return exercise.repsSpecial ?? '';
+		}
+		const repsMin = exercise.repsMin ?? 0;
+		if (exercise.showRange && (exercise.repsMax ?? 0) > 0) {
+			return `${Math.max(0, repsMin)}-${Math.max(0, exercise.repsMax ?? 0)}`;
+		}
+		return repsMin > 0 ? String(repsMin) : '';
+	};
 
 	const clearDeleteUndoTimer = () => {
 		if (deleteUndoTimer) {
@@ -308,7 +615,10 @@
 
 			nextPlan[dayKey] = {
 				...nextPlan[dayKey],
-				exercises: restored.map((exercise, index) => ({ ...exercise, order: index }))
+				exercises: normalizeDayExercisesForUi(
+					dayKey,
+					restored.map((exercise, index) => ({ ...exercise, order: index }))
+				)
 			};
 		}
 
@@ -316,48 +626,181 @@
 		resetDeleteUndoBatch();
 	};
 
-	const validateExercises = (dayKey: string): string | null => {
-		const exercises = plan[dayKey].exercises;
-		for (const ex of exercises) {
-			if (!ex.name || ex.name.trim() === '') {
-				return 'Hay ejercicios sin nombre. Completá el nombre antes de continuar.';
+	const collectBlockValidationIssues = (
+		exercises: RoutineExercise[],
+		blockKey: string
+	): BlockValidationIssue[] => {
+		const targetExercises = exercises.filter(
+			(exercise) => getExerciseBlockKey(exercise) === blockKey
+		);
+		const issues: BlockValidationIssue[] = [];
+		let hasCircuitRoundsIssue = false;
+		for (const exercise of targetExercises) {
+			if (!exercise.name || exercise.name.trim() === '') {
+				issues.push({
+					kind: 'exercise',
+					exerciseId: exercise.id,
+					field: 'name',
+					message: 'El nombre es obligatorio.'
+				});
+			} else if (exercise.name.length > MAX_EXERCISE_NAME_LENGTH) {
+				issues.push({
+					kind: 'exercise',
+					exerciseId: exercise.id,
+					field: 'name',
+					message: `Máximo ${MAX_EXERCISE_NAME_LENGTH} caracteres.`
+				});
 			}
-			if (ex.name.length > MAX_EXERCISE_NAME_LENGTH) {
-				return `El nombre del ejercicio "${ex.name.slice(0, 20)}..." es demasiado largo (máx ${MAX_EXERCISE_NAME_LENGTH} caracteres).`;
-			}
-			const sets = getTargetSets(ex);
-			if (sets === 0) {
-				return `El ejercicio "${ex.name}" no tiene series. Completá el campo Series.`;
-			}
-			if (getExerciseRepsMode(ex) === 'special') {
-				if (!getExerciseSpecialReps(ex)) {
-					return `El ejercicio "${ex.name}" necesita una indicación en repeticiones especiales (ej: AMRAP, 30 segundos).`;
+
+			const sets = getTargetSets(exercise);
+			if (sets <= 0) {
+				if (getExerciseBlockType(exercise) === 'circuit') {
+					if (!hasCircuitRoundsIssue) {
+						issues.push({
+							kind: 'block',
+							field: 'rounds',
+							message: 'Las vueltas son obligatorias.'
+						});
+						hasCircuitRoundsIssue = true;
+					}
+				} else {
+					issues.push({
+						kind: 'exercise',
+						exerciseId: exercise.id,
+						field: 'sets',
+						message: 'Las series son obligatorias.'
+					});
 				}
-			} else if (!ex.repsMin || ex.repsMin <= 0) {
-				return `El ejercicio "${ex.name}" no tiene repeticiones válidas.`;
+			}
+
+			if (getExerciseRepsMode(exercise) === 'special') {
+				if (!getExerciseSpecialReps(exercise)) {
+					issues.push({
+						kind: 'exercise',
+						exerciseId: exercise.id,
+						field: 'reps',
+						message: 'Completá repeticiones especiales.'
+					});
+				}
+			} else {
+				if (!exercise.repsMin || exercise.repsMin <= 0) {
+					issues.push({
+						kind: 'exercise',
+						exerciseId: exercise.id,
+						field: 'reps',
+						message: 'Las repeticiones son obligatorias.'
+					});
+				} else if (
+					exercise.showRange &&
+					(exercise.repsMax ?? 0) > 0 &&
+					(exercise.repsMax ?? 0) < (exercise.repsMin ?? 0)
+				) {
+					issues.push({
+						kind: 'exercise',
+						exerciseId: exercise.id,
+						field: 'reps',
+						message: 'El rango de repeticiones no es válido.'
+					});
+				}
 			}
 		}
+		return issues;
+	};
+
+	const applyBlockInlineValidation = (
+		dayKey: string,
+		blockKey: string,
+		exercises: RoutineExercise[]
+	): string | null => {
+		clearInlineErrorsForBlock(dayKey, blockKey, exercises);
+		const issues = collectBlockValidationIssues(exercises, blockKey);
+		if (issues.length === 0) {
+			clearBlockInlineWarning(dayKey, blockKey);
+			return null;
+		}
+		for (const issue of issues) {
+			if (issue.kind === 'block') {
+				setBlockFieldInlineError(dayKey, blockKey, issue.field, issue.message);
+			} else {
+				setExerciseInlineError(dayKey, issue.exerciseId, issue.field, issue.message);
+			}
+		}
+		setBlockInlineWarning(dayKey, blockKey, issues[0]?.message ?? 'Completá los datos obligatorios.');
+		return issues[0]?.message ?? null;
+	};
+
+	const hasInlineStateForBlock = (
+		dayKey: string,
+		blockKey: string,
+		exercises: RoutineExercise[]
+	) => {
+		if (getBlockScopeKey(dayKey, blockKey) in blockInlineWarnings) return true;
+		if (getBlockFieldErrorKey(dayKey, blockKey, 'rounds') in blockFieldInlineErrors) return true;
+		const blockExercises = exercises.filter((exercise) => getExerciseBlockKey(exercise) === blockKey);
+		for (const exercise of blockExercises) {
+			if (getExerciseFieldErrorKey(dayKey, exercise.id, 'name') in exerciseInlineErrors) return true;
+			if (getExerciseFieldErrorKey(dayKey, exercise.id, 'sets') in exerciseInlineErrors) return true;
+			if (getExerciseFieldErrorKey(dayKey, exercise.id, 'reps') in exerciseInlineErrors) return true;
+		}
+		return false;
+	};
+
+	const getExerciseFieldUiError = (
+		dayKey: string,
+		exercise: RoutineExercise,
+		field: ExerciseFieldKey
+	): string | null => {
+		const local = getExerciseInlineError(dayKey, exercise.id, field);
+		if (local) return local;
+		if (!showValidationErrors) return null;
+
+		if (field === 'name') {
+			if (!exercise.name || exercise.name.trim() === '') return 'El nombre es obligatorio.';
+			if (exercise.name.length > MAX_EXERCISE_NAME_LENGTH) {
+				return `Máximo ${MAX_EXERCISE_NAME_LENGTH} caracteres.`;
+			}
+			return null;
+		}
+
+		if (field === 'sets') {
+			if (getTargetSets(exercise) <= 0) {
+				return getExerciseBlockType(exercise) === 'circuit'
+					? 'Las vueltas son obligatorias.'
+					: 'Las series son obligatorias.';
+			}
+			return null;
+		}
+
+		if (getExerciseRepsMode(exercise) === 'special') {
+			return getExerciseSpecialReps(exercise) ? null : 'Completá repeticiones especiales.';
+		}
+		if (!exercise.repsMin || exercise.repsMin <= 0) return 'Las repeticiones son obligatorias.';
+		if (
+			exercise.showRange &&
+			(exercise.repsMax ?? 0) > 0 &&
+			(exercise.repsMax ?? 0) < (exercise.repsMin ?? 0)
+		) {
+			return 'El rango de repeticiones no es válido.';
+		}
+		return null;
+	};
+
+	const getBlockRoundsUiError = (dayKey: string, blockKey: string, rounds: number | null): string | null => {
+		const local = getBlockFieldInlineError(dayKey, blockKey, 'rounds');
+		if (local) return local;
+		if (!showValidationErrors) return null;
+		if (!rounds || rounds <= 0) return 'Las vueltas son obligatorias.';
 		return null;
 	};
 
 	const addExercise = (dayKey: string) => {
 		const exercises = plan[dayKey].exercises;
-		
-		// Validar ejercicios existentes antes de agregar uno nuevo
-		const validationError = validateExercises(dayKey);
-		if (validationError) {
-			feedback = validationError;
-			feedbackType = 'warning';
-			setTimeout(() => (feedback = ''), 4000);
-			return;
-		}
-		
+
 		if (exercises.length >= MAX_EXERCISES_PER_DAY) {
-			feedback = 'Límite de 50 ejercicios para este día.';
-			feedbackType = 'warning';
-			setTimeout(() => (feedback = ''), 2500);
+			setDayInlineWarning(dayKey, 'Límite de 50 ejercicios para este día.');
 			return;
 		}
+		clearDayInlineWarning(dayKey);
 		const newExercise: RoutineExercise = {
 			id: crypto.randomUUID(),
 			name: '',
@@ -368,27 +811,144 @@
 			repsMax: null,
 			repsMode: 'number',
 			repsSpecial: null,
-			showRange: false
+			showRange: false,
+			blockType: 'normal',
+			blockId: crypto.randomUUID(),
+			blockLabel: '',
+			blockOrder: 0,
+			circuitRounds: null
 		};
+		const nextExercises = normalizeDayExercisesForUi(dayKey, [...exercises, newExercise]);
 		plan = {
 			...plan,
-			[dayKey]: { ...plan[dayKey], exercises: [...exercises, newExercise] }
+			[dayKey]: { ...plan[dayKey], exercises: nextExercises }
+		};
+	};
+
+	const addExerciseToBlock = (dayKey: string, sourceExerciseId: string) => {
+		const exercises = plan[dayKey].exercises;
+		const sourceExercise = exercises.find((exercise) => exercise.id === sourceExerciseId);
+		if (!sourceExercise) return;
+		if (getExerciseBlockType(sourceExercise) !== 'circuit') return;
+
+		const sourceBlockKey = getExerciseBlockKey(sourceExercise);
+		const validationError = applyBlockInlineValidation(dayKey, sourceBlockKey, exercises);
+		if (validationError) {
+			return;
+		}
+		clearDayInlineWarning(dayKey);
+
+		if (exercises.length >= MAX_EXERCISES_PER_DAY) {
+			setDayInlineWarning(dayKey, 'Límite de 50 ejercicios para este día.');
+			return;
+		}
+
+		const sourceBlockId = getExerciseBlockId(sourceExercise);
+		const sourceBlockLabel = sanitizeBlockLabelLocal(
+			sourceExercise.blockLabel,
+			`Bloque ${(sourceExercise.blockOrder ?? 0) + 1}`
+		);
+		const sourceRounds = Math.max(
+			1,
+			Math.min(
+				99,
+				Math.floor(
+					Number(
+						typeof sourceExercise.circuitRounds === 'number' && Number.isFinite(sourceExercise.circuitRounds)
+							? sourceExercise.circuitRounds
+							: getTargetSets(sourceExercise) || 3
+					) || 3
+				)
+			)
+		);
+
+		let insertIndex = exercises.length;
+		for (let index = 0; index < exercises.length; index += 1) {
+			const candidate = exercises[index];
+			if (getExerciseBlockType(candidate) !== 'circuit') continue;
+			if (getExerciseBlockId(candidate) === sourceBlockId) {
+				insertIndex = index + 1;
+			}
+		}
+
+		const newExercise: RoutineExercise = {
+			id: crypto.randomUUID(),
+			name: '',
+			scheme: '',
+			order: insertIndex,
+			totalSets: undefined,
+			repsMin: undefined,
+			repsMax: null,
+			repsMode: 'number',
+			repsSpecial: null,
+			showRange: false,
+			blockType: 'circuit',
+			blockId: sourceBlockId,
+			blockLabel: sourceBlockLabel,
+			blockOrder: sourceExercise.blockOrder ?? 0,
+			circuitRounds: sourceRounds,
+			note: sourceExercise.note ?? ''
+		};
+
+		const nextExercises = normalizeDayExercisesForUi(dayKey, [
+			...exercises.slice(0, insertIndex),
+			newExercise,
+			...exercises.slice(insertIndex)
+		]);
+		plan = {
+			...plan,
+			[dayKey]: { ...plan[dayKey], exercises: nextExercises }
 		};
 	};
 
 	const updateExercise = (dayKey: string, id: string, field: keyof RoutineExercise, value: string | number | boolean | null) => {
-		const exercises = plan[dayKey].exercises.map((ex) =>
-			ex.id === id ? { ...ex, [field]: value } : ex
-		);
-		plan = { ...plan, [dayKey]: { ...plan[dayKey], exercises } };
+		const currentExercises = plan[dayKey].exercises;
+		const targetExercise = currentExercises.find((exercise) => exercise.id === id);
+		let exercises: RoutineExercise[];
+
+		if (
+			field === 'circuitRounds' &&
+			targetExercise &&
+			getExerciseBlockType(targetExercise) === 'circuit'
+		) {
+			const rounds = Math.max(
+				1,
+				Math.min(99, Math.floor(Number(value) || 0))
+			);
+			const targetBlockId = getExerciseBlockId(targetExercise);
+			exercises = currentExercises.map((exercise) =>
+				getExerciseBlockType(exercise) === 'circuit' && getExerciseBlockId(exercise) === targetBlockId
+					? { ...exercise, circuitRounds: rounds }
+					: exercise
+			);
+		} else {
+			exercises = currentExercises.map((ex) => (ex.id === id ? { ...ex, [field]: value } : ex));
+		}
+
+		plan = {
+			...plan,
+			[dayKey]: {
+				...plan[dayKey],
+				exercises: normalizeDayExercisesForUi(dayKey, exercises)
+			}
+		};
+
+		const updatedExercise = plan[dayKey].exercises.find((exercise) => exercise.id === id);
+		if (updatedExercise) {
+			const updatedBlockKey = getExerciseBlockKey(updatedExercise);
+			if (hasInlineStateForBlock(dayKey, updatedBlockKey, plan[dayKey].exercises)) {
+				applyBlockInlineValidation(dayKey, updatedBlockKey, plan[dayKey].exercises);
+			}
+		}
 		
 		// Limpiar advertencia si el usuario corrigió el error
 		if (
 			showValidationErrors &&
 			feedbackType === 'warning' &&
-			(field === 'name' ||
-				field === 'totalSets' ||
-				field === 'repsMode' ||
+				(field === 'name' ||
+					field === 'totalSets' ||
+					field === 'circuitRounds' ||
+					field === 'repsMode' ||
 				field === 'repsMin' ||
 				field === 'repsMax' ||
 				field === 'repsSpecial')
@@ -397,8 +957,7 @@
 			const hasErrors = updatedExercises.some(ex => 
 				!ex.name ||
 				ex.name.trim() === '' ||
-				!ex.totalSets ||
-				ex.totalSets === 0 ||
+				getTargetSets(ex) <= 0 ||
 				(getExerciseRepsMode(ex) === 'number'
 					? !ex.repsMin || ex.repsMin <= 0
 					: !getExerciseSpecialReps(ex))
@@ -410,10 +969,85 @@
 		}
 	};
 
+	const updateExerciseBlockType = (dayKey: string, id: string, blockType: RoutineBlockType) => {
+		const currentExercises = plan[dayKey].exercises;
+		const sourceExercise = currentExercises.find((exercise) => exercise.id === id);
+		if (!sourceExercise) return;
+		const sourceMode = getExerciseBlockType(sourceExercise);
+		if (sourceMode === blockType) return;
+
+		const blockId = getExerciseBlockId(sourceExercise);
+		const sourceBlockKey = `${sourceMode}:${blockId}`;
+		const targetBlockKey = `${blockType}:${blockId}`;
+		const sourceBlockExercises = currentExercises.filter(
+			(exercise) => getExerciseBlockType(exercise) === sourceMode && getExerciseBlockId(exercise) === blockId
+		);
+		if (sourceBlockExercises.length === 0) return;
+
+		setBlockModeDraft(dayKey, blockId, sourceMode, sourceBlockExercises);
+		const targetBlockExercisesInPlan = currentExercises.filter(
+			(exercise) => getExerciseBlockType(exercise) === blockType && getExerciseBlockId(exercise) === blockId
+		);
+		if (targetBlockExercisesInPlan.length > 0) {
+			setBlockModeDraft(dayKey, blockId, blockType, targetBlockExercisesInPlan);
+		}
+
+		const sourceFirstIndex = currentExercises.findIndex(
+			(exercise) => getExerciseBlockType(exercise) === sourceMode && getExerciseBlockId(exercise) === blockId
+		);
+		const remainingExercises = currentExercises.filter(
+			(exercise) =>
+				!(
+					(getExerciseBlockType(exercise) === sourceMode ||
+						getExerciseBlockType(exercise) === blockType) &&
+					getExerciseBlockId(exercise) === blockId
+				)
+		);
+		const cachedTargetExercises = getBlockModeDraft(dayKey, blockId, blockType);
+		const fallbackBlockOrder = sourceExercise.blockOrder ?? 0;
+		const targetBlockExercises =
+			cachedTargetExercises && cachedTargetExercises.length > 0
+				? cachedTargetExercises
+				: [createEmptyExerciseForMode(dayKey, blockId, blockType, fallbackBlockOrder)];
+		const insertAt =
+			sourceFirstIndex >= 0 ? Math.min(sourceFirstIndex, remainingExercises.length) : remainingExercises.length;
+
+		const exercises = [
+			...remainingExercises.slice(0, insertAt),
+			...targetBlockExercises,
+			...remainingExercises.slice(insertAt)
+		];
+
+		plan = {
+			...plan,
+			[dayKey]: {
+				...plan[dayKey],
+				exercises: normalizeDayExercisesForUi(dayKey, exercises)
+			}
+		};
+		clearInlineErrorsForBlock(dayKey, sourceBlockKey, currentExercises);
+		clearInlineErrorsForBlock(dayKey, targetBlockKey, currentExercises);
+		clearBlockInlineWarning(dayKey, sourceBlockKey);
+		clearBlockInlineWarning(dayKey, targetBlockKey);
+	};
+
+	const setExerciseRepsValue = (dayKey: string, exerciseId: string, rawValue: string) => {
+		const parsed = parseRoutineRepsInput(rawValue);
+		updateExercise(dayKey, exerciseId, 'repsMode', parsed.repsMode);
+		updateExercise(dayKey, exerciseId, 'showRange', parsed.showRange);
+		updateExercise(dayKey, exerciseId, 'repsMin', parsed.repsMin);
+		updateExercise(dayKey, exerciseId, 'repsMax', parsed.repsMax);
+		updateExercise(dayKey, exerciseId, 'repsSpecial', parsed.repsSpecial);
+	};
+
 	const removeExercise = (dayKey: string, id: string) => {
 		const currentExercises = plan[dayKey].exercises;
 		const deletedIndex = currentExercises.findIndex((ex) => ex.id === id);
 		if (deletedIndex < 0) return;
+		const deletedExerciseRef = currentExercises[deletedIndex];
+		const deletedBlockKey = getExerciseBlockKey(deletedExerciseRef);
+		const deletedBlockId = getExerciseBlockId(deletedExerciseRef);
+		const hadInlineState = hasInlineStateForBlock(dayKey, deletedBlockKey, currentExercises);
 
 		if (!deletedBatchSnapshotsByDay[dayKey]) {
 			deletedBatchSnapshotsByDay = {
@@ -423,8 +1057,26 @@
 		}
 
 		const deletedExercise = { ...currentExercises[deletedIndex] };
-		const exercises = currentExercises.filter((ex) => ex.id !== id);
+		const exercises = normalizeDayExercisesForUi(
+			dayKey,
+			currentExercises.filter((ex) => ex.id !== id)
+		);
 		plan = { ...plan, [dayKey]: { ...plan[dayKey], exercises } };
+		if (exercises.length < MAX_EXERCISES_PER_DAY) {
+			clearDayInlineWarning(dayKey);
+		}
+		if (hadInlineState) {
+			const blockStillExists = plan[dayKey].exercises.some(
+				(exercise) => getExerciseBlockKey(exercise) === deletedBlockKey
+			);
+			if (blockStillExists) {
+				applyBlockInlineValidation(dayKey, deletedBlockKey, plan[dayKey].exercises);
+			} else {
+				clearInlineErrorsForBlock(dayKey, deletedBlockKey, currentExercises);
+				clearBlockInlineWarning(dayKey, deletedBlockKey);
+				clearBlockModeDraftsForAnchor(dayKey, deletedBlockId);
+			}
+		}
 
 		deletedExercisesBatch = [
 			...deletedExercisesBatch,
@@ -436,6 +1088,22 @@
 		];
 		showDeleteUndoSnackbar = true;
 		scheduleDeleteUndoBatchReset();
+	};
+
+	const removeBlock = (dayKey: string, sourceExerciseId: string) => {
+		const sourceExercise = (plan[dayKey]?.exercises ?? []).find(
+			(exercise) => exercise.id === sourceExerciseId
+		);
+		if (!sourceExercise) return;
+		const sourceBlockId = getExerciseBlockId(sourceExercise);
+		const targetKey = getExerciseBlockKey(sourceExercise);
+		const blockExerciseIds = (plan[dayKey]?.exercises ?? [])
+			.filter((exercise) => getExerciseBlockKey(exercise) === targetKey)
+			.map((exercise) => exercise.id);
+		for (const exerciseId of blockExerciseIds.reverse()) {
+			removeExercise(dayKey, exerciseId);
+		}
+		clearBlockModeDraftsForAnchor(dayKey, sourceBlockId);
 	};
 
 	const copyLink = async () => {
@@ -451,7 +1119,12 @@
 		routineVersion: number;
 	}) => {
 		resetDeleteUndoBatch();
-		plan = structuredClone(payload.plan);
+		plan = normalizePlan(structuredClone(payload.plan));
+		blockModeDrafts = {};
+		blockInlineWarnings = {};
+		dayInlineWarnings = {};
+		exerciseInlineErrors = {};
+		blockFieldInlineErrors = {};
 		uiMeta = normalizeRoutineUiMeta(payload.uiMeta ?? null);
 		routineVersion = payload.routineVersion;
 		statusMessage =
@@ -534,12 +1207,12 @@
 					saving = false;
 					return;
 				}
-				const sets = getTargetSets(ex);
-				if (sets === 0) {
-					feedback = `${displayLabel}: "${ex.name}" no tiene series. Completá el campo Series.`;
-					feedbackType = 'warning';
-					saving = false;
-					return;
+					const sets = getTargetSets(ex);
+					if (sets === 0) {
+						feedback = `${displayLabel}: "${ex.name}" no tiene series o vueltas válidas.`;
+						feedbackType = 'warning';
+						saving = false;
+						return;
 				}
 				if (getExerciseRepsMode(ex) === 'special') {
 					if (!getExerciseSpecialReps(ex)) {
@@ -582,6 +1255,10 @@
 			feedback = 'Rutina guardada';
 			feedbackType = 'success';
 			showValidationErrors = false;
+			blockInlineWarnings = {};
+			dayInlineWarnings = {};
+			exerciseInlineErrors = {};
+			blockFieldInlineErrors = {};
 		} else {
 			feedback = 'No pudimos guardar la rutina';
 			feedbackType = 'error';
@@ -962,189 +1639,297 @@
 				{#if plan[selectedDay].exercises.length === 0}
 					<p class="text-base text-slate-400">Sin ejercicios. Agregá uno.</p>
 				{:else}
-						{#each plan[selectedDay].exercises as exercise, index (exercise.id)}
-							<div class="relative rounded-lg border border-slate-800 bg-[#111423] p-3 md:p-4 shadow-sm">
-								<div class="pr-12">
-									<p class="text-base font-semibold text-slate-100">Ejercicio {index + 1}</p>
+					{#each getEditorBlocks(selectedDay) as block (block.key)}
+						{#if block.type === 'circuit'}
+							{@const blockWarning = blockInlineWarnings[`${selectedDay}::${block.key}`]}
+							{@const roundsError = getBlockRoundsUiError(selectedDay, block.key, block.rounds)}
+							<div class="rounded-xl border border-cyan-900/40 bg-gradient-to-b from-[#101a2d] to-[#0f1626] p-3 md:p-4 shadow-sm">
+								<div class="mb-5 flex items-start justify-between gap-3">
+									<div class="inline-flex shrink-0 rounded-lg border border-slate-700 bg-[#101423] p-1">
+										<button
+											type="button"
+											class="rounded-md px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-[#1c2336]"
+											onclick={() => updateExerciseBlockType(selectedDay, block.exercises[0].id, 'normal')}
+										>
+											Normal
+										</button>
+										<button
+											type="button"
+											class="rounded-md bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-900"
+											onclick={() => updateExerciseBlockType(selectedDay, block.exercises[0].id, 'circuit')}
+										>
+											Circuito
+										</button>
+									</div>
+									<button
+										type="button"
+										title="Eliminar bloque"
+										aria-label="Eliminar bloque"
+										class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-700/70 bg-transparent text-red-300 transition-colors hover:bg-red-900/30 hover:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/50"
+										onclick={() => removeBlock(selectedDay, block.exercises[0].id)}
+									>
+										<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7h16m-6 0V5.5a1.5 1.5 0 0 0-3 0V7m-4 0 .7 11.2A2 2 0 0 0 9.7 20h4.6a2 2 0 0 0 2-1.8L17 7M10 10.5v6M14 10.5v6" />
+										</svg>
+									</button>
 								</div>
-								<button
-									type="button"
-									title="Eliminar ejercicio"
-									aria-label="Eliminar ejercicio"
-									class="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-700/70 bg-transparent text-red-300 transition-colors hover:bg-red-900/30 hover:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/50"
-									onclick={() => removeExercise(selectedDay, exercise.id)}
-								>
-									<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7h16m-6 0V5.5a1.5 1.5 0 0 0-3 0V7m-4 0 .7 11.2A2 2 0 0 0 9.7 20h4.6a2 2 0 0 0 2-1.8L17 7M10 10.5v6M14 10.5v6" />
-									</svg>
-								</button>
-									<div class="mt-3">
-								<label class="block text-sm font-medium text-slate-300">
-									Nombre
-									<input
-										class="mt-1 w-full rounded-lg border {showValidationErrors && (!exercise.name || exercise.name.trim() === '') ? 'border-red-500' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
-										value={exercise.name}
-										placeholder="Nuevo ejercicio"
-										oninput={(e) => {
-											const input = e.target as HTMLInputElement;
-											const value = input.value;
-											const capitalized = value.charAt(0).toUpperCase() + value.slice(1);
-											updateExercise(selectedDay, exercise.id, 'name', capitalized);
-										}}
-									/>
-								</label>
-								
-									<div class="mt-6 grid gap-6 md:mt-10 md:gap-5 md:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] md:items-start">
-										<label class="block text-sm font-medium text-slate-300">
-											<span class="flex items-center md:h-11">Series</span>
+
+										<div>
+											<label class="block w-full max-w-full text-sm font-medium text-slate-300 md:max-w-[12rem]">
+												Vueltas
 											<input
 												type="number"
 												min="1"
-												max="99"
-												class="mt-3 w-full rounded-lg border {showValidationErrors && (!exercise.totalSets || exercise.totalSets === 0) ? 'border-red-500' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700 md:mt-2"
-												value={exercise.totalSets ?? ''}
-												placeholder="Ej: 4"
-												oninput={(e) =>
+											max="99"
+											class="mt-2 w-full rounded-lg border {roundsError ? 'border-red-500/80' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
+											value={block.rounds ?? 3}
+											placeholder="Ej: 3"
+											oninput={(event) =>
+												updateExercise(
+													selectedDay,
+													block.exercises[0].id,
+													'circuitRounds',
+													Number((event.currentTarget as HTMLInputElement).value) || 0
+												)}
+										/>
+											{#if roundsError}
+												<p class="mt-1 text-xs text-red-400">{roundsError}</p>
+											{/if}
+										</label>
+											<label class="mt-7 block w-full max-w-full text-sm font-medium text-slate-300 md:max-w-xl">
+												Notas del circuito (opcional)
+												<input
+													type="text"
+												maxlength="140"
+												class="mt-2 w-full rounded-lg border border-slate-700 bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
+												value={getCircuitBlockNote(block)}
+												placeholder="Ej. 30s de descanso entre vueltas"
+												oninput={(event) =>
+													updateCircuitBlockNote(
+														selectedDay,
+														block.key,
+														(event.currentTarget as HTMLInputElement).value
+													)}
+											/>
+										</label>
+									</div>
+
+									<div class="mt-7 border-t border-slate-700/60 pt-5">
+										<div class="mb-3 hidden grid-cols-[minmax(0,1fr)_minmax(0,12rem)_2.25rem] gap-3 text-xs font-semibold uppercase tracking-[0.08em] text-slate-400 md:grid">
+											<span>Nombre</span>
+											<span>Repeticiones</span>
+											<span></span>
+										</div>
+										<div class="space-y-3">
+											{#each block.exercises as exercise (exercise.id)}
+												{@const nameError = getExerciseFieldUiError(selectedDay, exercise, 'name')}
+												{@const repsError = getExerciseFieldUiError(selectedDay, exercise, 'reps')}
+												<div class="relative rounded-lg border border-slate-800/70 bg-[#0e1423] px-3 py-3">
+													<div class="grid gap-3 pr-12 md:grid-cols-[minmax(0,1fr)_minmax(0,12rem)_2.25rem] md:items-start md:pr-0">
+														<div>
+															<p class="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400 md:hidden">
+																Nombre
+															</p>
+															<input
+																class="w-full rounded-lg border {nameError ? 'border-red-500/80' : 'border-slate-600/90'} bg-[#16203a] px-3 py-2.5 text-[1.05rem] font-semibold tracking-tight text-slate-50 placeholder:text-slate-500 shadow-sm focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
+															value={exercise.name}
+															placeholder="Ej: Flexiones"
+															oninput={(event) => {
+																const input = event.currentTarget as HTMLInputElement;
+																const value = input.value;
+																const capitalized = value.charAt(0).toUpperCase() + value.slice(1);
+																updateExercise(selectedDay, exercise.id, 'name', capitalized);
+															}}
+														/>
+														{#if nameError}
+															<p class="mt-1 text-xs text-red-400">{nameError}</p>
+															{/if}
+														</div>
+														<div>
+															<p class="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400 md:hidden">
+																Repeticiones
+															</p>
+															<input
+																type="text"
+																maxlength={MAX_SPECIAL_REPS_LENGTH}
+															class="w-full rounded-lg border {repsError ? 'border-red-500/80' : 'border-slate-700'} bg-[#151827] px-3 py-2.5 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
+															value={getExerciseRepsInputValue(exercise)}
+															placeholder="Ej: 10, 8-10, 30 segundos, AMRAP, al fallo"
+															oninput={(event) => setExerciseRepsValue(selectedDay, exercise.id, (event.currentTarget as HTMLInputElement).value)}
+														/>
+														{#if repsError}
+															<p class="mt-1 text-xs text-red-400">{repsError}</p>
+														{/if}
+													</div>
+														<button
+															type="button"
+															title="Eliminar ejercicio"
+															aria-label="Eliminar ejercicio"
+															class="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-700/70 bg-transparent text-red-300 transition-colors hover:bg-red-900/30 hover:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/50 md:static md:right-auto md:top-auto md:self-start"
+															onclick={() => removeExercise(selectedDay, exercise.id)}
+														>
+														<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7h16m-6 0V5.5a1.5 1.5 0 0 0-3 0V7m-4 0 .7 11.2A2 2 0 0 0 9.7 20h4.6a2 2 0 0 0 2-1.8L17 7M10 10.5v6M14 10.5v6" />
+														</svg>
+													</button>
+												</div>
+												</div>
+											{/each}
+										</div>
+								</div>
+								{#if blockWarning}
+									<p class="mt-4 rounded-lg border border-amber-700/50 bg-amber-900/35 px-3 py-2 text-sm text-amber-200">
+										{blockWarning}
+									</p>
+								{/if}
+
+								<button
+									type="button"
+									class="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-cyan-800/70 bg-transparent px-4 py-3 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-950/30 hover:border-cyan-600"
+									onclick={() => addExerciseToBlock(selectedDay, block.exercises[0].id)}
+								>
+									<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v14m-7-7h14" />
+									</svg>
+									Agregar ejercicio
+								</button>
+							</div>
+						{:else}
+							{@const exercise = block.exercises[0]}
+							{@const blockWarning = blockInlineWarnings[`${selectedDay}::${block.key}`]}
+							{@const nameError = getExerciseFieldUiError(selectedDay, exercise, 'name')}
+							{@const setsError = getExerciseFieldUiError(selectedDay, exercise, 'sets')}
+							{@const repsError = getExerciseFieldUiError(selectedDay, exercise, 'reps')}
+							<div class="rounded-lg border border-slate-800 bg-[#111423] p-3 md:p-4 shadow-sm">
+								<div>
+									<div class="mb-7 flex items-start justify-between gap-3">
+										<div class="mt-1 inline-flex shrink-0 rounded-lg border border-slate-700 bg-[#101423] p-1">
+											<button
+												type="button"
+												class="rounded-md bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-900"
+												onclick={() => updateExerciseBlockType(selectedDay, exercise.id, 'normal')}
+											>
+												Normal
+											</button>
+											<button
+												type="button"
+												class="rounded-md px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-[#1c2336]"
+												onclick={() => updateExerciseBlockType(selectedDay, exercise.id, 'circuit')}
+											>
+												Circuito
+											</button>
+										</div>
+										<button
+											type="button"
+											title="Eliminar ejercicio"
+											aria-label="Eliminar ejercicio"
+											class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-700/70 bg-transparent text-red-300 transition-colors hover:bg-red-900/30 hover:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/50"
+											onclick={() => removeExercise(selectedDay, exercise.id)}
+										>
+											<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7h16m-6 0V5.5a1.5 1.5 0 0 0-3 0V7m-4 0 .7 11.2A2 2 0 0 0 9.7 20h4.6a2 2 0 0 0 2-1.8L17 7M10 10.5v6M14 10.5v6" />
+											</svg>
+										</button>
+									</div>
+										<label class="block">
+											<span class="sr-only">Nombre del ejercicio</span>
+											<input
+												class="w-full rounded-lg border {nameError ? 'border-red-500/80' : 'border-slate-500/95'} bg-[#1a243a] px-4 py-[1.1rem] text-[1.2rem] font-semibold tracking-tight text-slate-50 placeholder:text-slate-500 shadow-sm focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
+												value={exercise.name}
+												placeholder="Ej: Sentadilla"
+											oninput={(event) => {
+												const input = event.currentTarget as HTMLInputElement;
+												const value = input.value;
+												const capitalized = value.charAt(0).toUpperCase() + value.slice(1);
+													updateExercise(selectedDay, exercise.id, 'name', capitalized);
+												}}
+											/>
+											{#if nameError}
+												<p class="mt-1 text-xs text-red-400">{nameError}</p>
+											{/if}
+										</label>
+
+									<div class="mt-6 grid gap-6 md:mt-10 md:gap-5 md:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] md:items-start">
+											<label class="block text-sm font-medium text-slate-300">
+												<span class="flex items-center md:h-11">Series</span>
+												<input
+													type="number"
+													min="1"
+													max="99"
+													class="mt-3 w-full rounded-lg border {setsError ? 'border-red-500/80' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700 md:mt-2"
+													value={exercise.totalSets ?? ''}
+													placeholder="Ej: 4"
+												oninput={(event) =>
 													updateExercise(
 														selectedDay,
 														exercise.id,
 														'totalSets',
-														Number((e.target as HTMLInputElement).value) || 0
-													)}
-											/>
-										</label>
-
-										<div class="block text-sm font-medium text-slate-300">
-											<div class="flex items-center justify-between gap-3 md:h-11 md:flex-nowrap">
-												<span>Repeticiones</span>
-												<div class="inline-flex shrink-0 rounded-lg border border-slate-700 bg-[#101423] p-1">
-													<button
-														type="button"
-														class={`rounded-md px-3 py-1.5 text-xs font-semibold ${
-															getExerciseRepsMode(exercise) === 'number'
-																? 'bg-slate-100 text-slate-900'
-																: 'text-slate-300 hover:bg-[#1c2336]'
-														}`}
-														onclick={() => updateExercise(selectedDay, exercise.id, 'repsMode', 'number')}
-													>
-														Número
-													</button>
-													<button
-														type="button"
-														class={`rounded-md px-3 py-1.5 text-xs font-semibold ${
-															getExerciseRepsMode(exercise) === 'special'
-																? 'bg-slate-100 text-slate-900'
-																: 'text-slate-300 hover:bg-[#1c2336]'
-														}`}
-														onclick={() => updateExercise(selectedDay, exercise.id, 'repsMode', 'special')}
-													>
-														Especial
-													</button>
-												</div>
-											</div>
-											{#if getExerciseRepsMode(exercise) === 'number'}
-												<div class="mt-3 flex items-center gap-2 md:mt-2">
-												<input
-													type="number"
-													min="1"
-													max="999"
-													class="w-full rounded-lg border {showValidationErrors && (!exercise.repsMin || exercise.repsMin <= 0) ? 'border-red-500' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
-													value={exercise.repsMin ?? ''}
-													placeholder="Ej: 8"
-													oninput={(e) =>
-														updateExercise(
-															selectedDay,
-															exercise.id,
-															'repsMin',
-															Number((e.target as HTMLInputElement).value) || 0
+															Number((event.currentTarget as HTMLInputElement).value) || 0
 														)}
 												/>
-												{#if exercise.showRange}
-													<span class="text-slate-400">a</span>
+												{#if setsError}
+													<p class="mt-1 text-xs text-red-400">{setsError}</p>
+												{/if}
+											</label>
+
+											<div class="block text-sm font-medium text-slate-300">
+												<div class="flex items-center justify-between gap-3 md:h-11 md:flex-nowrap">
+													<span>Repeticiones</span>
+												</div>
+												<div class="mt-3 space-y-2 md:mt-2">
 													<input
-														type="number"
-														min="1"
-														max="999"
-														class="w-full rounded-lg border {(exercise.repsMax ?? 0) > 0 && (exercise.repsMax ?? 0) < (exercise.repsMin ?? 0) ? 'border-red-500' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
-														value={exercise.repsMax ?? ''}
-														placeholder="máx"
-														oninput={(e) =>
-															updateExercise(
+														type="text"
+														maxlength={MAX_SPECIAL_REPS_LENGTH}
+														class="w-full rounded-lg border {repsError ? 'border-red-500/80' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
+														value={getExerciseRepsInputValue(exercise)}
+														placeholder="Ej: 10, 8-10, 30 segundos, AMRAP, al fallo"
+														oninput={(event) =>
+															setExerciseRepsValue(
 																selectedDay,
 																exercise.id,
-																'repsMax',
-																Number((e.target as HTMLInputElement).value) || null
+																(event.currentTarget as HTMLInputElement).value
 															)}
 													/>
-													<button
-														type="button"
-														class="flex-shrink-0 rounded p-1.5 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
-														title="Quitar rango"
-														onclick={() => {
-															updateExercise(selectedDay, exercise.id, 'showRange', false);
-															updateExercise(selectedDay, exercise.id, 'repsMax', null);
-														}}
-													>
-														<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-														</svg>
-													</button>
-												{:else}
-													<button
-														type="button"
-														class="flex-shrink-0 whitespace-nowrap rounded-lg border border-slate-600 px-4 py-3 text-sm text-slate-300 hover:bg-slate-700"
-														onclick={() => updateExercise(selectedDay, exercise.id, 'showRange', true)}
-													>
-														agregar rango
-													</button>
-												{/if}
+													{#if repsError}
+														<p class="text-xs text-red-400">{repsError}</p>
+													{/if}
+													<p class="text-xs text-slate-400">
+														Se verá así: {getExercisePreview(exercise) || '...'}
+													</p>
+												</div>
 											</div>
-											{#if exercise.showRange && (exercise.repsMax ?? 0) > 0 && (exercise.repsMax ?? 0) < (exercise.repsMin ?? 0)}
-												<p class="mt-1 text-xs text-red-400">El máximo debe ser igual o mayor que el mínimo</p>
-											{/if}
-											{:else}
-												<div class="mt-3 space-y-2 md:mt-2">
-												<input
-													type="text"
-													maxlength={MAX_SPECIAL_REPS_LENGTH}
-													class="w-full rounded-lg border {showValidationErrors && !getExerciseSpecialReps(exercise) ? 'border-red-500' : 'border-slate-700'} bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
-													value={exercise.repsSpecial ?? ''}
-													placeholder="Ej: 30 segundos, AMRAP, al fallo, 1:30"
-													oninput={(e) =>
-														updateExercise(
-															selectedDay,
-															exercise.id,
-															'repsSpecial',
-															(e.target as HTMLInputElement).value
-														)}
-												/>
-												<p class="text-xs text-slate-400">
-													Se verá así: {(exercise.totalSets ?? 1) === 1 ? '1 serie' : `${exercise.totalSets ?? 1} series`} x
-													{getExerciseSpecialPreview(exercise) || '...'}
-												</p>
-											</div>
-										{/if}
 									</div>
-								</div>
-								
+
 									<label class="mt-6 block text-sm font-medium text-slate-300">
-									Nota (opcional)
-									<input
-										class="mt-1 w-full rounded-lg border border-slate-700 bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
-										value={exercise.note ?? ''}
-										placeholder="Ej: RPE, RIR, dropset, etc."
-										oninput={(e) =>
-											updateExercise(
-												selectedDay,
-												exercise.id,
-												'note',
-												(e.target as HTMLInputElement).value
-											)}
-									/>
-								</label>
+										Nota (opcional)
+										<input
+											class="mt-1 w-full rounded-lg border border-slate-700 bg-[#151827] px-4 py-3 text-base text-slate-100 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-700"
+											value={exercise.note ?? ''}
+											placeholder="Ej: RPE, RIR, dropset, etc."
+											oninput={(event) =>
+												updateExercise(
+													selectedDay,
+													exercise.id,
+													'note',
+													(event.currentTarget as HTMLInputElement).value
+												)}
+										/>
+									</label>
+									{#if blockWarning}
+										<p class="mt-4 rounded-lg border border-amber-700/50 bg-amber-900/35 px-3 py-2 text-sm text-amber-200">
+											{blockWarning}
+										</p>
+									{/if}
+								</div>
 							</div>
-						</div>
+						{/if}
 					{/each}
+				{/if}
+
+				{#if dayInlineWarnings[selectedDay]}
+					<p class="rounded-lg border border-amber-700/50 bg-amber-900/35 px-3 py-2 text-sm text-amber-200">
+						{dayInlineWarnings[selectedDay]}
+					</p>
 				{/if}
 
 				<div class={`grid grid-cols-1 gap-3 ${hasAnyExercise() ? 'sm:grid-cols-3' : 'sm:grid-cols-1'}`}>

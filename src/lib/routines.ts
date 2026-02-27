@@ -1,6 +1,7 @@
 import type {
 	ProgressMeta,
 	ProgressState,
+	RoutineBlockType,
 	RoutineDay,
 	RoutineDayLabelMode,
 	RoutineExercise,
@@ -22,6 +23,7 @@ export const WEEK_DAYS: RoutineDay[] = [
 const VALID_DAY_LABEL_MODES = new Set<RoutineDayLabelMode>(['weekday', 'sequential', 'custom']);
 const MAX_CUSTOM_DAY_LABEL_LENGTH = 40;
 const MAX_SPECIAL_REPS_LENGTH = 80;
+const MAX_BLOCK_LABEL_LENGTH = 40;
 
 export const normalizeLabelForCompare = (value: string | null | undefined) =>
 	(value ?? '')
@@ -37,6 +39,15 @@ export const sanitizeCustomLabel = (value: string | null | undefined, fallback: 
 		.trim()
 		.replace(/\s+/g, ' ')
 		.slice(0, MAX_CUSTOM_DAY_LABEL_LENGTH);
+	return cleaned || fallback;
+};
+
+export const sanitizeBlockLabel = (value: string | null | undefined, fallback: string) => {
+	const cleaned = (value ?? '')
+		.replace(/[\u0000-\u001F\u007F]/g, '')
+		.trim()
+		.replace(/\s+/g, ' ')
+		.slice(0, MAX_BLOCK_LABEL_LENGTH);
 	return cleaned || fallback;
 };
 
@@ -63,13 +74,141 @@ export const sanitizeSpecialRepsText = (value: string | null | undefined) =>
 export const formatSpecialRepsForDisplay = (value: string | null | undefined) => {
 	const cleaned = sanitizeSpecialRepsText(value);
 	if (!cleaned) return '';
-	if (cleaned.toLowerCase() === 'amrap') return 'AMRAP';
-	return cleaned;
+	return cleaned.replace(/\bamrap\b/gi, 'AMRAP');
+};
+
+export type ParsedRoutineRepsInput = {
+	repsMode: RoutineRepsMode;
+	repsMin: number;
+	repsMax: number | null;
+	showRange: boolean;
+	repsSpecial: string | null;
+};
+
+const parsePositiveInt = (value: string | undefined) => {
+	const parsed = Number(value ?? 0);
+	if (!Number.isFinite(parsed)) return 0;
+	return Math.max(0, Math.min(999, Math.floor(parsed)));
+};
+
+export const parseRoutineRepsInput = (value: string): ParsedRoutineRepsInput => {
+	const raw = sanitizeSpecialRepsText(value);
+	if (!raw) {
+		return {
+			repsMode: 'number',
+			repsMin: 0,
+			repsMax: null,
+			showRange: false,
+			repsSpecial: null
+		};
+	}
+
+	const normalizedRangeSeparators = raw.replace(/[–—]/g, '-');
+	const rangeDashMatch = normalizedRangeSeparators.match(
+		/^(\d{1,3})\s*-\s*(\d{1,3})(?:\s*(?:rep(?:eticion(?:es)?)?s?))?$/i
+	);
+	if (rangeDashMatch) {
+		const min = parsePositiveInt(rangeDashMatch[1]);
+		const max = Math.max(min, parsePositiveInt(rangeDashMatch[2]));
+		return {
+			repsMode: 'number',
+			repsMin: min,
+			repsMax: max,
+			showRange: true,
+			repsSpecial: null
+		};
+	}
+
+	const rangeTextMatch = normalizedRangeSeparators.match(
+		/^(?:de\s+)?(\d{1,3})\s*a\s*(\d{1,3})(?:\s*(?:rep(?:eticion(?:es)?)?s?))?$/i
+	);
+	if (rangeTextMatch) {
+		const min = parsePositiveInt(rangeTextMatch[1]);
+		const max = Math.max(min, parsePositiveInt(rangeTextMatch[2]));
+		return {
+			repsMode: 'number',
+			repsMin: min,
+			repsMax: max,
+			showRange: true,
+			repsSpecial: null
+		};
+	}
+
+	const fixedMatch = normalizedRangeSeparators.match(
+		/^(?:de\s+)?(\d{1,3})(?:\s*(?:rep(?:eticion(?:es)?)?s?))?$/i
+	);
+	if (fixedMatch) {
+		return {
+			repsMode: 'number',
+			repsMin: parsePositiveInt(fixedMatch[1]),
+			repsMax: null,
+			showRange: false,
+			repsSpecial: null
+		};
+	}
+
+	return {
+		repsMode: 'special',
+		repsMin: 0,
+		repsMax: null,
+		showRange: false,
+		repsSpecial: formatSpecialRepsForDisplay(raw)
+	};
+};
+
+type SpecialRepsConnector = 'x' | 'de' | 'none';
+
+const SPECIAL_FAIL_PATTERN = /^(?:de\s+)?(?:al\s+fallo|a\s+fallo|fallo)\b/i;
+const SPECIAL_DURATION_PATTERN =
+	/^(?:de\s+)?(?:(?:\d{1,2}:\d{2})|(?:\d+(?:[.,]\d+)?))\s*(?:s|seg|segs|segundo|segundos|sec|secs|min|mins|minuto|minutos|h|hr|hrs|hora|horas)\b/i;
+const SPECIAL_CLOCK_PATTERN = /^(?:de\s+)?\d{1,2}:\d{2}$/i;
+
+const getSpecialRepsDisplayMeta = (value: string | null | undefined): { connector: SpecialRepsConnector; text: string } => {
+	const cleaned = formatSpecialRepsForDisplay(value);
+	if (!cleaned) return { connector: 'x', text: '' };
+
+	const trimmed = cleaned.trim();
+	if (SPECIAL_FAIL_PATTERN.test(trimmed)) {
+		return { connector: 'none', text: 'al fallo' };
+	}
+
+	const withoutLeadingPrep = trimmed.replace(/^(?:de|por)\s+/i, '').trim();
+	if (SPECIAL_DURATION_PATTERN.test(trimmed) || SPECIAL_DURATION_PATTERN.test(withoutLeadingPrep) || SPECIAL_CLOCK_PATTERN.test(trimmed) || SPECIAL_CLOCK_PATTERN.test(withoutLeadingPrep)) {
+		return { connector: 'de', text: withoutLeadingPrep };
+	}
+
+	const withoutLeadingX = withoutLeadingPrep.replace(/^x\s+/i, '').trim();
+	return { connector: 'x', text: withoutLeadingX || trimmed };
+};
+
+const formatSeriesWithSpecial = (sets: number, value: string | null | undefined) => {
+	const seriesWord = sets === 1 ? 'serie' : 'series';
+	const meta = getSpecialRepsDisplayMeta(value);
+	if (!meta.text) return `${sets} ${seriesWord}`;
+	if (meta.connector === 'none') return `${sets} ${seriesWord} ${meta.text}`;
+	if (meta.connector === 'de') return `${sets} ${seriesWord} de ${meta.text}`;
+	return `${sets} ${seriesWord} x ${meta.text}`;
 };
 
 export const getRoutineExerciseRepsMode = (exercise: RoutineExercise): RoutineRepsMode => {
 	if (exercise.repsMode === 'special') return 'special';
 	return 'number';
+};
+
+export const getRoutineExerciseBlockType = (exercise: RoutineExercise): RoutineBlockType => {
+	if (exercise.blockType === 'circuit') return 'circuit';
+	return 'normal';
+};
+
+const normalizeCircuitRounds = (exercise: RoutineExercise) => {
+	const raw =
+		typeof exercise.circuitRounds === 'number' && Number.isFinite(exercise.circuitRounds)
+			? exercise.circuitRounds
+			: typeof exercise.totalSets === 'number' && Number.isFinite(exercise.totalSets)
+				? exercise.totalSets
+				: null;
+	if (!raw || raw <= 0) return 3;
+	return Math.max(1, Math.min(99, Math.floor(raw)));
 };
 
 export const resolveEffectiveDayLabelMode = (
@@ -180,6 +319,47 @@ const uuid = () => {
 	return 'id-' + Math.random().toString(36).slice(2, 10);
 };
 
+const normalizeDayExercises = (
+	dayKey: string,
+	exercises: RoutineExercise[],
+	regenerateIds: boolean
+): RoutineExercise[] => {
+	const blockOrderByKey = new Map<string, number>();
+	const normalized: RoutineExercise[] = [];
+
+	for (let idx = 0; idx < exercises.length; idx += 1) {
+		const ex = exercises[idx];
+		const id = regenerateIds ? uuid() : ex.id || uuid();
+		const repsSpecial = sanitizeSpecialRepsText(ex.repsSpecial);
+		const repsMode: RoutineRepsMode =
+			ex.repsMode === 'special' && repsSpecial ? 'special' : 'number';
+		const blockType = getRoutineExerciseBlockType(ex);
+		const baseBlockId = (ex.blockId ?? '').trim() || `block-${dayKey}-${id}`;
+		const blockKey = `${blockType}:${baseBlockId}`;
+		const blockOrder = blockOrderByKey.has(blockKey) ? (blockOrderByKey.get(blockKey) ?? 0) : blockOrderByKey.size;
+		if (!blockOrderByKey.has(blockKey)) {
+			blockOrderByKey.set(blockKey, blockOrder);
+		}
+		const blockLabel = sanitizeBlockLabel(ex.blockLabel, `Bloque ${blockOrder + 1}`);
+		const circuitRounds = blockType === 'circuit' ? normalizeCircuitRounds(ex) : null;
+
+		normalized.push({
+			...ex,
+			id,
+			order: idx,
+			repsMode,
+			repsSpecial: repsSpecial || null,
+			blockType,
+			blockId: baseBlockId,
+			blockOrder,
+			blockLabel,
+			circuitRounds
+		});
+	}
+
+	return normalized;
+};
+
 export const createEmptyPlan = (): RoutinePlan =>
 	WEEK_DAYS.reduce((acc, day) => {
 		acc[day.key] = { ...day, exercises: [] };
@@ -194,18 +374,7 @@ export const normalizePlan = (plan?: RoutinePlan | null, regenerateIds = false):
 			base[day.key] = {
 				key: day.key,
 				label: sanitizeCustomLabel(plan[day.key]?.label, day.label),
-				exercises: (plan[day.key]?.exercises || []).map((ex, idx) => {
-					const repsSpecial = sanitizeSpecialRepsText(ex.repsSpecial);
-					const repsMode: RoutineRepsMode =
-						ex.repsMode === 'special' && repsSpecial ? 'special' : 'number';
-					return {
-						...ex,
-						id: regenerateIds ? uuid() : (ex.id || uuid()),
-						order: ex.order ?? idx,
-						repsMode,
-						repsSpecial: repsSpecial || null
-					};
-				})
+				exercises: normalizeDayExercises(day.key, plan[day.key]?.exercises || [], regenerateIds)
 			};
 		}
 	}
@@ -249,6 +418,10 @@ export const parseTotalSets = (scheme: string): number | undefined => {
 };
 
 export const getTargetSets = (exercise: RoutineExercise): number => {
+	if (getRoutineExerciseBlockType(exercise) === 'circuit') {
+		const rounds = normalizeCircuitRounds(exercise);
+		return rounds > 0 ? rounds : 0;
+	}
 	return exercise.totalSets ?? parseTotalSets(exercise.scheme) ?? 0;
 };
 
@@ -257,12 +430,20 @@ export const formatPrescription = (exercise: RoutineExercise): string => {
 	const repsMin = exercise.repsMin;
 	const repsMax = exercise.repsMax;
 	const repsMode = getRoutineExerciseRepsMode(exercise);
+	const blockType = getRoutineExerciseBlockType(exercise);
 	const repsSpecial = formatSpecialRepsForDisplay(exercise.repsSpecial);
 	
 	if (!sets || sets === 0) return '';
+	if (blockType === 'circuit') {
+		if (repsMode === 'special' && repsSpecial) return getSpecialRepsDisplayMeta(repsSpecial).text;
+		if (repsMin != null && repsMin > 0) {
+			if (repsMax != null && repsMax > repsMin) return `${repsMin}-${repsMax} reps`;
+			return `${repsMin} reps`;
+		}
+		return '';
+	}
 	if (repsMode === 'special' && repsSpecial) {
-		const seriesWord = sets === 1 ? 'serie' : 'series';
-		return `${sets} ${seriesWord} x ${repsSpecial}`;
+		return formatSeriesWithSpecial(sets, repsSpecial);
 	}
 	
 	let repsText = '';
@@ -285,13 +466,25 @@ export const formatPrescriptionLong = (exercise: RoutineExercise): string => {
 	const repsMin = exercise.repsMin;
 	const repsMax = exercise.repsMax;
 	const repsMode = getRoutineExerciseRepsMode(exercise);
+	const blockType = getRoutineExerciseBlockType(exercise);
 	const repsSpecial = formatSpecialRepsForDisplay(exercise.repsSpecial);
 	
 	if (!sets || sets === 0) return '';
+	if (blockType === 'circuit') {
+		if (repsMode === 'special' && repsSpecial) return getSpecialRepsDisplayMeta(repsSpecial).text;
+		if (repsMin != null && repsMin > 0) {
+			if (repsMax != null && repsMax > repsMin) {
+				return `${repsMin} a ${repsMax} repeticiones`;
+			}
+			const repWord = repsMin === 1 ? 'repetición' : 'repeticiones';
+			return `${repsMin} ${repWord}`;
+		}
+		return '';
+	}
 	
 	const seriesWord = sets === 1 ? 'serie' : 'series';
 	if (repsMode === 'special' && repsSpecial) {
-		return `${sets} ${seriesWord} x ${repsSpecial}`;
+		return formatSeriesWithSpecial(sets, repsSpecial);
 	}
 	
 	if (repsMin != null && repsMin > 0) {

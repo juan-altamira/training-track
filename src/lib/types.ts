@@ -1,6 +1,7 @@
 import type { ImportShapeV1 } from '$lib/import/types';
 
 export type RoutineRepsMode = 'number' | 'special';
+export type RoutineBlockType = 'normal' | 'circuit';
 
 export type RoutineExercise = {
 	id: string;
@@ -14,6 +15,11 @@ export type RoutineExercise = {
 	repsMode?: RoutineRepsMode;
 	repsSpecial?: string | null;
 	showRange?: boolean;
+	blockId?: string;
+	blockType?: RoutineBlockType;
+	blockLabel?: string;
+	blockOrder?: number;
+	circuitRounds?: number | null;
 	importShape?: ImportShapeV1;
 };
 

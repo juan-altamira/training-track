@@ -2,6 +2,7 @@ import type { ParserContext, ParserOutput } from './types';
 import { makeId, normalizeLine, toConfidence } from '../utils';
 import type { ImportDraft, ImportDraftBlock, ImportDraftDay, ImportDraftNode } from '$lib/import/types';
 import { IMPORT_DRAFT_VERSION } from '../constants';
+import { parseRoutineRepsInput } from '$lib/routines';
 
 const WEEKDAY_BY_ALIAS: Record<string, string> = {
 	lunes: 'monday',
@@ -39,43 +40,27 @@ const detectHeaderKey = (raw: string): string => {
 
 const parseReps = (raw: string) => {
 	const value = normalizeLine(raw);
-	if (!value)
+	const parsed = parseRoutineRepsInput(value);
+	if (parsed.repsMode === 'special') {
 		return {
 			repsMin: null as number | null,
 			repsMax: null as number | null,
-			repsText: null as string | null,
-			repsMode: 'number' as const,
-			repsSpecial: null as string | null
-		};
-	const range = value.match(/^(\d{1,3})\s*[-–]\s*(\d{1,3})$/);
-	if (range) {
-		const min = Number.parseInt(range[1], 10);
-		const max = Number.parseInt(range[2], 10);
-		return {
-			repsMin: min,
-			repsMax: max >= min ? max : null,
-			repsText: `${min}-${max}`,
-			repsMode: 'number' as const,
-			repsSpecial: null as string | null
-		};
-	}
-	const exact = value.match(/^(\d{1,3})$/);
-	if (exact) {
-		const reps = Number.parseInt(exact[1], 10);
-		return {
-			repsMin: reps,
-			repsMax: null,
-			repsText: `${reps}`,
-			repsMode: 'number' as const,
-			repsSpecial: null as string | null
+			repsText: parsed.repsSpecial,
+			repsMode: 'special' as const,
+			repsSpecial: parsed.repsSpecial
 		};
 	}
 	return {
-		repsMin: null,
-		repsMax: null,
-		repsText: value,
-		repsMode: 'special' as const,
-		repsSpecial: value
+		repsMin: parsed.repsMin > 0 ? parsed.repsMin : null,
+		repsMax: parsed.showRange && parsed.repsMax && parsed.repsMax > 0 ? parsed.repsMax : null,
+		repsText:
+			parsed.repsMin > 0
+				? parsed.showRange && parsed.repsMax
+					? `${parsed.repsMin}-${parsed.repsMax}`
+					: `${parsed.repsMin}`
+				: null,
+		repsMode: 'number' as const,
+		repsSpecial: null as string | null
 	};
 };
 
@@ -242,6 +227,85 @@ const normalizeRows = (rows: Record<string, unknown>[]) =>
 		return mapped;
 	});
 
+const decodePayloadText = (payload: Uint8Array) => {
+	const text = new TextDecoder('utf-8', { fatal: false }).decode(payload);
+	return text.replace(/^\uFEFF/, '');
+};
+
+const detectCsvDelimiter = (headerLine: string) => {
+	const commaCount = (headerLine.match(/,/g) ?? []).length;
+	const semicolonCount = (headerLine.match(/;/g) ?? []).length;
+	return semicolonCount > commaCount ? ';' : ',';
+};
+
+const parseDelimitedText = (text: string, delimiter: string): string[][] => {
+	const rows: string[][] = [];
+	let row: string[] = [];
+	let cell = '';
+	let inQuotes = false;
+
+	for (let i = 0; i < text.length; i += 1) {
+		const char = text[i];
+		const next = text[i + 1];
+		if (char === '"') {
+			if (inQuotes && next === '"') {
+				cell += '"';
+				i += 1;
+				continue;
+			}
+			inQuotes = !inQuotes;
+			continue;
+		}
+		if (!inQuotes && char === delimiter) {
+			row.push(cell.trim());
+			cell = '';
+			continue;
+		}
+		if (!inQuotes && (char === '\n' || char === '\r')) {
+			row.push(cell.trim());
+			cell = '';
+			if (row.some((value) => value.length > 0)) {
+				rows.push(row);
+			}
+			row = [];
+			if (char === '\r' && next === '\n') {
+				i += 1;
+			}
+			continue;
+		}
+		cell += char;
+	}
+
+	row.push(cell.trim());
+	if (row.some((value) => value.length > 0)) {
+		rows.push(row);
+	}
+
+	return rows;
+};
+
+const parseCsvRows = (payload: Uint8Array): Record<string, unknown>[] => {
+	const text = decodePayloadText(payload);
+	const lines = text.split(/\r?\n/u).filter((line) => line.trim().length > 0);
+	if (lines.length === 0) return [];
+	const delimiter = detectCsvDelimiter(lines[0]);
+	const matrix = parseDelimitedText(text, delimiter);
+	if (matrix.length === 0) return [];
+	const header = matrix[0].map((raw) => detectHeaderKey(raw));
+	const rows: Record<string, unknown>[] = [];
+	for (let rowIndex = 1; rowIndex < matrix.length; rowIndex += 1) {
+		const values = matrix[rowIndex];
+		const row: Record<string, unknown> = {};
+		for (let colIndex = 0; colIndex < header.length; colIndex += 1) {
+			const key = header[colIndex];
+			if (!key) continue;
+			row[key] = values[colIndex] ?? '';
+		}
+		rows.push(row);
+	}
+	return rows;
+};
+
 const parseSheetRows = async (payload: Uint8Array): Promise<Record<string, unknown>[]> => {
 	const xlsx = await import('xlsx');
 	const workbook = xlsx.read(payload, { type: 'array' });
@@ -269,7 +333,7 @@ export const parseCsvPayload = async (
 	payload: Uint8Array,
 	context: ParserContext
 ): Promise<ParserOutput> => {
-	const rows = await parseSheetRows(payload);
+	const rows = parseCsvRows(payload);
 	return {
 		draft: toDraft(rows, context, 0.9)
 	};

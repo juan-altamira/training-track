@@ -88,6 +88,31 @@ export const deriveRoutinePlanFromDraft = (
 		let nextOrder = targetDay.exercises.length;
 
 		day.blocks.forEach((block, blockIndex) => {
+			const firstBlockContext =
+				block.nodes.find((node) => node.parsed_shape?.block)?.parsed_shape?.block ?? null;
+			const blockType: 'normal' | 'circuit' =
+				firstBlockContext?.kind === 'circuit' || block.block_type === 'circuit'
+					? 'circuit'
+					: 'normal';
+			const blockId =
+				firstBlockContext?.header_unit_id?.trim() ||
+				`${blockType}-${block.id || `${day.id}-${blockIndex + 1}`}`;
+			const blockLabel =
+				blockType === 'circuit'
+					? (firstBlockContext?.header_text?.trim() || `Bloque ${blockIndex + 1}`)
+					: `Bloque ${blockIndex + 1}`;
+			const roundsFromContext =
+				firstBlockContext?.kind === 'circuit' &&
+				typeof firstBlockContext.rounds === 'number' &&
+				firstBlockContext.rounds > 0
+					? Math.floor(firstBlockContext.rounds)
+					: null;
+			const circuitBlockNote =
+				blockType === 'circuit'
+					? ((block.nodes.find((node) => (node.note ?? '').trim().length > 0)?.note ?? '').trim() ||
+						null)
+					: null;
+
 			block.nodes.forEach((node, nodeIndex) => {
 				const exerciseName = node.raw_exercise_name?.trim() ?? '';
 				const shape = node.parsed_shape ?? null;
@@ -149,6 +174,9 @@ export const deriveRoutinePlanFromDraft = (
 					});
 				}
 
+				const circuitRounds =
+					blockType === 'circuit' ? roundsFromContext ?? (sets > 0 ? sets : 3) : null;
+
 				const exercise: RoutineExercise = {
 					id: randomUUID(),
 					name: exerciseName || 'Ejercicio sin nombre',
@@ -162,7 +190,15 @@ export const deriveRoutinePlanFromDraft = (
 						repsMode === 'number' && repsMax && repsMin && repsMax >= repsMin ? repsMax : null,
 					showRange:
 						repsMode === 'number' && Boolean(repsMax && repsMin && repsMax > repsMin),
-					note: node.note ?? undefined,
+					blockType,
+					blockId,
+					blockOrder: blockIndex,
+					blockLabel,
+					circuitRounds,
+					note:
+						blockType === 'circuit'
+							? (circuitBlockNote ?? undefined)
+							: ((node.note ?? '').trim() || undefined),
 					importShape: shape ?? undefined
 				};
 

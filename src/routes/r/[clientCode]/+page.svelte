@@ -9,7 +9,7 @@ import {
 	type DayFeedbackRow
 } from '$lib/dayFeedback';
 import { WEEK_DAYS, getDisplayDays, getTargetSets, formatPrescriptionLong, normalizeRoutineUiMeta } from '$lib/routines';
-import type { ProgressState, RoutinePlan, RoutineUiMeta } from '$lib/types';
+import type { ProgressState, RoutineExercise, RoutinePlan, RoutineUiMeta } from '$lib/types';
 
 	let { data } = $props();
 
@@ -51,6 +51,13 @@ import type { ProgressState, RoutinePlan, RoutineUiMeta } from '$lib/types';
 	let timerTickIntervalId: ReturnType<typeof setInterval> | null = null;
 	const TIMER_STORAGE_KEY = 'training_track_rest_timer_v1';
 	const displayDays = (activeDayKey: string | null) => getDisplayDays(plan, uiMeta, { activeDayKey });
+	type DayExerciseBlock = {
+		key: string;
+		type: 'normal' | 'circuit';
+		label: string;
+		rounds: number | null;
+		exercises: RoutineExercise[];
+	};
 
 	type PersistedTimerState = {
 		accumulatedMs: number;
@@ -488,6 +495,49 @@ import type { ProgressState, RoutinePlan, RoutineUiMeta } from '$lib/types';
 		});
 	};
 
+	const getDayExerciseBlocks = (dayKey: string): DayExerciseBlock[] => {
+		const dayPlan = plan[dayKey];
+		if (!dayPlan) return [];
+
+		const blocks: DayExerciseBlock[] = [];
+		const byKey = new Map<string, DayExerciseBlock>();
+
+		for (const exercise of dayPlan.exercises) {
+			const type: DayExerciseBlock['type'] = exercise.blockType === 'circuit' ? 'circuit' : 'normal';
+			const id = (exercise.blockId ?? '').trim() || exercise.id;
+			const key = `${type}:${id}`;
+			const fallbackLabel = `Bloque ${blocks.length + 1}`;
+			if (!byKey.has(key)) {
+				const label = (exercise.blockLabel ?? '').trim() || fallbackLabel;
+				const rounds =
+					type === 'circuit'
+						? Math.max(
+								1,
+								Math.floor(
+									Number(
+										typeof exercise.circuitRounds === 'number' && Number.isFinite(exercise.circuitRounds)
+											? exercise.circuitRounds
+											: getTargetSets(exercise) || 1
+									) || 1
+								)
+							)
+						: null;
+				const block: DayExerciseBlock = { key, type, label, rounds, exercises: [] };
+				byKey.set(key, block);
+				blocks.push(block);
+			}
+			byKey.get(key)?.exercises.push(exercise);
+		}
+
+		return blocks;
+	};
+
+	const getCircuitBlockNote = (block: DayExerciseBlock) => {
+		if (block.type !== 'circuit') return '';
+		const firstWithNote = block.exercises.find((exercise) => (exercise.note ?? '').trim().length > 0);
+		return (firstWithNote?.note ?? '').trim();
+	};
+
 	const doSaveProgress = async (dayKey?: string) => {
 		if (saveInFlight) return;
 		saveInFlight = true;
@@ -644,32 +694,46 @@ import type { ProgressState, RoutinePlan, RoutineUiMeta } from '$lib/types';
 						</button>
 
 							{#if expanded[day.dayKey]}
-								<div class="day-body">
-									{#each plan[day.dayKey].exercises as exercise (exercise.id)}
-										<div class="exercise-card">
-										<div class="exercise-head">
-											<div>
-												<p class="exercise-name">{exercise.name}</p>
-												<p class="exercise-scheme">{formatPrescriptionLong(exercise) || exercise.scheme}</p>
+									<div class="day-body">
+											{#each getDayExerciseBlocks(day.dayKey) as block (block.key)}
+												<div class={`exercise-block ${block.type === 'circuit' ? 'is-circuit' : ''}`}>
+													{#if block.type === 'circuit'}
+														{@const circuitNote = getCircuitBlockNote(block)}
+														<div class="exercise-block-head">
+															<span class="exercise-block-label">{block.label}</span>
+															<span class="exercise-block-rounds">{block.rounds} vueltas</span>
+														</div>
+														{#if circuitNote}
+															<p class="exercise-block-note">{circuitNote}</p>
+														{/if}
+													{/if}
+													{#each block.exercises as exercise (exercise.id)}
+													<div class="exercise-card">
+														<div class="exercise-head">
+															<div>
+																<p class="exercise-name">{exercise.name}</p>
+																<p class="exercise-scheme">{formatPrescriptionLong(exercise) || exercise.scheme}</p>
+															</div>
+															{#if (progress[day.dayKey]?.exercises?.[exercise.id] ?? 0) >= Math.max(1, getTargetSets(exercise) || 0)}
+																<span class="badge success">Completado</span>
+															{/if}
+														</div>
+															{#if exercise.note && block.type !== 'circuit'}
+																<p class="exercise-note">{exercise.note}</p>
+															{/if}
+														<div class="exercise-controls">
+															<button class="pill-btn" type="button" onclick={() => adjustSets(day.dayKey, exercise.id, -1)}>−</button>
+															<div class="sets">
+																<span class="sets-done">{progress[day.dayKey]?.exercises?.[exercise.id] ?? 0}</span>
+																<span class="sets-separator">/</span>
+																<span class="sets-total">{Math.max(1, getTargetSets(exercise) || 0)}</span>
+															</div>
+															<button class="pill-btn" type="button" onclick={() => adjustSets(day.dayKey, exercise.id, 1)}>+</button>
+														</div>
+													</div>
+												{/each}
 											</div>
-											{#if (progress[day.dayKey]?.exercises?.[exercise.id] ?? 0) >= Math.max(1, getTargetSets(exercise) || 0)}
-												<span class="badge success">Completado</span>
-											{/if}
-										</div>
-										{#if exercise.note}
-											<p class="exercise-note">{exercise.note}</p>
-										{/if}
-											<div class="exercise-controls">
-												<button class="pill-btn" type="button" onclick={() => adjustSets(day.dayKey, exercise.id, -1)}>−</button>
-												<div class="sets">
-												<span class="sets-done">{progress[day.dayKey]?.exercises?.[exercise.id] ?? 0}</span>
-												<span class="sets-separator">/</span>
-												<span class="sets-total">{Math.max(1, getTargetSets(exercise) || 0)}</span>
-											</div>
-											<button class="pill-btn" type="button" onclick={() => adjustSets(day.dayKey, exercise.id, 1)}>+</button>
-											</div>
-										</div>
-									{/each}
+										{/each}
 
 										{#if getFeedbackCardMode(day.dayKey)}
 											<div class="feedback-zone">
@@ -989,6 +1053,52 @@ import type { ProgressState, RoutinePlan, RoutineUiMeta } from '$lib/types';
 		border-top: 1px solid #1f2333;
 		display: grid;
 		gap: 1.35rem;
+	}
+
+	.exercise-block {
+		display: grid;
+		gap: 0.85rem;
+	}
+
+	.exercise-block.is-circuit {
+		border: 1px solid #274255;
+		background: linear-gradient(180deg, #0f1a2a 0%, #0c1522 100%);
+		border-radius: 14px;
+		padding: 0.85rem;
+	}
+
+	.exercise-block-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.8rem;
+	}
+
+	.exercise-block-label {
+		font-size: 0.8rem;
+		font-weight: 800;
+		letter-spacing: 0.08em;
+		color: #9fb7d3;
+		text-transform: uppercase;
+	}
+
+	.exercise-block-rounds {
+		font-size: 0.78rem;
+		font-weight: 800;
+		color: #5be6a6;
+		background: #173327;
+		border: 1px solid #23593f;
+		border-radius: 999px;
+		padding: 0.2rem 0.65rem;
+		white-space: nowrap;
+	}
+
+	.exercise-block-note {
+		margin: 0.1rem 0 0.25rem;
+		font-size: 0.84rem;
+		color: #a7bdd8;
+		font-style: italic;
+		line-height: 1.45;
 	}
 
 	.feedback-card {

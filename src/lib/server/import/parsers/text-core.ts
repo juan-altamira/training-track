@@ -96,17 +96,19 @@ type ParseState =
 			headerText: string;
 			rounds: number;
 			blockId: string;
+			blockNote: string | null;
 			buffer: LineUnit[];
 			entries: Array<{ name: string; shape: ImportShapeV1 }>;
-		}
+	  }
 	| {
 			kind: 'ACTIVE_CIRCUIT';
 			headerUnitId: string;
 			headerText: string;
 			rounds: number;
 			blockId: string;
+			blockNote: string | null;
 			invalidEntryStreak: number;
-		}
+	  }
 	| {
 			kind: 'PENDING_LADDER';
 			headerUnitId: string;
@@ -150,6 +152,21 @@ const sanitizeNote = (raw: string | null | undefined) => {
 	const value = (raw ?? '').trim();
 	if (!value) return null;
 	return value;
+};
+
+const extractCircuitBlockNote = (raw: string) => {
+	const value = sanitizeNote(raw);
+	if (!value) return null;
+	if (/^nota\s*:?$/iu.test(value)) return null;
+	return value;
+};
+
+const appendCircuitBlockNote = (current: string | null, rawLine: string) => {
+	const next = extractCircuitBlockNote(rawLine);
+	if (!next) return current;
+	if (!current) return next;
+	if (current.toLowerCase() === next.toLowerCase()) return current;
+	return `${current} · ${next}`;
 };
 
 const isBlank = (value: string) => value.trim().length === 0;
@@ -732,6 +749,9 @@ export const parseLinesToDraft = (lines: ParsedLine[], context: ParserContext): 
 						}
 					};
 					const node = makeNodeFromRawShape(line, trimmed, entry.name, shape, 'contract');
+					if (state.blockNote) {
+						node.note = state.blockNote;
+					}
 					block.nodes.push(node);
 					counters.candidateLines += 1;
 					counters.contractLinesTotal += 1;
@@ -750,6 +770,7 @@ export const parseLinesToDraft = (lines: ParsedLine[], context: ParserContext): 
 							headerText: state.headerText,
 							rounds: state.rounds,
 							blockId: state.blockId,
+							blockNote: state.blockNote,
 							invalidEntryStreak: 0
 						};
 					} else {
@@ -763,6 +784,16 @@ export const parseLinesToDraft = (lines: ParsedLine[], context: ParserContext): 
 			}
 
 			if (parsed.kind === 'noise') {
+				const nextBlockNote = appendCircuitBlockNote(state.blockNote, trimmed);
+				if (nextBlockNote !== state.blockNote) {
+					state.blockNote = nextBlockNote;
+					if (nextBlockNote) {
+						const block = ensureBlockById(currentDay, 'circuit', state.blockId);
+						if (block.nodes.length > 0) {
+							block.nodes = block.nodes.map((node) => ({ ...node, note: nextBlockNote }));
+						}
+					}
+				}
 				if (state.kind === 'PENDING_CIRCUIT') {
 					state.buffer.push(unit);
 				}
@@ -782,6 +813,7 @@ export const parseLinesToDraft = (lines: ParsedLine[], context: ParserContext): 
 					headerText: state.headerText,
 					rounds: state.rounds,
 					blockId: state.blockId,
+					blockNote: state.blockNote,
 					invalidEntryStreak: 1
 				};
 				continue;
@@ -933,6 +965,7 @@ export const parseLinesToDraft = (lines: ParsedLine[], context: ParserContext): 
 				headerText: circuitHeading.headerText,
 				rounds: circuitHeading.rounds,
 				blockId: makeId(),
+				blockNote: null,
 				buffer: [],
 				entries: []
 			};

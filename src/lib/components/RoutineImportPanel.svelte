@@ -4,11 +4,14 @@
 		IMPORT_WEEK_DAY_KEYS,
 		type ImportCommitPolicy,
 		type ImportDraft,
+		type ImportDraftBlock,
+		type ImportDraftNode,
 		type ImportIssue,
 		type ImportStats
 	} from '$lib/import/types';
 	import { importDraftSchema } from '$lib/import/schemas';
-	import type { RoutinePlan, RoutineUiMeta } from '$lib/types';
+	import { formatPrescriptionLong, parseRoutineRepsInput } from '$lib/routines';
+	import type { RoutineExercise, RoutinePlan, RoutineUiMeta } from '$lib/types';
 
 	type ImportJobView = {
 		id: string;
@@ -377,80 +380,183 @@
 		}
 	};
 
-	const updateNodeField = (
+	const isCircuitBlock = (block: ImportDraftBlock) => block.block_type === 'circuit';
+
+	const updateBlockNodes = (
 		dayId: string,
 		blockId: string,
-		nodeId: string,
-		field:
-			| 'raw_exercise_name'
-			| 'sets'
-			| 'reps_mode'
-			| 'reps_min'
-			| 'reps_max'
-			| 'reps_special'
-			| 'note',
-		value: string
+		mapNode: (node: ImportDraftNode) => ImportDraftNode
 	) => {
 		if (!draft) return;
 		draft = {
 			...draft,
-			days: draft.days.map((day) => {
-				if (day.id !== dayId) return day;
-				return {
-					...day,
-					blocks: day.blocks.map((block) => {
-						if (block.id !== blockId) return block;
-						return {
-							...block,
-							nodes: block.nodes.map((node) => {
-								if (node.id !== nodeId) return node;
-								if (
-									field === 'raw_exercise_name' ||
-									field === 'note' ||
-									field === 'reps_special'
-								) {
-									return { ...node, [field]: value };
-								}
-								if (field === 'reps_mode') {
-									const nextMode = value === 'special' ? 'special' : 'number';
-									return { ...node, reps_mode: nextMode };
-								}
-								const numeric = Number.parseInt(value, 10);
-								return {
-									...node,
-									[field]: Number.isFinite(numeric) && numeric > 0 ? numeric : null
-								};
-							})
-						};
-					})
-				};
-			})
+			days: draft.days.map((day) =>
+				day.id !== dayId
+					? day
+					: {
+							...day,
+							blocks: day.blocks.map((block) =>
+								block.id !== blockId
+									? block
+									: {
+											...block,
+											nodes: block.nodes.map(mapNode)
+										}
+							)
+						}
+			)
 		};
 	};
 
-	const getNodeRepsMode = (node: {
-		reps_mode?: 'number' | 'special';
-		reps_text?: string | null;
-		reps_special?: string | null;
-		parsed_shape?: { kind?: string } | null;
-	}) => {
-		if (node.reps_mode === 'special') return 'special';
-		if (node.parsed_shape?.kind === 'amrap') return 'special';
-		return 'number';
+	const updateSingleNode = (
+		dayId: string,
+		blockId: string,
+		nodeId: string,
+		mapNode: (node: ImportDraftNode) => ImportDraftNode
+	) => {
+		updateBlockNodes(dayId, blockId, (node) => (node.id === nodeId ? mapNode(node) : node));
 	};
 
-	const formatSpecialRepsPreview = (value: string | null | undefined) => {
-		const cleaned = (value ?? '').trim().slice(0, 80);
-		if (!cleaned) return '';
-		if (cleaned.toLowerCase() === 'amrap') return 'AMRAP';
-		return cleaned;
+	const toPositiveInt = (value: string | number | null | undefined, fallback = 0) => {
+		const parsed = Number(value ?? fallback);
+		if (!Number.isFinite(parsed)) return fallback;
+		return Math.max(0, Math.floor(parsed));
 	};
 
-	const getNodeSpecialReps = (node: {
-		reps_special?: string | null;
-		reps_text?: string | null;
-	}) => {
-		return formatSpecialRepsPreview(node.reps_special ?? node.reps_text ?? '');
+	const getNodeRepsInputValue = (node: ImportDraftNode) => {
+		if (node.reps_mode === 'special') {
+			return (node.reps_special ?? node.reps_text ?? '').trim();
+		}
+		const repsMin = toPositiveInt(node.reps_min, 0);
+		const repsMax = toPositiveInt(node.reps_max, 0);
+		if (repsMin > 0 && repsMax > repsMin) return `${repsMin}-${repsMax}`;
+		if (repsMin > 0) return `${repsMin}`;
+		return (node.reps_text ?? '').trim();
+	};
+
+	const updateNodeName = (dayId: string, blockId: string, nodeId: string, value: string) => {
+		updateSingleNode(dayId, blockId, nodeId, (node) => ({ ...node, raw_exercise_name: value }));
+	};
+
+	const updateNodeSets = (dayId: string, blockId: string, nodeId: string, value: string) => {
+		const sets = toPositiveInt(value, 0);
+		updateSingleNode(dayId, blockId, nodeId, (node) => {
+			const parsedShape = node.parsed_shape
+				? node.parsed_shape.kind === 'fixed' ||
+					node.parsed_shape.kind === 'range' ||
+					node.parsed_shape.kind === 'scheme' ||
+					node.parsed_shape.kind === 'amrap'
+					? { ...node.parsed_shape, sets: Math.max(1, sets || 1) }
+					: node.parsed_shape
+				: node.parsed_shape;
+			return {
+				...node,
+				sets: sets > 0 ? sets : null,
+				parsed_shape: parsedShape
+			};
+		});
+	};
+
+	const updateNodeRepsInput = (dayId: string, blockId: string, nodeId: string, value: string) => {
+		const parsed = parseRoutineRepsInput(value);
+		updateSingleNode(dayId, blockId, nodeId, (node) => {
+			const nextRepsText =
+				parsed.repsMode === 'special'
+					? parsed.repsSpecial
+					: parsed.repsMin > 0
+						? parsed.showRange && parsed.repsMax
+							? `${parsed.repsMin}-${parsed.repsMax}`
+							: `${parsed.repsMin}`
+						: null;
+			return {
+				...node,
+				reps_mode: parsed.repsMode,
+				reps_min: parsed.repsMode === 'number' && parsed.repsMin > 0 ? parsed.repsMin : null,
+				reps_max:
+					parsed.repsMode === 'number' && parsed.showRange && parsed.repsMax ? parsed.repsMax : null,
+				reps_special: parsed.repsMode === 'special' ? parsed.repsSpecial : null,
+				reps_text: nextRepsText
+			};
+		});
+	};
+
+	const updateNodeNote = (dayId: string, blockId: string, nodeId: string, value: string) => {
+		updateSingleNode(dayId, blockId, nodeId, (node) => ({ ...node, note: value }));
+	};
+
+	const getCircuitBlockRounds = (block: ImportDraftBlock) => {
+		const firstNode = block.nodes[0];
+		if (!firstNode) return 3;
+		const fromNode = toPositiveInt(firstNode.sets, 0);
+		if (fromNode > 0) return fromNode;
+		const fromShape =
+			firstNode.parsed_shape?.block?.kind === 'circuit'
+				? toPositiveInt(firstNode.parsed_shape.block.rounds ?? 0, 0)
+				: 0;
+		return fromShape > 0 ? fromShape : 3;
+	};
+
+	const updateCircuitBlockRounds = (dayId: string, blockId: string, value: string) => {
+		const rounds = Math.max(1, Math.min(99, toPositiveInt(value, 1)));
+		updateBlockNodes(dayId, blockId, (node) => {
+			let parsedShape = node.parsed_shape;
+			if (parsedShape?.block?.kind === 'circuit') {
+				parsedShape = {
+					...parsedShape,
+					block: {
+						...parsedShape.block,
+						rounds
+					}
+				};
+			}
+			if (
+				parsedShape &&
+				(parsedShape.kind === 'fixed' ||
+					parsedShape.kind === 'range' ||
+					parsedShape.kind === 'scheme' ||
+					parsedShape.kind === 'amrap')
+			) {
+				parsedShape = { ...parsedShape, sets: rounds };
+			}
+			return {
+				...node,
+				sets: rounds,
+				parsed_shape: parsedShape
+			};
+		});
+	};
+
+	const getCircuitBlockNote = (block: ImportDraftBlock) =>
+		(block.nodes.find((node) => (node.note ?? '').trim().length > 0)?.note ?? '').trim();
+
+	const updateCircuitBlockNote = (dayId: string, blockId: string, value: string) => {
+		updateBlockNodes(dayId, blockId, (node) => ({ ...node, note: value }));
+	};
+
+	const getNodePreview = (block: ImportDraftBlock, node: ImportDraftNode) => {
+		const isCircuit = isCircuitBlock(block);
+		const sets = isCircuit ? getCircuitBlockRounds(block) : toPositiveInt(node.sets, 0);
+		const previewExercise: RoutineExercise = {
+			id: node.id,
+			name: node.raw_exercise_name,
+			scheme: '',
+			order: 0,
+			totalSets: sets > 0 ? sets : undefined,
+			repsMode: node.reps_mode,
+			repsSpecial: node.reps_special ?? node.reps_text ?? null,
+			repsMin: node.reps_mode === 'number' ? toPositiveInt(node.reps_min, 0) || undefined : undefined,
+			repsMax:
+				node.reps_mode === 'number' && toPositiveInt(node.reps_max, 0) > 0
+					? toPositiveInt(node.reps_max, 0)
+					: null,
+			showRange:
+				node.reps_mode === 'number' &&
+				toPositiveInt(node.reps_min, 0) > 0 &&
+				toPositiveInt(node.reps_max, 0) > toPositiveInt(node.reps_min, 0),
+			blockType: isCircuit ? 'circuit' : 'normal',
+			circuitRounds: isCircuit ? sets : null
+		};
+		return formatPrescriptionLong(previewExercise);
 	};
 
 	const saveDraft = async () => {
@@ -474,7 +580,7 @@
 					panelError = payload?.message ?? 'No pudimos guardar los cambios.';
 				return;
 			}
-				draft = payload.draft;
+				draft = normalizeDraftForUi(payload.draft as ImportDraft | null);
 				issues = payload.issues ?? [];
 				stats = payload.stats ?? null;
 				panelMessage = 'Cambios guardados.';
@@ -822,145 +928,165 @@
 						{/if}
 
 						{#each day.blocks as block (block.id)}
-							{#each block.nodes as node (node.id)}
-										<div class="space-y-2 rounded-lg border border-slate-700/70 bg-[#111827] p-3">
-											<div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_8rem_13rem] md:items-start">
-												<label class="block text-[11px] font-medium text-slate-300">
-													<span class="flex h-8 items-center">Ejercicio</span>
-												<input
-													class="mt-1 w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
-													placeholder="Nombre del ejercicio"
-													value={node.raw_exercise_name}
-													oninput={(event) =>
-														updateNodeField(
-															day.id,
-															block.id,
-															node.id,
-															'raw_exercise_name',
-															(event.currentTarget as HTMLInputElement).value
-														)}
-												/>
-											</label>
-												<label class="block text-[11px] font-medium text-slate-300">
-													<span class="flex h-8 items-center">Series</span>
-													<input
-														class="input-no-spin mt-1 w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
-														type="number"
-													min="1"
-													placeholder="Ej: 3"
-													value={node.sets ?? ''}
-													oninput={(event) =>
-														updateNodeField(
-															day.id,
-															block.id,
-															node.id,
-															'sets',
-															(event.currentTarget as HTMLInputElement).value
-														)}
-												/>
-											</label>
-												<div class="space-y-1">
-													<div class="flex h-8 items-center justify-between gap-2">
-														<p class="text-[11px] font-medium text-slate-300">Repeticiones</p>
-														<div class="inline-flex rounded-lg border border-slate-600 bg-[#111827] p-1">
-															<button
-																type="button"
-																class={`rounded-md px-2 py-1 text-[11px] font-semibold ${
-																	getNodeRepsMode(node) === 'number'
-																		? 'bg-slate-100 text-slate-900'
-																		: 'text-slate-300 hover:bg-[#1f293f]'
-																}`}
-																onclick={() => updateNodeField(day.id, block.id, node.id, 'reps_mode', 'number')}
-															>
-																Número
-															</button>
-															<button
-																type="button"
-																class={`rounded-md px-2 py-1 text-[11px] font-semibold ${
-																	getNodeRepsMode(node) === 'special'
-																		? 'bg-slate-100 text-slate-900'
-																		: 'text-slate-300 hover:bg-[#1f293f]'
-																}`}
-																onclick={() => updateNodeField(day.id, block.id, node.id, 'reps_mode', 'special')}
-															>
-																Especial
-															</button>
-														</div>
-													</div>
-													{#if getNodeRepsMode(node) === 'number'}
-														<div class="mt-6 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-														<input
-															class="input-no-spin w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
-															type="number"
-															min="1"
-															placeholder="Mín."
-															value={node.reps_min ?? ''}
-															oninput={(event) =>
-																updateNodeField(
-																	day.id,
-																	block.id,
-																	node.id,
-																	'reps_min',
-																	(event.currentTarget as HTMLInputElement).value
-																)}
-														/>
-														<span class="text-xs font-semibold text-slate-400">a</span>
-														<input
-															class="input-no-spin w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
-															type="number"
-															min="1"
-															placeholder="Máx."
-															value={node.reps_max ?? ''}
-															oninput={(event) =>
-																updateNodeField(
-																	day.id,
-																	block.id,
-																	node.id,
-																	'reps_max',
-																	(event.currentTarget as HTMLInputElement).value
-																)}
-														/>
-													</div>
-													{:else}
-															<div class="mt-6 space-y-2">
-														<input
-															class="w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
-															type="text"
-															maxlength="80"
-															placeholder="Ej: 30 segundos, AMRAP, al fallo..."
-															value={node.reps_special ?? node.reps_text ?? ''}
-															oninput={(event) =>
-																updateNodeField(
-																	day.id,
-																	block.id,
-																	node.id,
-																	'reps_special',
-																	(event.currentTarget as HTMLInputElement).value
-																)}
-														/>
-														<p class="text-[10px] text-slate-400">
-															Se verá así: {(node.sets ?? 1) === 1 ? '1 serie' : `${node.sets ?? 1} series`} x
-															{getNodeSpecialReps(node) || '...'}
-														</p>
-													</div>
-												{/if}
-											</div>
+							<div class="space-y-3 rounded-lg border border-slate-700/70 bg-[#111827] p-3">
+								{#if isCircuitBlock(block)}
+									<div class="space-y-4">
+										<label class="block max-w-[12rem] text-[11px] font-medium text-slate-300">
+											<span class="flex h-7 items-center">Vueltas</span>
+											<input
+												class="input-no-spin mt-1 w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
+												type="number"
+												min="1"
+												max="99"
+												placeholder="Ej: 3"
+												value={getCircuitBlockRounds(block)}
+												oninput={(event) =>
+													updateCircuitBlockRounds(
+														day.id,
+														block.id,
+														(event.currentTarget as HTMLInputElement).value
+													)}
+											/>
+										</label>
+										<label class="block text-[11px] font-medium text-slate-300">
+											<span class="flex h-7 items-center">Notas del circuito (opcional)</span>
+											<input
+												class="mt-1 w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
+												type="text"
+												maxlength="140"
+												placeholder="Ej. 30s de descanso entre vueltas"
+												value={getCircuitBlockNote(block)}
+												oninput={(event) =>
+													updateCircuitBlockNote(
+														day.id,
+														block.id,
+														(event.currentTarget as HTMLInputElement).value
+													)}
+											/>
+										</label>
+									</div>
+									<div class="mt-5 border-t border-slate-700/70 pt-4">
+										<div class="mb-2 hidden grid-cols-[minmax(0,1fr)_minmax(0,13rem)] gap-3 text-[11px] font-medium text-slate-300 md:grid">
+											<span>Nombre</span>
+											<span>Repeticiones</span>
 										</div>
-										<input
-											class="w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
-											placeholder="Nota opcional"
-										value={node.note ?? ''}
-										oninput={(event) =>
-												updateNodeField(
-													day.id,
-													block.id,
-													node.id,
-													'note',
-													(event.currentTarget as HTMLInputElement).value
-												)}
-									/>
-								</div>
-							{/each}
+										<div class="space-y-2.5">
+											{#each block.nodes as node (node.id)}
+												<div class="rounded-lg border border-slate-700/60 bg-[#0f1728] p-3">
+													<div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,13rem)]">
+														<label class="block text-[11px] font-medium text-slate-300">
+															<span class="mb-1 block md:hidden">Nombre</span>
+															<input
+																class="w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
+																placeholder="Nombre del ejercicio"
+																value={node.raw_exercise_name}
+																oninput={(event) =>
+																	updateNodeName(
+																		day.id,
+																		block.id,
+																		node.id,
+																		(event.currentTarget as HTMLInputElement).value
+																	)}
+															/>
+														</label>
+														<label class="block text-[11px] font-medium text-slate-300">
+															<span class="mb-1 block md:hidden">Repeticiones</span>
+															<input
+																class="w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
+																type="text"
+																maxlength="80"
+																placeholder="Ej: 10, 8-10, 30 segundos, AMRAP, al fallo"
+																value={getNodeRepsInputValue(node)}
+																oninput={(event) =>
+																	updateNodeRepsInput(
+																		day.id,
+																		block.id,
+																		node.id,
+																		(event.currentTarget as HTMLInputElement).value
+																	)}
+															/>
+														</label>
+													</div>
+													<p class="mt-2 text-[10px] text-slate-400">
+														Se verá así: {getNodePreview(block, node) || '...'}
+													</p>
+												</div>
+											{/each}
+										</div>
+									</div>
+								{:else}
+									{#each block.nodes as node (node.id)}
+										<div class="space-y-2 rounded-lg border border-slate-700/70 bg-[#111827] p-3">
+											<div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_8rem_minmax(0,13rem)] md:items-start">
+												<label class="block text-[11px] font-medium text-slate-300">
+													<span class="mb-1 block">Ejercicio</span>
+													<input
+														class="w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
+														placeholder="Nombre del ejercicio"
+														value={node.raw_exercise_name}
+														oninput={(event) =>
+															updateNodeName(
+																day.id,
+																block.id,
+																node.id,
+																(event.currentTarget as HTMLInputElement).value
+															)}
+													/>
+												</label>
+												<label class="block text-[11px] font-medium text-slate-300">
+													<span class="mb-1 block">Series</span>
+													<input
+														class="input-no-spin w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
+														type="number"
+														min="1"
+														placeholder="Ej: 3"
+														value={node.sets ?? ''}
+														oninput={(event) =>
+															updateNodeSets(
+																day.id,
+																block.id,
+																node.id,
+																(event.currentTarget as HTMLInputElement).value
+															)}
+													/>
+												</label>
+												<label class="block text-[11px] font-medium text-slate-300">
+													<span class="mb-1 block">Repeticiones</span>
+													<input
+														class="w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
+														type="text"
+														maxlength="80"
+														placeholder="Ej: 10, 8-10, 30 segundos, AMRAP, al fallo"
+														value={getNodeRepsInputValue(node)}
+														oninput={(event) =>
+															updateNodeRepsInput(
+																day.id,
+																block.id,
+																node.id,
+																(event.currentTarget as HTMLInputElement).value
+															)}
+													/>
+													<p class="mt-1 text-[10px] text-slate-400">
+														Se verá así: {getNodePreview(block, node) || '...'}
+													</p>
+												</label>
+											</div>
+											<input
+												class="w-full rounded-lg border border-slate-600 bg-[#1a2132] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500"
+												placeholder="Nota opcional"
+												value={node.note ?? ''}
+												oninput={(event) =>
+													updateNodeNote(
+														day.id,
+														block.id,
+														node.id,
+														(event.currentTarget as HTMLInputElement).value
+													)}
+											/>
+										</div>
+									{/each}
+								{/if}
+							</div>
 						{/each}
 					</article>
 				{/each}

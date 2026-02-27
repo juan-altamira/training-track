@@ -138,6 +138,7 @@ const sanitizeExerciseName = (raw: string) =>
 const sanitizeNote = (raw: string | null | undefined) => {
 	const value = (raw ?? '').trim();
 	if (!value) return null;
+	if (/^[\/\\|()[\]{}<>]+$/u.test(value)) return null;
 	return value;
 };
 

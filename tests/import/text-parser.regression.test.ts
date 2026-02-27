@@ -45,6 +45,38 @@ test('anti-regression: note literal preserves decimal comma', async () => {
 	assert.equal(node.note, '82,5kg');
 });
 
+test('anti-regression: wrapper-only note residue from slash syntax is discarded', async () => {
+	const draft = await parseDraft('Biceps con barra /3x10/');
+	const node = getNodes(draft)[0];
+	assert.ok(node);
+	assert.equal(node.raw_exercise_name, 'Biceps con barra');
+	assert.equal(node.sets, 3);
+	assert.equal(node.reps_min, 10);
+	assert.equal(node.note, null);
+});
+
+test('anti-regression: wrapper-only note residue from parenthesized syntax is discarded', async () => {
+	const draft = await parseDraft('Vuelos Laterales ( 3x12 )');
+	const node = getNodes(draft)[0];
+	assert.ok(node);
+	assert.equal(node.raw_exercise_name, 'Vuelos Laterales');
+	assert.equal(node.sets, 3);
+	assert.equal(node.reps_min, 12);
+	assert.equal(node.note, null);
+});
+
+test('anti-regression: meaningful note in parentheses is preserved', async () => {
+	const draft = await parseDraft(
+		'Vuelos Posteriores 3 series de 12 repeticiones (hacerlo lento en la exentrica)'
+	);
+	const node = getNodes(draft)[0];
+	assert.ok(node);
+	assert.equal(node.raw_exercise_name, 'Vuelos Posteriores');
+	assert.equal(node.sets, 3);
+	assert.equal(node.reps_min, 12);
+	assert.equal(node.note, '(hacerlo lento en la exentrica)');
+});
+
 test('anti-regression: day heading is not parsed as exercise', async () => {
 	const draft = await parseDraft('Día 1:\nPress banca 3x8');
 	const nodes = getNodes(draft);

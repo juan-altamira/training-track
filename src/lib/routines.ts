@@ -34,6 +34,10 @@ const VALID_DAY_LABEL_MODES = new Set<RoutineDayLabelMode>(['weekday', 'sequenti
 const MAX_CUSTOM_DAY_LABEL_LENGTH = 40;
 const MAX_SPECIAL_REPS_LENGTH = 80;
 const MAX_BLOCK_LABEL_LENGTH = 40;
+const SPECIAL_SECONDS_PATTERN =
+	/(\d+(?:[.,]\d+)?|\d{1,2}:\d{2})\s*(segundo(?:\(s\))?|segundos?|segund|segndo|segndos|segudos|segunods|segun2|segundoss|seg\.?|segs?\.?|secs?\.?|sec\.?|sgs|s\.?)\b/gi;
+const SPECIAL_MINUTES_PATTERN =
+	/(\d+(?:[.,]\d+)?|\d{1,2}:\d{2})\s*(minuto(?:\(s\))?|minutos?|minut|minuos|minito|minuttos|min\.?|mins?\.?|mns|mnuto|mnutos|m\.?)\b/gi;
 
 export const normalizeLabelForCompare = (value: string | null | undefined) =>
 	(value ?? '')
@@ -84,7 +88,10 @@ export const sanitizeSpecialRepsText = (value: string | null | undefined) =>
 export const formatSpecialRepsForDisplay = (value: string | null | undefined) => {
 	const cleaned = sanitizeSpecialRepsText(value);
 	if (!cleaned) return '';
-	return cleaned.replace(/\bamrap\b/gi, 'AMRAP');
+	return cleaned
+		.replace(/\bamrap\b/gi, 'AMRAP')
+		.replace(SPECIAL_SECONDS_PATTERN, '$1 segundos')
+		.replace(SPECIAL_MINUTES_PATTERN, '$1 minutos');
 };
 
 export type ParsedRoutineRepsInput = {

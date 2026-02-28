@@ -291,3 +291,157 @@ test('anti-regression: adapter keeps all normal exercises from a multi-node day 
 	assert.equal(tuesdayBlockIds.size, 3);
 	assert.equal(wednesdayBlockIds.size, 3);
 });
+
+test('anti-regression: full lunes-miercoles-viernes OCR routine parses all days and cleans noisy names', async () => {
+	const draft = await parseDraft(
+		'LUNES (Énfasis en Pectoral)\n• Sentadillas 3x6a8\n• Banco Plano 3*8\n• Press Militar con Barra Parado 3x8\n• Remo en Maquina 5 x 10\n• Cruces de Polea para Pectoral Inferior 3x 10\n• Cruces de Polea para Pectoral Superior 4 x12\n• Biceps con barra /3x10/\n• Biceps en banco scot /3x12/\n• Vuelos Laterales ( 3x12 )\n• Vuelos Posteriores 3 series de 12 repeticiones (hacerlo lento en la exentrica)\n• Tríceps Polea Alta (3x10)\n• Triceps Polea Baja o Press Frances (3 series x12\n1. Gemelos (4 series de 12)\nSeries de Pierna: 6\nSeries de Pecho: 10\nSeries de Hombro 9:\nSeries de Espalda: 5\nSeries de Biceps: 6\nSeries de Triceps: 6\nMIÉRCOLES (Énfasis en Espalda)\n• Prensa Pesada (4x10 a 12repeticiones)\n• Curl Femoral (4x 8\n• (4 series de 12) Remo en Maquina\n• Jalon al Pecho para Espalda (3x12)\n• 3 series x12 de Banco Plano\n• Press Militar Sentado con Mancuernas (3x10)\n• tres series de ocho repeticiones en Remo en Maquina\n• Cruces de Polea para Pectoral Superior hacete 3 series de 8 a 12 repeticiones en este\n• Biceps con Barra – aca hace hacete ocho de 15 repeticiones\n• Biceps en Banco Inclinado con Mancuernas (3x12)\n• Vuelos Laterales (3x12)\n• Vuelos Posteriores (3x12)\n• Tríceps Polea Alta (3x10)\n• Triceps Polea Baja o Press Frances (3x12)\n• Gemelos (4x12)\nSeries de Pierna: 8\nSeries de Pecho: 6\nSeries de Hombro 9:\nSeries de Espalda: 10\nSeries de Biceps: 6\nSeries de Triceps: 6VIERNES:\n• Sentadillas (3x6)\n• Curl Femoral (3x12)\n• Banco Plano (3x8)\n• Press Militar con Barra Parado (3x8)\n• Remo en Maquina (5x10)\n• Cruces de Polea para Pectoral Inferior (3x10)\n• Cruces de Polea para Pectoral Superior (4x12)\n• Biceps con Barra (3x10)\n• Biceps en Banco Scott (3x12)\n• Vuelos Laterales (3x12)\n• Vuelos Posteriores (3x12)\n• Tríceps Polea Alta (3x10)\n• Triceps Polea Baja o Press Frances (3x12)\n• Gemelos (4x12)\nSeries de Pierna: 6\nSeries de Pecho: 10\nSeries de Hombro 9:\nSeries de Espalda: 5\nSeries de Biceps: 6\nSeries de Triceps: 6'
+	);
+
+	assert.equal(draft.days.length, 3);
+	assert.equal(draft.days[0]?.source_label, 'LUNES');
+	assert.equal(draft.days[1]?.source_label, 'MIÉRCOLES');
+	assert.equal(draft.days[2]?.source_label, 'VIERNES');
+
+	const mondayNodes = draft.days[0]?.blocks.flatMap((block) => block.nodes) ?? [];
+	const wednesdayNodes = draft.days[1]?.blocks.flatMap((block) => block.nodes) ?? [];
+	const fridayNodes = draft.days[2]?.blocks.flatMap((block) => block.nodes) ?? [];
+
+	assert.equal(mondayNodes.length, 13);
+	assert.equal(wednesdayNodes.length, 15);
+	assert.equal(fridayNodes.length, 14);
+
+	assert.deepEqual(
+		wednesdayNodes.map((node) => node.raw_exercise_name),
+		[
+			'Prensa Pesada',
+			'Curl Femoral',
+			'Remo en Maquina',
+			'Jalon al Pecho para Espalda',
+			'Banco Plano',
+			'Press Militar Sentado con Mancuernas',
+			'Remo en Maquina',
+			'Cruces de Polea para Pectoral Superior',
+			'Biceps con Barra',
+			'Biceps en Banco Inclinado con Mancuernas',
+			'Vuelos Laterales',
+			'Vuelos Posteriores',
+			'Tríceps Polea Alta',
+			'Triceps Polea Baja o Press Frances',
+			'Gemelos'
+		]
+	);
+
+	const prensaPesada = wednesdayNodes.find((node) => node.raw_exercise_name === 'Prensa Pesada');
+	assert.ok(prensaPesada);
+	assert.equal(prensaPesada.sets, 4);
+	assert.equal(prensaPesada.reps_min, 10);
+	assert.equal(prensaPesada.reps_max, 12);
+	assert.equal(prensaPesada.note, null);
+
+	const bancoPlanoWednesday = wednesdayNodes.find((node) => node.raw_exercise_name === 'Banco Plano');
+	assert.ok(bancoPlanoWednesday);
+	assert.equal(bancoPlanoWednesday.sets, 3);
+	assert.equal(bancoPlanoWednesday.reps_min, 12);
+
+	const crucesSuperior = wednesdayNodes.find(
+		(node) => node.raw_exercise_name === 'Cruces de Polea para Pectoral Superior'
+	);
+	assert.ok(crucesSuperior);
+	assert.equal(crucesSuperior.sets, 3);
+	assert.equal(crucesSuperior.reps_min, 8);
+	assert.equal(crucesSuperior.reps_max, 12);
+	assert.equal(crucesSuperior.note, null);
+
+	const bicepsBarra = wednesdayNodes.find((node) => node.raw_exercise_name === 'Biceps con Barra');
+	assert.ok(bicepsBarra);
+	assert.equal(bicepsBarra.sets, 8);
+	assert.equal(bicepsBarra.reps_min, 15);
+	assert.equal(bicepsBarra.note, null);
+
+	const lunesGemelos = mondayNodes.find((node) => node.raw_exercise_name === 'Gemelos');
+	assert.ok(lunesGemelos);
+	assert.equal(lunesGemelos.sets, 4);
+	assert.equal(lunesGemelos.reps_min, 12);
+	assert.equal(lunesGemelos.note, null);
+});
+
+test('anti-regression: trailing duration-only exercise is imported as special reps with one set', async () => {
+	const draft = await parseDraft('Plancha 20 segundos');
+	const node = getNodes(draft)[0];
+	assert.ok(node);
+	assert.equal(node.raw_exercise_name, 'Plancha');
+	assert.equal(node.sets, 1);
+	assert.equal(node.reps_mode, 'special');
+	assert.equal(node.reps_special, '20 segundos');
+	assert.equal(node.note, null);
+});
+
+test('anti-regression: leading duration with OCR typo still detects exercise', async () => {
+	const draft = await parseDraft('15 segudos de plancha lateral');
+	const node = getNodes(draft)[0];
+	assert.ok(node);
+	assert.equal(node.raw_exercise_name, 'plancha lateral');
+	assert.equal(node.sets, 1);
+	assert.equal(node.reps_mode, 'special');
+	assert.equal(node.reps_special, '15 segundos');
+	assert.equal(node.note, null);
+});
+
+test('anti-regression: narrative leading duration detects exercise name after de', async () => {
+	const draft = await parseDraft('son 40 segundos de press pallof en cada lado');
+	const node = getNodes(draft)[0];
+	assert.ok(node);
+	assert.equal(node.raw_exercise_name, 'press pallof en cada lado');
+	assert.equal(node.sets, 1);
+	assert.equal(node.reps_mode, 'special');
+	assert.equal(node.reps_special, '40 segundos');
+	assert.equal(node.note, null);
+});
+
+test('anti-regression: sets x duration de exercise keeps duration as special reps and clean name', async () => {
+	const draft = await parseDraft('6x15 segundos de press pallof');
+	const node = getNodes(draft)[0];
+	assert.ok(node);
+	assert.equal(node.raw_exercise_name, 'press pallof');
+	assert.equal(node.sets, 6);
+	assert.equal(node.reps_mode, 'special');
+	assert.equal(node.reps_special, '15 segundos');
+	assert.equal(node.reps_min, null);
+	assert.equal(node.note, null);
+});
+
+test('anti-regression: exercise with sets x duration keeps seconds in special reps instead of note', async () => {
+	const draft = await parseDraft('plancha 4x20 segundos');
+	const node = getNodes(draft)[0];
+	assert.ok(node);
+	assert.equal(node.raw_exercise_name, 'plancha');
+	assert.equal(node.sets, 4);
+	assert.equal(node.reps_mode, 'special');
+	assert.equal(node.reps_special, '20 segundos');
+	assert.equal(node.reps_min, null);
+	assert.equal(node.note, null);
+});
+
+test('anti-regression: weird second aliases normalize to canonical duration text', async () => {
+	const draft = await parseDraft('plancha lateral 3x20 segun2');
+	const node = getNodes(draft)[0];
+	assert.ok(node);
+	assert.equal(node.raw_exercise_name, 'plancha lateral');
+	assert.equal(node.sets, 3);
+	assert.equal(node.reps_mode, 'special');
+	assert.equal(node.reps_special, '20 segundos');
+});
+
+test('anti-regression: explicit reps stay numeric and trailing duration cue goes to note', async () => {
+	const draft = await parseDraft(
+		'3 series de 9 repeticiones de biceps con mancuernas aguantando la exentrica 30 segundos'
+	);
+	const node = getNodes(draft)[0];
+	assert.ok(node);
+	assert.equal(node.raw_exercise_name, 'biceps con mancuernas');
+	assert.equal(node.sets, 3);
+	assert.equal(node.reps_mode, 'number');
+	assert.equal(node.reps_min, 9);
+	assert.equal(node.reps_special, null);
+	assert.equal(node.note, 'aguantando la exentrica 30 segundos');
+});

@@ -35,20 +35,49 @@ type BuildCandidateInput = {
 	structTokensUsed: StructuralTokenRef[];
 	parsedShape: ImportShapeV1;
 	tokens: LineToken[];
+	forceStructureEndOffset?: number;
+	forceNoteStartOffset?: number;
 };
 
-const sanitizeExerciseName = (raw: string) =>
-	raw
+const sanitizeExerciseName = (raw: string) => {
+	let value = raw
 		.replace(/^[\s•●▪◦·*+\-:/.()]+/, '')
 		.replace(/[\s•●▪◦·*+\-:/.()]+$/, '')
 		.replace(/\s+/g, ' ')
 		.trim();
+	while (/\s*(?:[-–—/]+)?\s*(?:aca|acá|ahi|ahí|hace|hacete|metele|mandale|dale|arranca|empeza)\s*$/iu.test(value)) {
+		value = value
+			.replace(/\s*(?:[-–—/]+)?\s*(?:aca|acá|ahi|ahí|hace|hacete|metele|mandale|dale|arranca|empeza)\s*$/iu, '')
+			.trim();
+	}
+	return value;
+};
 
 const normalizeWord = (value: string) =>
 	value
 		.normalize('NFD')
 		.replace(/\p{Diacritic}/gu, '')
 		.toLowerCase();
+
+const SPANISH_NUMBER_WORDS: Record<string, number> = {
+	un: 1,
+	uno: 1,
+	una: 1,
+	dos: 2,
+	tres: 3,
+	cuatro: 4,
+	cinco: 5,
+	seis: 6,
+	siete: 7,
+	ocho: 8,
+	nueve: 9,
+	diez: 10,
+	once: 11,
+	doce: 12,
+	trece: 13,
+	catorce: 14,
+	quince: 15
+};
 
 const narrativePrefixes: string[][] = [
 	['hoy', 'arrancamos', 'con'],
@@ -105,19 +134,23 @@ const computeScore = (name: string, refs: StructuralTokenRef[], priority: number
 const buildCandidate = (input: BuildCandidateInput): ContractCandidate | null => {
 	const structTokensUsed = dedupeStructuralRefs(input.structTokensUsed);
 	const endToken = getStructuralEndToken(input.tokens, structTokensUsed);
-	if (!endToken) return null;
+	if (!endToken && input.forceStructureEndOffset == null) return null;
 	const span = trimSpan(input.rawExerciseName, input.nameSpanStart, input.nameSpanEnd);
 	if (span.end <= span.start) return null;
 	const name = sanitizeExerciseName(input.rawExerciseName.slice(span.start, span.end));
 	if (!name) return null;
 	const fullLength = input.rawExerciseName.length;
+	const structureEndOffset = input.forceStructureEndOffset ?? endToken?.endOffset ?? 0;
+	const noteStartOffset = input.forceNoteStartOffset ?? structureEndOffset;
 	if (
 		span.start < 0 ||
 		span.end < 0 ||
 		span.start > span.end ||
 		span.end > fullLength ||
-		endToken.endOffset < span.end ||
-		endToken.endOffset > fullLength
+		structureEndOffset < span.end ||
+		structureEndOffset > fullLength ||
+		noteStartOffset < span.end ||
+		noteStartOffset > fullLength
 	) {
 		return null;
 	}
@@ -128,11 +161,27 @@ const buildCandidate = (input: BuildCandidateInput): ContractCandidate | null =>
 		rawExerciseName: name,
 		nameSpanStart: span.start,
 		nameSpanEnd: span.end,
-		structureEndOffset: endToken.endOffset,
-		noteStartOffset: endToken.endOffset,
+		structureEndOffset,
+		noteStartOffset,
 		parsedShape: input.parsedShape,
 		structTokensUsed
 	};
+};
+
+const parseFlexibleIntToken = (token: LineToken | undefined): number | null => {
+	const parsed = parseIntToken(token);
+	if (parsed !== null) return parsed;
+	if (!token || token.type !== 'word') return null;
+	return SPANISH_NUMBER_WORDS[token.normalized] ?? null;
+};
+
+const isWrapperSymbol = (token: LineToken | undefined) =>
+	token?.type === 'symbol' && ['(', ')', '[', ']', '{', '}', '/', '\\'].includes(token.normalized);
+
+const skipWrapperTokens = (tokens: LineToken[], index: number) => {
+	let next = index;
+	while (isWrapperSymbol(tokens[next])) next += 1;
+	return next;
 };
 
 const findFirstMeaningfulTokenIndex = (tokens: LineToken[]) => {
@@ -264,6 +313,15 @@ const matchClassicSetsReps = (
 				repsMax = Math.max(reps, maxCandidate);
 				structRefs.push({ tokenIndex: i + 3, role: 'keyword' });
 				structRefs.push({ tokenIndex: i + 4, role: 'reps_max' });
+				let trailing = i + 5;
+				if (isRepsKeyword(tokens[trailing])) {
+					structRefs.push({ tokenIndex: trailing, role: 'keyword' });
+					trailing += 1;
+				}
+				while (isWrapperSymbol(tokens[trailing])) {
+					structRefs.push({ tokenIndex: trailing, role: 'keyword' });
+					trailing += 1;
+				}
 				matcherId = 'classic_sets_range';
 				shape = {
 					version: 1,
@@ -360,14 +418,14 @@ const matchXPrefixCompact = (rawLine: string, tokens: LineToken[]): ContractCand
 
 const matchSeriesWording = (rawLine: string, tokens: LineToken[]): ContractCandidate | null => {
 	for (let i = 1; i < tokens.length - 2; i += 1) {
-		const sets = parseIntToken(tokens[i - 1]);
+		const sets = parseFlexibleIntToken(tokens[i - 1]);
 		if (!sets) continue;
 		if (!isSeriesKeyword(tokens[i])) continue;
 		let repsTokenIndex = i + 1;
 		if (tokens[repsTokenIndex]?.type === 'word' && ['de', 'x', 'por'].includes(tokens[repsTokenIndex]?.normalized ?? '')) {
 			repsTokenIndex += 1;
 		}
-		const reps = parseIntToken(tokens[repsTokenIndex]);
+		const reps = parseFlexibleIntToken(tokens[repsTokenIndex]);
 		if (!reps) continue;
 		const nameStart = tokens[0]?.startOffset ?? 0;
 		const nameEnd = tokens[i - 1]?.startOffset ?? 0;
@@ -382,8 +440,8 @@ const matchSeriesWording = (rawLine: string, tokens: LineToken[]): ContractCandi
 			structRefs.push({ tokenIndex: afterRepsIndex, role: 'keyword' });
 			afterRepsIndex += 1;
 		}
-		if (isRangeConnector(tokens[afterRepsIndex]) && tokens[afterRepsIndex + 1]?.type === 'number') {
-			const maxCandidate = parseIntToken(tokens[afterRepsIndex + 1]);
+		if (isRangeConnector(tokens[afterRepsIndex])) {
+			const maxCandidate = parseFlexibleIntToken(tokens[afterRepsIndex + 1]);
 			if (maxCandidate && maxCandidate >= reps) {
 				structRefs.push({ tokenIndex: afterRepsIndex, role: 'keyword' });
 				structRefs.push({ tokenIndex: afterRepsIndex + 1, role: 'reps_max' });
@@ -510,20 +568,23 @@ const matchRepsBySetsCompactWording = (rawLine: string, tokens: LineToken[]): Co
 
 const matchSetsFirstNameAfter = (rawLine: string, tokens: LineToken[]): ContractCandidate | null => {
 	if (tokens.length < 4) return null;
-	const sets = parseIntToken(tokens[0]);
+	const startIndex = findFirstMeaningfulTokenIndex(tokens);
+	const sets = parseFlexibleIntToken(tokens[startIndex]);
 	if (!sets) return null;
-	if (!isSeriesKeyword(tokens[1]) && !isSeparatorX(tokens[1])) return null;
-	let repsIndex = 2;
+	if (!isSeriesKeyword(tokens[startIndex + 1]) && !isSeparatorX(tokens[startIndex + 1])) return null;
+	let repsIndex = startIndex + 2;
 	if (tokens[repsIndex]?.type === 'word' && ['de', 'x', 'por'].includes(tokens[repsIndex]?.normalized ?? '')) {
 		repsIndex += 1;
 	}
-	const reps = parseIntToken(tokens[repsIndex]);
+	if (isSeparatorX(tokens[repsIndex])) repsIndex += 1;
+	const reps = parseFlexibleIntToken(tokens[repsIndex]);
 	if (!reps) return null;
-	let nameIndex = repsIndex + 1;
+	let nameIndex = skipWrapperTokens(tokens, repsIndex + 1);
 	if (isRepsKeyword(tokens[nameIndex])) nameIndex += 1;
 	if (tokens[nameIndex]?.type === 'word' && ['de', 'en'].includes(tokens[nameIndex]?.normalized ?? '')) {
 		nameIndex += 1;
 	}
+	nameIndex = skipWrapperTokens(tokens, nameIndex);
 	const nameStart = tokens[nameIndex]?.startOffset ?? -1;
 	const nameEnd = tokens[tokens.length - 1]?.endOffset ?? -1;
 	if (nameStart < 0 || nameEnd <= nameStart) return null;
@@ -533,8 +594,10 @@ const matchSetsFirstNameAfter = (rawLine: string, tokens: LineToken[]): Contract
 		rawExerciseName: rawLine,
 		nameSpanStart: nameStart,
 		nameSpanEnd: nameEnd,
+		forceStructureEndOffset: rawLine.length,
+		forceNoteStartOffset: rawLine.length,
 		structTokensUsed: [
-			{ tokenIndex: 0, role: 'sets' },
+			{ tokenIndex: startIndex, role: 'sets' },
 			{ tokenIndex: repsIndex, role: 'reps_min' }
 		],
 		parsedShape: {
@@ -547,6 +610,47 @@ const matchSetsFirstNameAfter = (rawLine: string, tokens: LineToken[]): Contract
 		},
 		tokens
 	});
+};
+
+const matchNameThenSetsOfReps = (rawLine: string, tokens: LineToken[]): ContractCandidate | null => {
+	for (let i = 0; i < tokens.length - 3; i += 1) {
+		const sets = parseFlexibleIntToken(tokens[i]);
+		if (!sets) continue;
+		let repsIndex = i + 1;
+		if (tokens[repsIndex]?.type === 'word' && tokens[repsIndex]?.normalized === 'de') {
+			repsIndex += 1;
+		}
+		const reps = parseFlexibleIntToken(tokens[repsIndex]);
+		if (!reps) continue;
+		if (!isRepsKeyword(tokens[repsIndex + 1])) continue;
+		const nameStart = tokens[0]?.startOffset ?? 0;
+		const nameEnd = tokens[i]?.startOffset ?? 0;
+		if (nameEnd <= nameStart) continue;
+		return buildCandidate({
+			matcherId: 'name_then_sets_of_reps',
+			priority: 74,
+			rawExerciseName: rawLine,
+			nameSpanStart: nameStart,
+			nameSpanEnd: nameEnd,
+			forceStructureEndOffset: rawLine.length,
+			forceNoteStartOffset: rawLine.length,
+			structTokensUsed: [
+				{ tokenIndex: i, role: 'sets' },
+				{ tokenIndex: repsIndex, role: 'reps_min' },
+				{ tokenIndex: repsIndex + 1, role: 'keyword' }
+			],
+			parsedShape: {
+				version: 1,
+				kind: 'fixed',
+				sets,
+				reps_min: reps,
+				reps_max: null,
+				evidence: 'heuristic'
+			},
+			tokens
+		});
+	}
+	return null;
 };
 
 const matchSchemeFromNumberRuns = (rawLine: string, tokens: LineToken[]): ContractCandidate | null => {
@@ -620,6 +724,7 @@ const allMatchers = [
 	matchRepsBySetsWording,
 	matchRepsBySetsCompactWording,
 	matchSetsFirstNameAfter,
+	matchNameThenSetsOfReps,
 	matchSchemeFromNumberRuns
 ] as const;
 

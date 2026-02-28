@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
 	createEmptyPlan,
+	formatSpecialRepsForDisplay,
 	formatPrescriptionLong,
 	getDisplayDays,
 	normalizePlan,
@@ -86,4 +87,29 @@ test('formatPrescriptionLong: special reps uses series x texto', () => {
 		}
 	];
 	assert.equal(formatPrescriptionLong(plan['monday'].exercises[0]), '3 series x AMRAP');
+});
+
+test('formatSpecialRepsForDisplay: normalizes duration units for display', () => {
+	assert.equal(formatSpecialRepsForDisplay('20 seg'), '20 segundos');
+	assert.equal(formatSpecialRepsForDisplay('15 s'), '15 segundos');
+	assert.equal(formatSpecialRepsForDisplay('5 min'), '5 minutos');
+	assert.equal(formatSpecialRepsForDisplay('20 segun2'), '20 segundos');
+	assert.equal(formatSpecialRepsForDisplay('20 segudos'), '20 segundos');
+	assert.equal(formatSpecialRepsForDisplay('3 minuttos'), '3 minutos');
+});
+
+test('formatPrescriptionLong: duration special reps keeps explicit time unit', () => {
+	const plan = createEmptyPlan();
+	plan['monday'].exercises = [
+		{
+			id: 'ex-duration',
+			name: 'Plancha',
+			scheme: '',
+			order: 0,
+			totalSets: 1,
+			repsMode: 'special',
+			repsSpecial: '20 seg'
+		}
+	];
+	assert.equal(formatPrescriptionLong(plan['monday'].exercises[0]), '1 serie de 20 segundos');
 });

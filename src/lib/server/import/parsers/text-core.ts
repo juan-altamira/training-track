@@ -138,8 +138,229 @@ const sanitizeExerciseName = (raw: string) =>
 const sanitizeNote = (raw: string | null | undefined) => {
 	const value = (raw ?? '').trim();
 	if (!value) return null;
-	if (/^[\/\\|()[\]{}<>]+$/u.test(value)) return null;
+	const unwrapped = value.replace(/^[\/\\|()[\]{}<>\s]+|[\/\\|()[\]{}<>\s]+$/gu, '');
+	if (!unwrapped) return null;
+	if (/^(?:rep|reps|repeticion|repeticiones)$/iu.test(unwrapped)) return null;
+	if (/^(?:en\s+este|en\s+esta|en\s+ese|en\s+esa)$/iu.test(unwrapped)) return null;
 	return value;
+};
+
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const SECOND_UNIT_ALIASES = [
+	'segundo',
+	'segundos',
+	'seg.',
+	'seg',
+	's.',
+	's',
+	'secs',
+	'sec',
+	'sec.',
+	'segs',
+	'sgs',
+	'segund',
+	'segundo(s)',
+	'segndo',
+	'segndos',
+	'segudos',
+	'segunods',
+	'segun2',
+	'segundos.',
+	'segs.',
+	'segundoss'
+] as const;
+
+const MINUTE_UNIT_ALIASES = [
+	'minuto',
+	'minutos',
+	'min.',
+	'min',
+	'm.',
+	'm',
+	'mins',
+	'mns',
+	'minut',
+	'minuto(s)',
+	'mnuto',
+	'mnutos',
+	'minuos',
+	'minito',
+	'mins.',
+	'minutos.',
+	'minuttos'
+] as const;
+
+const normalizeDurationUnitKey = (rawUnit: string) =>
+	normalizeCompactWhitespace(rawUnit)
+		.normalize('NFD')
+		.replace(/\p{Diacritic}/gu, '')
+		.toLowerCase()
+		.replace(/[().]/g, '');
+
+const SECOND_UNIT_KEYS = new Set(SECOND_UNIT_ALIASES.map(normalizeDurationUnitKey));
+const MINUTE_UNIT_KEYS = new Set(MINUTE_UNIT_ALIASES.map(normalizeDurationUnitKey));
+const DURATION_UNIT_PATTERN = [...SECOND_UNIT_ALIASES, ...MINUTE_UNIT_ALIASES]
+	.sort((a, b) => b.length - a.length)
+	.map(escapeRegex)
+	.join('|');
+
+const normalizeDurationUnit = (rawUnit: string) => {
+	const unit = normalizeDurationUnitKey(rawUnit);
+	if (SECOND_UNIT_KEYS.has(unit)) {
+		return 'segundos';
+	}
+	if (MINUTE_UNIT_KEYS.has(unit)) {
+		return 'minutos';
+	}
+	return rawUnit.trim();
+};
+
+const parseStructuredSpecialDurationLine = (
+	rawLine: string
+): {
+	name: string;
+	sets: number;
+	repsSpecial: string;
+	note: string | null;
+} | null => {
+	const raw = normalizeCompactWhitespace(rawLine.trim());
+	if (!raw) return null;
+
+	const nameFirst = raw.match(
+		new RegExp(
+			`^(.+?)\\s+(\\d{1,2})\\s*(?:x|X|\\*|por)\\s*(\\d{1,3}(?::\\d{2})?)\\s*(${DURATION_UNIT_PATTERN})(?:\\s+(.*))?$`,
+			'iu'
+		)
+	);
+	if (nameFirst) {
+		const name = sanitizeExerciseName(nameFirst[1] ?? '');
+		const sets = Number.parseInt(nameFirst[2] ?? '', 10);
+		const amount = (nameFirst[3] ?? '').trim();
+		const unit = normalizeDurationUnit(nameFirst[4] ?? '');
+		const trailing = sanitizeNote(nameFirst[5] ?? null);
+		if (!name || !sets || !amount || !unit) return null;
+		return {
+			name,
+			sets,
+			repsSpecial: `${amount} ${unit}`.trim(),
+			note: trailing
+		};
+	}
+
+	const setsFirst = raw.match(
+		new RegExp(
+			`^(\\d{1,2})\\s*(?:x|X|\\*|por)\\s*(\\d{1,3}(?::\\d{2})?)\\s*(${DURATION_UNIT_PATTERN})\\s+de\\s+(.+)$`,
+			'iu'
+		)
+	);
+	if (setsFirst) {
+		const sets = Number.parseInt(setsFirst[1] ?? '', 10);
+		const amount = (setsFirst[2] ?? '').trim();
+		const unit = normalizeDurationUnit(setsFirst[3] ?? '');
+		const name = sanitizeExerciseName(setsFirst[4] ?? '');
+		if (!name || !sets || !amount || !unit) return null;
+		return {
+			name,
+			sets,
+			repsSpecial: `${amount} ${unit}`.trim(),
+			note: null
+		};
+	}
+
+	return null;
+};
+
+const parseLooseSpecialDurationLine = (
+	rawLine: string
+): {
+	name: string;
+	sets: number;
+	repsSpecial: string;
+	note: string | null;
+} | null => {
+	const raw = normalizeCompactWhitespace(rawLine.trim());
+	if (!raw) return null;
+
+	const trailing = raw.match(
+		new RegExp(`^(.+?)\\s+(\\d{1,3}(?::\\d{2})?)\\s*(${DURATION_UNIT_PATTERN})\\s*$`, 'iu')
+	);
+	if (trailing) {
+		const name = sanitizeLooseDurationExerciseName(trailing[1] ?? '');
+		const amount = (trailing[2] ?? '').trim();
+		const unit = normalizeDurationUnit(trailing[3] ?? '');
+		if (!name || !amount || !unit || isGenericNonExerciseName(name)) return null;
+		return {
+			name,
+			sets: 1,
+			repsSpecial: `${amount} ${unit}`.trim(),
+			note: null
+		};
+	}
+
+	const leading = raw.match(
+		new RegExp(`^(?:son\\s+)?(\\d{1,3}(?::\\d{2})?)\\s*(${DURATION_UNIT_PATTERN})\\s+de\\s+(.+)$`, 'iu')
+	);
+	if (leading) {
+		const amount = (leading[1] ?? '').trim();
+		const unit = normalizeDurationUnit(leading[2] ?? '');
+		const name = sanitizeLooseDurationExerciseName(leading[3] ?? '');
+		if (!name || !amount || !unit || isGenericNonExerciseName(name)) return null;
+		return {
+			name,
+			sets: 1,
+			repsSpecial: `${amount} ${unit}`.trim(),
+			note: null
+		};
+	}
+
+	return null;
+};
+
+const isGenericNonExerciseName = (value: string) =>
+	/^(?:movilidad|entrada\s+en\s+calor|calentamiento|descanso|pausa|elongacion|elongación|estiramiento|estiramientos)$/iu.test(
+		value.trim()
+	);
+
+const sanitizeLooseDurationExerciseName = (raw: string) =>
+	sanitizeExerciseName(raw).replace(
+		/^(?:hace|hacete|mete(le)?|manda(le)?|dale|anda|arranca|empeza|ejecuta)\s+/iu,
+		''
+	);
+
+const splitInlineNarrativeNote = (name: string, note: string | null) => {
+	if (note) return { name, note };
+	const match = name.match(
+		new RegExp(
+			`^(.*?\\S)\\s+(aguantando\\b.*?(?:\\d{1,3}(?::\\d{2})?)\\s*(?:${DURATION_UNIT_PATTERN}).*)$`,
+			'iu'
+		)
+	);
+	if (!match?.[1] || !match?.[2]) {
+		return { name, note };
+	}
+	return {
+		name: sanitizeExerciseName(match[1]),
+		note: sanitizeNote(match[2])
+	};
+};
+
+const EMBEDDED_DAY_HEADING_REGEX =
+	/(lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|d[ií]a\s*\d+|day\s*\d+)\s*:?\s*$/iu;
+
+const splitEmbeddedDayHeading = (rawLine: string) => {
+	const trimmed = rawLine.trimEnd();
+	const match = trimmed.match(EMBEDDED_DAY_HEADING_REGEX);
+	if (!match?.[1]) return null;
+	const heading = match[1];
+	const headingIndex = trimmed.lastIndexOf(heading);
+	if (headingIndex <= 0) return null;
+	const previousChar = trimmed[headingIndex - 1] ?? '';
+	if (!/[0-9):]/.test(previousChar)) return null;
+	return {
+		before: trimmed.slice(0, headingIndex).trimEnd(),
+		after: trimmed.slice(headingIndex).trim()
+	};
 };
 
 const extractCircuitBlockNote = (raw: string) => {
@@ -451,20 +672,21 @@ const makeNodeFromContractCandidate = (
 	const { sets, repsMin, repsMax, repsText, repsMode, repsSpecial } = shapeToLegacyFields(shape);
 	const note = sanitizeNote(rawSegment.slice(candidate.noteStartOffset));
 	const name = sanitizeExerciseName(candidate.rawExerciseName);
+	const normalized = splitInlineNarrativeNote(name, note);
 	return {
 		id: makeId(),
-		source_raw_name: name,
-		raw_exercise_name: name,
+		source_raw_name: normalized.name,
+		raw_exercise_name: normalized.name,
 		sets: sets ?? null,
 		reps_mode: repsMode,
 		reps_text: repsText,
 		reps_min: repsMin ?? null,
 		reps_max: repsMax ?? null,
 		reps_special: repsSpecial,
-		note,
+		note: normalized.note,
 		parsed_shape: shape,
 		split_meta: null,
-		field_meta: makeFieldMeta(line, path === 'contract' ? 0.9 : 0.65, Boolean(note)),
+		field_meta: makeFieldMeta(line, path === 'contract' ? 0.9 : 0.65, Boolean(normalized.note)),
 		debug: {
 			path,
 			struct_tokens_used_count: candidate.structTokensUsed.length
@@ -501,6 +723,33 @@ const makeNodeFromRawShape = (
 	};
 };
 
+const makeNodeFromLooseSpecial = (
+	line: ParsedLine,
+	name: string,
+	sets: number,
+	repsSpecial: string,
+	note: string | null,
+	path: 'contract' | 'legacy'
+): ImportDraftNode => ({
+	id: makeId(),
+	source_raw_name: name,
+	raw_exercise_name: name,
+	sets,
+	reps_mode: 'special',
+	reps_text: repsSpecial,
+	reps_min: null,
+	reps_max: null,
+	reps_special: repsSpecial,
+	note,
+	parsed_shape: null,
+	split_meta: null,
+	field_meta: makeFieldMeta(line, path === 'contract' ? 0.9 : 0.55, Boolean(note)),
+	debug: {
+		path,
+		struct_tokens_used_count: 0
+	}
+});
+
 const hasRequiredNodeFields = (node: ImportDraftNode) => {
 	if (!node.raw_exercise_name || !node.sets) return false;
 	if (node.reps_mode === 'special') {
@@ -517,6 +766,32 @@ const parseLineToNode = (
 ): ParseOutcome => {
 	counters.candidateLines += 1;
 	counters.contractLinesTotal += 1;
+
+	const structuredSpecial = parseStructuredSpecialDurationLine(rawSegment);
+	if (structuredSpecial) {
+		counters.legacyFallbackHits += 1;
+		counters.parsedLines += 1;
+		counters.linesWithPrescriptionDetected += 1;
+		const node = makeNodeFromLooseSpecial(
+			line,
+			structuredSpecial.name,
+			structuredSpecial.sets,
+			structuredSpecial.repsSpecial,
+			structuredSpecial.note,
+			'legacy'
+		);
+		if (hasRequiredNodeFields(node)) {
+			counters.requiredFieldsCompleted += 1;
+		}
+		return {
+			node,
+			usedContract: false,
+			usedLegacy: true,
+			detectedPrescription: true,
+			failedInvariant: false
+		};
+	}
+
 	const contract = parseContractCandidate(rawSegment);
 	if (contract.candidate) {
 		const isValid = assertCandidateInvariants(rawSegment, contract.candidate);
@@ -577,6 +852,31 @@ const parseLineToNode = (
 		const node = makeNodeFromRawShape(line, rawSegment, legacy.name, blockShape, 'legacy');
 		node.note = sanitizeNote(rawSegment.slice(legacy.structureEndOffset));
 		node.field_meta.note = node.note ? makeFieldMeta(line, 0.55, true).note : null;
+		if (hasRequiredNodeFields(node)) {
+			counters.requiredFieldsCompleted += 1;
+		}
+		return {
+			node,
+			usedContract: false,
+			usedLegacy: true,
+			detectedPrescription: true,
+			failedInvariant: false
+		};
+	}
+
+	const looseSpecial = parseLooseSpecialDurationLine(rawSegment);
+	if (looseSpecial) {
+		counters.legacyFallbackHits += 1;
+		counters.parsedLines += 1;
+		counters.linesWithPrescriptionDetected += 1;
+		const node = makeNodeFromLooseSpecial(
+			line,
+			looseSpecial.name,
+			looseSpecial.sets,
+			looseSpecial.repsSpecial,
+			looseSpecial.note,
+			'legacy'
+		);
 		if (hasRequiredNodeFields(node)) {
 			counters.requiredFieldsCompleted += 1;
 		}
@@ -691,7 +991,19 @@ export const parseLinesToDraft = (lines: ParsedLine[], context: ParserContext): 
 	while (queue.length > 0) {
 		const unit = queue.shift();
 		if (!unit) break;
-		const rawLine = unit.raw;
+		let rawLine = unit.raw;
+		const embeddedDayHeading = splitEmbeddedDayHeading(rawLine);
+		if (embeddedDayHeading?.after) {
+			queue.unshift({
+				...unit,
+				id: makeId(),
+				parent_id: unit.id,
+				raw: embeddedDayHeading.after,
+				source_kind: 'synthetic',
+				skip_context_open: false
+			});
+			rawLine = embeddedDayHeading.before;
+		}
 		const trimmed = rawLine.trim();
 
 		const line: ParsedLine = {

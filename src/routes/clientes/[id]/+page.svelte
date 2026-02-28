@@ -27,7 +27,7 @@
 		RoutinePlan,
 		RoutineUiMeta
 	} from '$lib/types';
-	import { onMount } from 'svelte';
+import { onMount, tick } from 'svelte';
 	import { rememberLastClientRoute } from '$lib/client/sessionResumeWarmup';
 
 	let { data } = $props();
@@ -52,6 +52,7 @@
 	let showArchiveConfirm = $state(false);
 	let showResetConfirm = $state(false);
 	let showDiscardImportConfirm = $state(false);
+	let discardImportPending = $state(false);
 	let showImportPublishConfirm = $state(false);
 	let copiedLink = $state(false);
 	let showCopyModal = $state(false);
@@ -520,9 +521,25 @@
 
 	const discardImportReviewSession = () => {
 		if (!importReviewSession) return;
-		plan = normalizePlan(structuredClone(importReviewSession.snapshot.plan));
-		uiMeta = normalizeRoutineUiMeta(structuredClone(importReviewSession.snapshot.uiMeta));
-		routineVersion = importReviewSession.snapshot.routineVersion;
+		const snapshot = importReviewSession.snapshot;
+		if (!snapshot) {
+			importReviewSession = null;
+			statusMessage = 'No pudimos descartar la importación. Reintentá.';
+			setTimeout(() => {
+				statusMessage = '';
+			}, 3000);
+			return;
+		}
+		const safeClone = <T,>(value: T) => {
+			try {
+				return structuredClone(value);
+			} catch {
+				return JSON.parse(JSON.stringify(value)) as T;
+			}
+		};
+		plan = normalizePlan(safeClone(snapshot.plan));
+		uiMeta = normalizeRoutineUiMeta(safeClone(snapshot.uiMeta));
+		routineVersion = snapshot.routineVersion;
 		importReviewSession = null;
 		blockModeDrafts = {};
 		resetDeleteUndoBatch();
@@ -531,6 +548,30 @@
 		setTimeout(() => {
 			statusMessage = '';
 		}, 3000);
+	};
+
+	const openDiscardImportConfirm = () => {
+		discardImportPending = false;
+		showDiscardImportConfirm = true;
+	};
+
+	const confirmDiscardImport = async () => {
+		if (discardImportPending) return;
+		discardImportPending = true;
+		statusMessage = 'Descartando importación...';
+		await tick();
+		try {
+			discardImportReviewSession();
+			showDiscardImportConfirm = false;
+		} catch (error) {
+			console.error(error);
+			statusMessage = 'No pudimos descartar la importación. Reintentá.';
+			setTimeout(() => {
+				statusMessage = '';
+			}, 3000);
+		} finally {
+			discardImportPending = false;
+		}
 	};
 
 	const isImportFieldResolved = (
@@ -1671,7 +1712,7 @@
 								<button
 									type="button"
 									class="rounded-xl border border-amber-600/60 bg-amber-950/25 px-3 py-2 text-xs font-semibold text-amber-100 transition hover:bg-amber-900/35"
-									onclick={() => (showDiscardImportConfirm = true)}
+									onclick={openDiscardImportConfirm}
 								>
 									Descartar importación
 								</button>
@@ -2494,20 +2535,25 @@
 				<div class="mt-5 flex items-center justify-end gap-3">
 					<button
 						type="button"
-						class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-2 text-slate-200 hover:bg-[#1b1f30]"
+						class="rounded-lg border border-slate-700 bg-[#151827] px-4 py-2 text-slate-200 hover:bg-[#1b1f30] disabled:cursor-not-allowed disabled:opacity-60"
+						disabled={discardImportPending}
 						onclick={() => (showDiscardImportConfirm = false)}
 					>
 						Cancelar
 					</button>
 					<button
 						type="button"
-						class="rounded-lg border border-amber-500/50 bg-amber-900/60 px-4 py-2 text-amber-100 hover:bg-amber-900/80"
-						onclick={() => {
-							showDiscardImportConfirm = false;
-							discardImportReviewSession();
-						}}
+						class="inline-flex items-center gap-2 rounded-lg border border-amber-500/50 bg-amber-900/60 px-4 py-2 text-amber-100 hover:bg-amber-900/80 disabled:cursor-not-allowed disabled:opacity-70"
+						disabled={discardImportPending}
+						aria-busy={discardImportPending}
+						onclick={confirmDiscardImport}
 					>
-						Descartar importación
+						{#if discardImportPending}
+							<span class="h-4 w-4 animate-spin rounded-full border-2 border-amber-200 border-t-transparent" aria-hidden="true"></span>
+							Descartando...
+						{:else}
+							Descartar importación
+						{/if}
 					</button>
 				</div>
 			</div>

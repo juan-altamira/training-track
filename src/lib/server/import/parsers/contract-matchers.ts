@@ -845,7 +845,9 @@ export type CircuitParsedEntry = {
 export const parseCircuitEntry = (rawSegment: string): CircuitParsedEntry | null => {
 	const trimmed = rawSegment.trim();
 	if (!trimmed) return null;
-	const contract = parseContractCandidate(trimmed);
+	const cleaned = trimmed.replace(/^(?:[-–—*•·‣▪︎]+|\d{1,2}[.)])\s*/u, '').trim();
+	if (!cleaned) return null;
+	const contract = parseContractCandidate(cleaned);
 	if (contract.candidate) {
 		const kind = contract.candidate.parsedShape.kind;
 		if (kind === 'fixed' || kind === 'range' || kind === 'amrap') {
@@ -856,14 +858,36 @@ export const parseCircuitEntry = (rawSegment: string): CircuitParsedEntry | null
 		}
 	}
 
-	const implicit = trimmed.match(/^(\d{1,3})(?:\s+)(.+)$/u);
+	const nameFirst = cleaned.match(/^(.+?)\s+(\d{1,3})$/u);
+	if (nameFirst) {
+		const reps = Number.parseInt(nameFirst[2] ?? '', 10);
+		if (Number.isFinite(reps) && reps > 0) {
+			const name = sanitizeExerciseName(nameFirst[1] ?? '');
+			if (name) {
+				return {
+					name,
+					shape: {
+						version: 1,
+						kind: 'fixed',
+						sets: 1,
+						reps_min: reps,
+						reps_max: null,
+						evidence: 'heuristic',
+						inference_reasons: ['circuit_grouped']
+					}
+				};
+			}
+		}
+	}
+
+	const implicit = cleaned.match(/^(\d{1,3})(?:\s+)(.+)$/u);
 	if (!implicit) return null;
 	const reps = Number.parseInt(implicit[1] ?? '', 10);
 	if (!Number.isFinite(reps) || reps <= 0) return null;
 	const suffix = (implicit[2] ?? '').trim();
 	if (!suffix) return null;
 	if (/^(?:s|seg|sec|min|mins|m)\b/i.test(suffix)) return null;
-	if (/^\d{1,2}:\d{2}\b/.test(trimmed)) return null;
+	if (/^\d{1,2}:\d{2}\b/.test(cleaned)) return null;
 	const name = sanitizeExerciseName(suffix);
 	if (!name) return null;
 	return {
@@ -893,11 +917,13 @@ export const splitCircuitSegments = (rawLine: string): string[] => {
 				.map((piece) => piece.trim())
 				.filter(Boolean);
 			if (pieces.length > 1) {
-				segments.push(...pieces);
+				segments.push(
+					...pieces.map((piece) => piece.replace(/^(?:[-–—*•·‣▪︎]+|\d{1,2}[.)])\s*/u, '').trim())
+				);
 				continue;
 			}
 		}
-		segments.push(segment);
+		segments.push(segment.replace(/^(?:[-–—*•·‣▪︎]+|\d{1,2}[.)])\s*/u, '').trim());
 	}
-	return segments;
+	return segments.filter(Boolean);
 };

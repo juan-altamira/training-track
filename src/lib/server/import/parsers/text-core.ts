@@ -24,7 +24,7 @@ const CUSTOM_DAY_HEADING_REGEX = /^(d[ií]a|day)\s+([^:]+?)(?:\s*:\s*(.*))?$/iu;
 const SUPERSET_HEADING_REGEX =
 	/^(?:superset|super\s*set|superserie|super\s*serie|serie\s+gigante)(?:\s*(?:x\s*(\d{1,2})|(\d{1,2})\s*vueltas?|#?\s*(\d{1,2})))?\b\s*:?\s*(.*)?$/iu;
 const CIRCUIT_HEADING_REGEX =
-	/^circuito(?:\s*x?\s*(\d{1,2})\s*(?:vueltas?)?)?\b\s*:?\s*(.*)?$/iu;
+	/^circuito(?:\s*x?\s*(\d{1,2})\s*(?:vueltas?|rondas?|rounds?)?)?\b\s*:?\s*(.*)?$/iu;
 const LOAD_HEADER_REGEX = /^([^:]{2,80}):\s*(.*)$/u;
 
 const NOISE_LINE_REGEX =
@@ -84,8 +84,19 @@ type ParseOutcome = {
 	failedInvariant: boolean;
 };
 
+type CircuitLineEntry =
+	| { kind: 'shape'; name: string; shape: ImportShapeV1; path: 'contract' }
+	| {
+			kind: 'special';
+			name: string;
+			sets: number;
+			repsSpecial: string;
+			note: string | null;
+			path: 'legacy';
+	  };
+
 type CircuitEntryResult =
-	| { kind: 'valid'; entries: Array<{ name: string; shape: ImportShapeV1 }> }
+	| { kind: 'valid'; entries: CircuitLineEntry[] }
 	| { kind: 'noise' }
 	| { kind: 'invalid' };
 
@@ -99,7 +110,7 @@ type ParseState =
 			blockId: string;
 			blockNote: string | null;
 			buffer: LineUnit[];
-			entries: Array<{ name: string; shape: ImportShapeV1 }>;
+			entries: CircuitLineEntry[];
 	  }
 	| {
 			kind: 'ACTIVE_CIRCUIT';
@@ -920,22 +931,38 @@ const parseCircuitLine = (
 	const segments = splitCircuitSegments(trimmed);
 	if (segments.length === 0) return { kind: 'noise' };
 
-	const entries: Array<{ name: string; shape: ImportShapeV1 }> = [];
+	const entries: CircuitLineEntry[] = [];
 	for (const segment of segments) {
 		const parsed = parseCircuitEntry(segment);
-		if (!parsed) {
-			return { kind: 'invalid' };
+		if (parsed) {
+			let shape = parsed.shape;
+			if (shape.kind === 'fixed' && shape.inference_reasons?.includes('circuit_grouped')) {
+				shape = {
+					...shape,
+					sets: rounds,
+					evidence: 'heuristic',
+					inference_reasons: Array.from(new Set([...(shape.inference_reasons ?? []), 'circuit_grouped']))
+				};
+			}
+			entries.push({ kind: 'shape', name: parsed.name, shape, path: 'contract' });
+			continue;
 		}
-		let shape = parsed.shape;
-		if (shape.kind === 'fixed' && shape.inference_reasons?.includes('circuit_grouped')) {
-			shape = {
-				...shape,
-				sets: rounds,
-				evidence: 'heuristic',
-				inference_reasons: Array.from(new Set([...(shape.inference_reasons ?? []), 'circuit_grouped']))
-			};
+
+		const structuredSpecial = parseStructuredSpecialDurationLine(segment);
+		const looseSpecial = structuredSpecial ?? parseLooseSpecialDurationLine(segment);
+		if (looseSpecial) {
+			entries.push({
+				kind: 'special',
+				name: looseSpecial.name,
+				sets: structuredSpecial ? looseSpecial.sets : rounds,
+				repsSpecial: looseSpecial.repsSpecial,
+				note: looseSpecial.note,
+				path: 'legacy'
+			});
+			continue;
 		}
-		entries.push({ name: parsed.name, shape });
+
+		return { kind: 'invalid' };
 	}
 	return { kind: 'valid', entries };
 };
@@ -1034,9 +1061,51 @@ export const parseLinesToDraft = (lines: ParsedLine[], context: ParserContext): 
 			const parsed = parseCircuitLine(trimmed, state.rounds);
 			if (parsed.kind === 'valid') {
 				const block = ensureBlockById(currentDay, 'circuit', state.blockId);
+				let hasBlockContext = block.nodes.some((node) => node.parsed_shape?.block);
 				for (const entry of parsed.entries) {
-					const shape: ImportShapeV1 = {
-						...entry.shape,
+					let node: ImportDraftNode;
+					if (entry.kind === 'shape') {
+						const shape: ImportShapeV1 = {
+							...entry.shape,
+							block: {
+								kind: 'circuit',
+								rounds: state.rounds,
+								header_text: state.headerText,
+								header_unit_id: state.headerUnitId
+							}
+						};
+						node = makeNodeFromRawShape(line, trimmed, entry.name, shape, entry.path);
+						hasBlockContext = true;
+						counters.contractLinesTotal += 1;
+						counters.contractLinesParsed += 1;
+					} else {
+						const sets = entry.sets > 0 ? entry.sets : state.rounds;
+						node = makeNodeFromLooseSpecial(line, entry.name, sets, entry.repsSpecial, entry.note, entry.path);
+						counters.legacyFallbackHits += 1;
+					}
+
+					if (state.blockNote) {
+						node.note = state.blockNote;
+					}
+					block.nodes.push(node);
+					counters.candidateLines += 1;
+					counters.parsedLines += 1;
+					counters.linesWithPrescriptionDetected += 1;
+					if (hasRequiredNodeFields(node)) {
+						counters.requiredFieldsCompleted += 1;
+					}
+				}
+
+				if (!hasBlockContext && block.nodes.length > 0) {
+					const fallbackNode = block.nodes[0];
+					fallbackNode.parsed_shape = {
+						version: 1,
+						kind: 'fixed',
+						sets: state.rounds,
+						reps_min: 1,
+						reps_max: null,
+						evidence: 'heuristic',
+						inference_reasons: ['circuit_grouped'],
 						block: {
 							kind: 'circuit',
 							rounds: state.rounds,
@@ -1044,19 +1113,6 @@ export const parseLinesToDraft = (lines: ParsedLine[], context: ParserContext): 
 							header_unit_id: state.headerUnitId
 						}
 					};
-					const node = makeNodeFromRawShape(line, trimmed, entry.name, shape, 'contract');
-					if (state.blockNote) {
-						node.note = state.blockNote;
-					}
-					block.nodes.push(node);
-					counters.candidateLines += 1;
-					counters.contractLinesTotal += 1;
-					counters.contractLinesParsed += 1;
-					counters.parsedLines += 1;
-					counters.linesWithPrescriptionDetected += 1;
-					if (hasRequiredNodeFields(node)) {
-						counters.requiredFieldsCompleted += 1;
-					}
 				}
 				if (state.kind === 'PENDING_CIRCUIT') {
 					if (block.nodes.length >= 2) {

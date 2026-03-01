@@ -146,6 +146,21 @@ test('anti-regression: circuit can split a line containing two valid entries', a
 	assert.equal(nodes[2]?.raw_exercise_name, 'abdominales');
 });
 
+test('anti-regression: circuito con rondas y bullets mantiene todas las entradas', async () => {
+	const draft = await parseDraft(
+		'Circuito x4 rondas:\n- Burpees 15\n- Kettlebell swing 20\n- Plancha 40s'
+	);
+	const nodes = getNodes(draft);
+	assert.equal(nodes.length, 3);
+	assert.equal(nodes[0]?.raw_exercise_name.toLowerCase(), 'burpees');
+	assert.equal(nodes[1]?.raw_exercise_name.toLowerCase(), 'kettlebell swing');
+	assert.equal(nodes[2]?.raw_exercise_name.toLowerCase(), 'plancha');
+	assert.ok(nodes.every((node) => node.sets === 4));
+	assert.equal(nodes[2]?.reps_mode, 'special');
+	assert.equal(nodes[2]?.reps_special, '40 segundos');
+	assert.ok(nodes.some((node) => node.parsed_shape?.block?.kind === 'circuit'));
+});
+
 test('anti-regression: contract path metrics are reported', async () => {
 	const draft = await parseDraft('Press banca 3x8\nRemo 4x10');
 	assert.equal(draft.coverage.legacy_fallback_hits, 0);
